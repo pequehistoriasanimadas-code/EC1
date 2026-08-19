@@ -158,15 +158,39 @@ app.on('before-quit',()=>localRuntime?.stop());
 
 ipcMain.handle('settings:get',()=>{
   const s=settingsStore.load();
-  return {...s,visual:{...s.visual,fallbackImageUrl:fallbackUrl()},ai:{...s.ai,claudeKey:'',geminiKey:'',hasClaudeKey:!!s.ai.claudeKeyEnc,hasGeminiKey:!!s.ai.geminiKeyEnc}};
+  const { claudeKeyEnc, geminiKeyEnc, ...publicAi } = s.ai;
+  return {
+    ...s,
+    visual:{...s.visual,fallbackImageUrl:fallbackUrl()},
+    ai:{...publicAi,claudeKey:'',geminiKey:'',hasClaudeKey:!!claudeKeyEnc,hasGeminiKey:!!geminiKeyEnc}
+  };
 });
 ipcMain.handle('settings:save',(_,incoming)=>{
   const current=settingsStore.load();
-  const next={...current,...incoming,ai:{...current.ai,...incoming.ai},tts:{...current.tts,...incoming.tts},visual:{...current.visual,...incoming.visual},automation:{...current.automation,...incoming.automation}};
-  if(incoming.ai?.claudeKey) next.ai.claudeKeyEnc=settingsStore.encryptSecret(incoming.ai.claudeKey);
-  if(incoming.ai?.geminiKey) next.ai.geminiKeyEnc=settingsStore.encryptSecret(incoming.ai.geminiKey);
-  delete next.ai.claudeKey; delete next.ai.geminiKey;
-  settingsStore.save(next); return {ok:true};
+  const incomingAi={...(incoming.ai||{})};
+  const claudePlain=String(incomingAi.claudeKey||'').trim();
+  const geminiPlain=String(incomingAi.geminiKey||'').trim();
+  delete incomingAi.claudeKey;
+  delete incomingAi.geminiKey;
+  delete incomingAi.claudeKeyEnc;
+  delete incomingAi.geminiKeyEnc;
+  delete incomingAi.hasClaudeKey;
+  delete incomingAi.hasGeminiKey;
+
+  const next={
+    ...current,
+    ...incoming,
+    ai:{...current.ai,...incomingAi},
+    tts:{...current.tts,...(incoming.tts||{})},
+    visual:{...current.visual,...(incoming.visual||{})},
+    automation:{...current.automation,...(incoming.automation||{})}
+  };
+  if(claudePlain) next.ai.claudeKeyEnc=settingsStore.encryptSecret(claudePlain);
+  else next.ai.claudeKeyEnc=current.ai.claudeKeyEnc||'';
+  if(geminiPlain) next.ai.geminiKeyEnc=settingsStore.encryptSecret(geminiPlain);
+  else next.ai.geminiKeyEnc=current.ai.geminiKeyEnc||'';
+  settingsStore.save(next);
+  return {ok:true,hasClaudeKey:!!next.ai.claudeKeyEnc,hasGeminiKey:!!next.ai.geminiKeyEnc};
 });
 
 ipcMain.handle('rss:load',async()=>rss.loadAll(settingsStore.load().rssFeeds));
