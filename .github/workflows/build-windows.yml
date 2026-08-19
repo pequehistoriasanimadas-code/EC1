@@ -41,10 +41,27 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
+      - name: Windows self-test
+        shell: powershell
+        run: |
+          $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
+          if (-not (Test-Path $exe)) { throw "No existe $exe" }
+          $p = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Self-test falló con código $($p.ExitCode)" }
+          Write-Host 'SELF-TEST OK'
+
+      - name: Upload portable folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: EC-Automatic-News-Portable-Folder
+          path: dist/win-unpacked/**
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload portable EXE
         uses: actions/upload-artifact@v4
         with:
-          name: EC-Automatic-News-Windows-Portable
+          name: EC-Automatic-News-Windows-Portable-EXE
           path: dist/*.exe
           if-no-files-found: error
           retention-days: 14

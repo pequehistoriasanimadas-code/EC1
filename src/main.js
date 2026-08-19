@@ -23,19 +23,49 @@ let history;
 let automation;
 let dataDir;
 let resourcesDir;
+let startupLogFile = '';
 
 function portableDataDir() {
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
   if (portableDir) return path.join(portableDir, 'EC Automatic News Data');
+  if (app.isPackaged) return path.join(path.dirname(process.execPath), 'EC Automatic News Data');
   return path.join(app.getPath('userData'), 'EC Automatic News Data');
+}
+
+function initStartupLog() {
+  try {
+    const base = portableDataDir();
+    const dir = path.join(base, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    startupLogFile = path.join(dir, 'startup.log');
+  } catch {
+    startupLogFile = path.join(app.getPath('temp'), 'EC-Automatic-News-startup.log');
+  }
+  logEvent('START', `version=${app.getVersion()} packaged=${app.isPackaged} exec=${process.execPath}`);
+}
+
+function logEvent(kind, message) {
+  const line = `[${new Date().toISOString()}] ${kind}: ${String(message || '')}\n`;
+  try { if (startupLogFile) fs.appendFileSync(startupLogFile, line, 'utf8'); } catch {}
+  try { console.log(line.trim()); } catch {}
+}
+
+function fatalError(label, err) {
+  const msg = err?.stack || err?.message || String(err);
+  logEvent(label, msg);
+  try { dialog.showErrorBox('EC Automatic News', `${label}\n\n${err?.message || err}\n\nLog: ${startupLogFile || 'no disponible'}`); } catch {}
 }
 
 function sendControl(channel, payload) {
   if (controlWindow && !controlWindow.isDestroyed()) controlWindow.webContents.send(channel, payload);
 }
 function sendOutput(payload) {
-  createOutputWindow();
-  if (outputWindow && !outputWindow.isDestroyed()) outputWindow.webContents.send('output:story', payload);
+  const win = createOutputWindow();
+  const deliver = () => {
+    if (win && !win.isDestroyed()) win.webContents.send('output:story', payload);
+  };
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', deliver);
+  else deliver();
 }
 function notify(title, body) {
   if (Notification.isSupported()) new Notification({title,body}).show();
@@ -51,7 +81,9 @@ function createControlWindow() {
     title: 'EC Automatic News', backgroundColor:'#0f0f0f',
     webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
   });
-  controlWindow.loadFile(path.join(__dirname,'control.html'));
+  controlWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('CONTROL_LOAD_FAIL',`${code} ${desc} ${url}`));
+  controlWindow.webContents.on('render-process-gone',(_,details)=>logEvent('CONTROL_RENDER_GONE',JSON.stringify(details)));
+  controlWindow.loadFile(path.join(__dirname,'control.html')).catch(e=>fatalError('No se pudo cargar la interfaz',e));
 }
 function createOutputWindow() {
   if (outputWindow && !outputWindow.isDestroyed()) return outputWindow;
@@ -60,7 +92,9 @@ function createOutputWindow() {
     backgroundColor:'#000000',autoHideMenuBar:true,
     webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
   });
-  outputWindow.loadFile(path.join(__dirname,'output.html'));
+  outputWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('OUTPUT_LOAD_FAIL',`${code} ${desc} ${url}`));
+  outputWindow.webContents.on('render-process-gone',(_,details)=>logEvent('OUTPUT_RENDER_GONE',JSON.stringify(details)));
+  outputWindow.loadFile(path.join(__dirname,'output.html')).catch(e=>fatalError('No se pudo cargar Output',e));
   outputWindow.on('closed',()=>outputWindow=null);
   return outputWindow;
 }
@@ -69,6 +103,7 @@ function initServices() {
   dataDir = portableDataDir();
   fs.mkdirSync(dataDir,{recursive:true});
   resourcesDir = app.isPackaged ? process.resourcesPath : path.join(__dirname,'..');
+  logEvent('PATHS',`dataDir=${dataDir} resourcesDir=${resourcesDir}`);
   settingsStore = new SettingsStore(dataDir);
   history = new HistoryStore(dataDir);
   localRuntime = new LocalRuntime({resourcesDir,dataDir,onEvent:e=>sendControl('local:event',e)});
@@ -83,11 +118,40 @@ function initServices() {
   automation.on('state',s=>sendControl('automation:state',s));
   automation.on('error-item',e=>sendControl('automation:itemError',e));
   automation.on('engine-error',e=>sendControl('automation:engineError',{message:e.message}));
+  logEvent('SERVICES','initialized');
 }
 
-app.whenReady().then(()=>{
-  initServices();
-  createControlWindow();
+async function runSelfTest() {
+  logEvent('SELF_TEST','begin');
+  const local = await localRuntime.status();
+  if (!local.runtime) throw new Error('llama.cpp runtime no encontrado');
+  if (!kokoro.ready()) throw new Error('Kokoro runtime incompleto');
+  const voices = await kokoro.listVoices();
+  if (!voices.length) throw new Error('Kokoro no pudo listar voces');
+  const sample = await kokoro.generate('Prueba de voz.', { voice: voices.includes('ef_dora') ? 'ef_dora' : voices[0], speed: 1.0 });
+  if (!sample.path || !fs.existsSync(sample.path) || fs.statSync(sample.path).size < 1000) throw new Error('Kokoro no generó audio válido');
+  try { fs.unlinkSync(sample.path); } catch {}
+  logEvent('SELF_TEST',`OK voices=${voices.length}`);
+}
+
+process.on('uncaughtException',e=>fatalError('Error no controlado',e));
+process.on('unhandledRejection',e=>fatalError('Promesa rechazada',e));
+
+app.whenReady().then(async()=>{
+  initStartupLog();
+  try {
+    initServices();
+    if (process.argv.includes('--self-test')) {
+      await runSelfTest();
+      app.exit(0);
+      return;
+    }
+    createControlWindow();
+    logEvent('WINDOW','control created');
+  } catch (e) {
+    fatalError('La aplicación no pudo iniciar',e);
+    app.exit(1);
+  }
 });
 app.on('window-all-closed',()=>{ localRuntime?.stop(); if(process.platform!=='darwin') app.quit(); });
 app.on('before-quit',()=>localRuntime?.stop());
