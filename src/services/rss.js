@@ -132,6 +132,19 @@ function parseHtmlLatest(html, feed, baseUrl=EC_LATEST_WEB) {
   });
   return out;
 }
+function parseAlternateSource(source, feed, baseUrl=EC_LATEST_WEB) {
+  let items=[];
+  const looksXml=/xml/i.test(source.contentType||'') || /^\s*<\?xml|^\s*<(rss|feed|rdf:RDF)/i.test(source.body||'');
+  if(looksXml){
+    try{items=parseFeed(source.body,feed);}catch{}
+    if(items.length)return {items,mode:'XML_FALLBACK',detail:`Usando fuente alternativa ${baseUrl}`};
+  }
+  if(/html/i.test(source.contentType||'') || /<html[\s>]/i.test(source.body||'')){
+    items=parseHtmlLatest(source.body,feed,source.finalUrl||baseUrl);
+    if(items.length)return {items,mode:'WEB_FALLBACK',detail:`Usando fuente alternativa ${baseUrl}`};
+  }
+  return {items:[],mode:'UNRECOGNIZED',detail:`La fuente alternativa ${baseUrl} no contiene noticias reconocibles`};
+}
 function isEcLatestArc(url='') {
   return /elcomercio\.pe\/arc\/outboundfeeds\/rss\/category\/ultimas-noticias/i.test(url);
 }
@@ -154,9 +167,9 @@ async function fetchFeedDetailed(feed) {
   } catch (e) {
     if (!isEcLatestArc(feed.url)) throw new Error(`RSS ${feed.name}: ${e.message}`);
     const alt = await requestText(EC_LATEST_WEB);
-    const items = parseHtmlLatest(alt.body, feed, EC_LATEST_WEB);
-    if (!items.length) throw new Error(`RSS ${feed.name}: ${e.message}; fallback web sin resultados`);
-    return {items, mode:'WEB_FALLBACK', detail:`RSS no accesible; usando ${EC_LATEST_WEB}`};
+    const fallback=parseAlternateSource(alt,feed,EC_LATEST_WEB);
+    if (!fallback.items.length) throw new Error(`RSS ${feed.name}: ${e.message}; fuente alternativa sin resultados`);
+    return fallback;
   }
 
   let items=[];
@@ -175,8 +188,8 @@ async function fetchFeedDetailed(feed) {
   if (isEcLatestArc(feed.url)) {
     try {
       const alt = await requestText(EC_LATEST_WEB);
-      items = parseHtmlLatest(alt.body, feed, EC_LATEST_WEB);
-      if (items.length) return {items, mode:'WEB_FALLBACK', detail:'RSS XML sin elementos reconocibles; usando página Últimas Noticias'};
+      const fallback=parseAlternateSource(alt,feed,EC_LATEST_WEB);
+      if (fallback.items.length) return fallback;
     } catch (e) {
       parseError = parseError || e.message;
     }
