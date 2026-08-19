@@ -1,0 +1,28 @@
+const {contextBridge,ipcRenderer}=require('electron');
+contextBridge.exposeInMainWorld('ECAPI',{
+  getSettings:()=>ipcRenderer.invoke('settings:get'),
+  saveSettings:s=>ipcRenderer.invoke('settings:save',s),
+  loadRss:()=>ipcRenderer.invoke('rss:load'),
+  testRss:f=>ipcRenderer.invoke('rss:test',f),
+  fetchArticle:u=>ipcRenderer.invoke('article:fetch',u),
+  testProvider:p=>ipcRenderer.invoke('providers:test',p),
+  generate:(story,article)=>ipcRenderer.invoke('providers:generate',story,article),
+  localStatus:()=>ipcRenderer.invoke('local:status'),
+  downloadLocalModel:()=>ipcRenderer.invoke('local:downloadModel'),
+  startLocal:()=>ipcRenderer.invoke('local:start'),
+  stopLocal:()=>ipcRenderer.invoke('local:stop'),
+  ttsStatus:()=>ipcRenderer.invoke('tts:status'),
+  generateTts:text=>ipcRenderer.invoke('tts:generate',text),
+  pickFallback:()=>ipcRenderer.invoke('fallback:pick'),
+  openOutput:()=>ipcRenderer.invoke('output:open'),
+  sendOutput:p=>ipcRenderer.send('output:story',p),
+  controlOutput:a=>ipcRenderer.send('output:control',a),
+  outputEnded:()=>ipcRenderer.send('output:ended'),
+  autoStart:()=>ipcRenderer.invoke('automation:start'),
+  autoPause:()=>ipcRenderer.invoke('automation:pause'),
+  autoResume:()=>ipcRenderer.invoke('automation:resume'),
+  autoStop:()=>ipcRenderer.invoke('automation:stop'),
+  resetHistory:()=>ipcRenderer.invoke('history:reset'),
+  notify:p=>ipcRenderer.send('notify',p),
+  on:(channel,cb)=>{const allowed=['automation:state','automation:itemError','automation:engineError','local:event','output:story','output:control']; if(allowed.includes(channel))ipcRenderer.on(channel,(_,p)=>cb(p));}
+});

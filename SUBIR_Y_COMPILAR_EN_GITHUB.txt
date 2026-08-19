@@ -1,0 +1,34 @@
+EC AUTOMATIC NEWS — SUBIR Y COMPILAR EN GITHUB
+
+1. En GitHub crea un repositorio nuevo, por ejemplo:
+   EC-Automatic-News
+
+2. En el repositorio usa Add file > Upload files.
+
+3. Sube TODO el contenido de esta carpeta, incluyendo la carpeta oculta:
+   .github/workflows/
+
+4. Confirma la subida.
+
+5. Abre la pestaña Actions.
+
+6. Selecciona:
+   Build Windows Portable
+
+7. Pulsa:
+   Run workflow
+
+8. Espera a que termine el build.
+
+9. Abre la ejecución terminada y, en Artifacts, descarga:
+   EC-Automatic-News-Windows-Portable
+
+10. Dentro estará el EXE portable.
+
+IMPORTANTE:
+- Tú no tienes que instalar Node ni Python para compilar.
+- GitHub Actions prepara todo en una máquina Windows temporal.
+- Kokoro y llama.cpp se empaquetan en el EXE.
+- Qwen 8B (~5 GB) NO se mete dentro del EXE: la aplicación lo descarga una sola vez si eliges IA local. Esto no instala nada en Windows.
+- Claude y Gemini funcionan con sus respectivas API Keys.
+- Windows puede mostrar SmartScreen porque el EXE no está firmado digitalmente.
