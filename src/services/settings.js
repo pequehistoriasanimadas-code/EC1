@@ -36,13 +36,27 @@ class SettingsStore {
         fallbackImage: '',
         pauseSeconds: 2.5,
         showSummary: true,
-        theme: { yellow: '#F7C600', black: '#000000', white: '#FFFFFF' }
+        theme: { yellow: '#F7C600', black: '#000000', white: '#FFFFFF' },
+        output: {
+          format: '16:9',
+          fontFamily: 'Arial',
+          titleColor: '#FFFFFF',
+          summaryColor: '#F3F3F3',
+          categoryBgColor: '#F7C600',
+          categoryTextColor: '#000000',
+          lowerBgColor: '#000000',
+          lowerOpacity: 0.88,
+          animation: 'auto',
+          motionSpeed: 'normal',
+          tiktokSafe: true,
+          showSafeGuides: true
+        }
       },
       automation: {
         updateMinutes: 2,
         maxAgeHours: 6,
-        bufferReady: 3,
-        queueMax: 10,
+        bufferReady: 5,
+        queueMax: 12,
         avoidRepeats: true,
         onlyMainImage: true,
         activeFeedIds: []

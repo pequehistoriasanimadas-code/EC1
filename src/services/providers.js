@@ -4,14 +4,18 @@ function extractJson(s) {
   t = t.replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
   if (a >= 0 && b > a) t = t.slice(a,b+1);
-  const data = JSON.parse(t);
-  return {
+  let data;
+  try { data=JSON.parse(t); }
+  catch(e){ const err=new Error(`JSON inválido: ${e.message}`); err.code='BAD_JSON'; throw err; }
+  const result={
     title: String(data.title || data.titulo || '').trim(),
     category: String(data.category || data.categoria || 'ACTUALIDAD').trim(),
     summary: String(data.summary || data.bajada || data.resumen || '').trim(),
     script: String(data.script || data.guion || '').trim(),
     durationSec: Number(data.duration_sec || data.durationSec || 60)
   };
+  if(!result.script) { const err=new Error('La IA no devolvió un guion'); err.code='EMPTY_SCRIPT'; throw err; }
+  return result;
 }
 
 function promptFor(story, article, targetSeconds) {
@@ -55,10 +59,10 @@ function retryableError(e){
 
 async function listClaudeModels(apiKey) {
   if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
-  const r = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': apiKey, 'anthropic-version':'2023-06-01' } });
+  const r = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': apiKey, 'anthropic-version':'2023-06-01' }, signal:AbortSignal.timeout(20000) });
   if (!r.ok) {
     const body=await r.text();
-    throw new ProviderError('claude', `Claude HTTP ${r.status}: ${body.slice(0,220)}`, String(r.status));
+    throw new ProviderError('claude', `Claude HTTP ${r.status}: ${body.slice(0,220)}`, String(r.status), Number(r.headers.get('retry-after')||0));
   }
   const j = await r.json();
   return (j.data || []).map(x=>x.id);
@@ -75,7 +79,8 @@ async function claudeGenerate(apiKey, model, prompt) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:{'content-type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
-    body:JSON.stringify({model:m,max_tokens:1600,temperature:0.15,messages:[{role:'user',content:prompt}]})
+    body:JSON.stringify({model:m,max_tokens:1600,temperature:0.15,messages:[{role:'user',content:prompt}]}),
+    signal:AbortSignal.timeout(90000)
   });
   if (!r.ok) {
     const retry = Number(r.headers.get('retry-after') || 0);
@@ -89,10 +94,10 @@ async function claudeGenerate(apiKey, model, prompt) {
 
 async function listGeminiModels(apiKey) {
   if (!apiKey) throw new ProviderError('gemini','Falta Gemini API Key','NO_KEY');
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,{signal:AbortSignal.timeout(20000)});
   if (!r.ok) {
     const body=await r.text();
-    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,220)}`, String(r.status));
+    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,220)}`, String(r.status), Number(r.headers.get('retry-after')||0));
   }
   const j = await r.json();
   return (j.models || []).filter(x => (x.supportedGenerationMethods||[]).includes('generateContent')).map(x=>x.name.replace(/^models\//,''));
@@ -107,10 +112,10 @@ async function geminiGenerate(apiKey, model, prompt) {
   }
   if (!m) throw new ProviderError('gemini','No se encontró un modelo Gemini disponible','NO_MODEL');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const r = await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.15,responseMimeType:'application/json'}})});
+  const r = await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.15,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(90000)});
   if (!r.ok) {
     const body = await r.text();
-    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,300)}`, String(r.status));
+    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,300)}`, String(r.status), Number(r.headers.get('retry-after')||0));
   }
   const j = await r.json();
   const out = j?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('\n') || '';
@@ -118,7 +123,11 @@ async function geminiGenerate(apiKey, model, prompt) {
 }
 
 class Providers {
-  constructor({ settingsStore, localRuntime }) { this.settingsStore=settingsStore; this.localRuntime=localRuntime; }
+  constructor({ settingsStore, localRuntime }) {
+    this.settingsStore=settingsStore;
+    this.localRuntime=localRuntime;
+    this.cooldownUntil={claude:0,gemini:0,local:0};
+  }
 
   async test(provider, settings) {
     if (provider==='local') return this.localRuntime.status();
@@ -136,7 +145,7 @@ class Providers {
   }
 
   async callProvider(provider,prompt,settings){
-    if(provider==='local') return {model:'Qwen3-8B-Q4_K_M',result:extractJson(await this.localRuntime.generate(prompt))};
+    if(provider==='local') return {model:'Qwen3-8B-Q4_K_M',result:extractJson(await this.localRuntime.generate(`/no_think\n${prompt}`))};
     if(provider==='claude'){
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
       return claudeGenerate(key,settings.ai.claudeModel,prompt);
@@ -148,20 +157,33 @@ class Providers {
     throw new ProviderError(provider,'Proveedor desconocido','UNKNOWN_PROVIDER');
   }
 
+  setCooldown(provider,e){
+    if(String(e?.code)!=='429') return;
+    const seconds=Math.max(15,Math.min(300,Number(e.retryAfter)||30));
+    this.cooldownUntil[provider]=Date.now()+seconds*1000;
+  }
+
   async generate(story, article, settings) {
     const prompt = promptFor(story, article, settings.ai.targetSeconds || 60);
     const order = [settings.ai.primary, settings.ai.backup1, settings.ai.backup2].filter((x,i,a)=>x && x!=='none' && a.indexOf(x)===i);
     const attempts=[];
     for (const provider of order) {
+      const cooldown=Math.max(0,(this.cooldownUntil[provider]||0)-Date.now());
+      if(cooldown>0){
+        attempts.push({provider,attempt:0,ok:false,code:'COOLDOWN',message:`En espera por límite de uso (${Math.ceil(cooldown/1000)} s)`});
+        continue;
+      }
       for(let n=1;n<=2;n++){
         try {
           const out=await this.callProvider(provider,prompt,settings);
           attempts.push({provider,attempt:n,ok:true,model:out.model||''});
           return {provider,model:out.model||'',result:out.result,attempts};
         } catch (e) {
+          this.setCooldown(provider,e);
           attempts.push({provider,attempt:n,ok:false,message:e.message,code:e.code||''});
+          if(String(e.code)==='429') break;
           if(n>=2 || !retryableError(e)) break;
-          await wait(e.retryAfter?Math.min(e.retryAfter*1000,10000):800);
+          await wait(e.retryAfter?Math.min(e.retryAfter*1000,10000):900);
         }
       }
     }
@@ -171,4 +193,4 @@ class Providers {
   }
 }
 
-module.exports = { Providers, ProviderError, listClaudeModels, listGeminiModels };
+module.exports = { Providers, ProviderError, listClaudeModels, listGeminiModels, extractJson };

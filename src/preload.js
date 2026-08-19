@@ -15,14 +15,25 @@ contextBridge.exposeInMainWorld('ECAPI',{
   generateTts:text=>ipcRenderer.invoke('tts:generate',text),
   pickFallback:()=>ipcRenderer.invoke('fallback:pick'),
   openOutput:()=>ipcRenderer.invoke('output:open'),
-  sendOutput:p=>ipcRenderer.send('output:story',p),
+  outputStatus:()=>ipcRenderer.invoke('output:status'),
+  sendManualOutput:p=>ipcRenderer.invoke('output:manualSend',p),
   controlOutput:a=>ipcRenderer.send('output:control',a),
-  outputEnded:()=>ipcRenderer.send('output:ended'),
-  autoStart:()=>ipcRenderer.invoke('automation:start'),
-  autoPause:()=>ipcRenderer.invoke('automation:pause'),
-  autoResume:()=>ipcRenderer.invoke('automation:resume'),
-  autoStop:()=>ipcRenderer.invoke('automation:stop'),
+  previewOutputDesign:d=>ipcRenderer.send('output:designPreview',d),
+  outputPlayback:e=>ipcRenderer.send('output:playback',e),
+  automationStatus:()=>ipcRenderer.invoke('automation:status'),
+  processingStart:()=>ipcRenderer.invoke('automation:processingStart'),
+  processingPause:()=>ipcRenderer.invoke('automation:processingPause'),
+  processingResume:()=>ipcRenderer.invoke('automation:processingResume'),
+  processingStop:()=>ipcRenderer.invoke('automation:processingStop'),
+  emissionStart:()=>ipcRenderer.invoke('automation:emissionStart'),
+  emissionPause:()=>ipcRenderer.invoke('automation:emissionPause'),
+  emissionResume:()=>ipcRenderer.invoke('automation:emissionResume'),
+  emissionStop:()=>ipcRenderer.invoke('automation:emissionStop'),
+  clearQueue:()=>ipcRenderer.invoke('automation:clearQueue'),
   resetHistory:()=>ipcRenderer.invoke('history:reset'),
   notify:p=>ipcRenderer.send('notify',p),
-  on:(channel,cb)=>{const allowed=['automation:state','automation:itemError','automation:engineError','local:event','output:story','output:control']; if(allowed.includes(channel))ipcRenderer.on(channel,(_,p)=>cb(p));}
+  on:(channel,cb)=>{
+    const allowed=['automation:state','automation:itemError','automation:engineError','local:event','output:story','output:control','output:design','output:state'];
+    if(allowed.includes(channel))ipcRenderer.on(channel,(_,p)=>cb(p));
+  }
 });

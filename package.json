@@ -1,6 +1,6 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "EC Automatic News",
   "main": "src/main.js",
@@ -22,31 +22,11 @@
     "appId": "pe.ec.automaticnews",
     "productName": "EC Automatic News",
     "artifactName": "EC-Automatic-News-Portable-${version}.${ext}",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "src/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "runtime",
-        "to": "runtime",
-        "filter": ["**/*"]
-      }
-    ],
-    "extraFiles": [
-      {
-        "from": "DIAGNOSTICO.cmd",
-        "to": "DIAGNOSTICO.cmd"
-      }
-    ],
-    "win": {
-      "target": ["portable"]
-    },
-    "portable": {
-      "requestExecutionLevel": "user"
-    }
+    "directories": { "output": "dist" },
+    "files": ["src/**/*", "package.json"],
+    "extraResources": [{"from":"runtime","to":"runtime","filter":["**/*"]}],
+    "extraFiles": [{"from":"DIAGNOSTICO.cmd","to":"DIAGNOSTICO.cmd"}],
+    "win": { "target": ["portable"] },
+    "portable": { "requestExecutionLevel": "user" }
   }
 }
