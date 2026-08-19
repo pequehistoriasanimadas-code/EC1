@@ -39,6 +39,7 @@ class AutomationEngine extends EventEmitter {
         provider:x.provider||'',
         model:x.model||'',
         attempts:x.attempts||[],
+        metrics:x.metrics||null,
         error:x.error||'',
         stage:x.stage||''
       })),
@@ -182,7 +183,7 @@ class AutomationEngine extends EventEmitter {
         if(!candidate){await wait(3000);continue;}
 
         this.queuedUrls.add(candidate.link);
-        const holder={story:candidate,status:'PROCESANDO',attempts:[],stage:'article'};
+        const holder={story:candidate,status:'PROCESANDO',attempts:[],metrics:null,stage:'article'};
         this.queue.push(holder);this.state();
         try{
           Object.assign(holder,await this.process(candidate,s,holder));
@@ -205,13 +206,13 @@ class AutomationEngine extends EventEmitter {
     holder.stage='ai';this.state();
     let ai;
     try{ai=await this.providers.generate(story,article,s);}catch(e){e.message=`IA: ${e.message}`;throw e;}
-    holder.provider=ai.provider;holder.model=ai.model;holder.attempts=ai.attempts||[];
+    holder.provider=ai.provider;holder.model=ai.model;holder.attempts=ai.attempts||[];holder.metrics=ai.metrics||null;
 
     holder.stage='tts';this.state();
     let audio;
     try{audio=await this.kokoro.generate(ai.result.script,{voice:s.tts.voice,speed:s.tts.speed});}
     catch(e){e.message=`Kokoro: ${e.message}`;e.details=ai.attempts||[];throw e;}
-    return {article,provider:ai.provider,model:ai.model,result:ai.result,attempts:ai.attempts||[],audio,image,fallback:this.getFallbackUrl()};
+    return {article,provider:ai.provider,model:ai.model,result:ai.result,attempts:ai.attempts||[],metrics:ai.metrics||null,audio,image,fallback:this.getFallbackUrl()};
   }
 
   async consumer(epoch){

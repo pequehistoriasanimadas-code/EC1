@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { safeStorage } = require('electron');
 
+const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+
 class SettingsStore {
   constructor(baseDir) {
     this.baseDir = baseDir;
@@ -23,12 +25,13 @@ class SettingsStore {
         backup1: 'claude',
         backup2: 'gemini',
         claudeKeyEnc: '',
-        claudeModel: '',
+        claudeModel: DEFAULT_CLAUDE_MODEL,
         geminiKeyEnc: '',
         geminiModel: '',
         targetSeconds: 60,
         localBackupMode: 'on_demand',
-        localIdleMinutes: 10
+        localIdleMinutes: 5,
+        localResourceMode: 'safe_streaming'
       },
       tts: {
         voice: 'ef_dora',
@@ -68,12 +71,22 @@ class SettingsStore {
 
   load() {
     let data = this.defaults();
+    let raw = null;
     try {
       if (fs.existsSync(this.file)) {
-        const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+        raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
         data = this.merge(data, raw);
       }
     } catch {}
+
+    // Migración 0.3.2: el automático usa Haiku 4.5 por defecto para reducir latencia/costo.
+    if (!String(data.ai?.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+
+    // Migración 0.3.2: los equipos que venían del perfil anterior pasan al modo seguro para streaming.
+    if (raw?.ai && raw.ai.localResourceMode === undefined) {
+      data.ai.localResourceMode = 'safe_streaming';
+      if (Number(raw.ai.localIdleMinutes) === 10) data.ai.localIdleMinutes = 5;
+    }
     return data;
   }
 
@@ -108,4 +121,4 @@ class SettingsStore {
   }
 }
 
-module.exports = { SettingsStore };
+module.exports = { SettingsStore, DEFAULT_CLAUDE_MODEL };

@@ -1,5 +1,6 @@
 const fs=require('fs');
 const path=require('path');
+const os=require('os');
 const {spawn}=require('child_process');
 const {pathToFileURL}=require('url');
 
@@ -16,8 +17,11 @@ class KokoroTTS {
   run(args){
     return new Promise((resolve,reject)=>{
       if(!this.ready()) return reject(new Error('Kokoro runtime no incluido o incompleto'));
-      const p=spawn(this.python,[this.script,...args],{windowsHide:true}); let out='',err='';
+      const env={...process.env,OMP_NUM_THREADS:'6',OPENBLAS_NUM_THREADS:'6',MKL_NUM_THREADS:'6',NUMEXPR_NUM_THREADS:'6',OMP_WAIT_POLICY:'PASSIVE'};
+      const p=spawn(this.python,[this.script,...args],{windowsHide:true,env}); let out='',err='';
+      try{os.setPriority(p.pid,os.constants.priority.PRIORITY_BELOW_NORMAL);}catch{}
       p.stdout.on('data',d=>out+=d); p.stderr.on('data',d=>err+=d);
+      p.on('error',reject);
       p.on('exit',code=> code===0?resolve(out.trim()):reject(new Error(`Kokoro error ${code}: ${err.slice(-1200)}`)));
     });
   }

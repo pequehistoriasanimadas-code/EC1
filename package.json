@@ -1,6 +1,6 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "EC Automatic News",
   "main": "src/main.js",

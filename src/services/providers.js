@@ -1,3 +1,5 @@
+const DEFAULT_CLAUDE_MODEL='claude-haiku-4-5-20251001';
+
 function extractJson(s) {
   if (!s) throw new Error('La IA devolvió una respuesta vacía');
   let t = String(s).trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
@@ -18,13 +20,36 @@ function extractJson(s) {
   return result;
 }
 
-function promptFor(story, article, targetSeconds) {
-  return `Eres editor de noticias. Convierte la nota siguiente en un guion locutable en español neutro latinoamericano, informativo y sobrio, de aproximadamente ${targetSeconds} segundos.
+function compactBody(body,maxChars=12000){
+  const raw=String(body||'').split(/\n{2,}|\r?\n/).map(x=>x.replace(/\s+/g,' ').trim()).filter(x=>x.length>35);
+  const reject=/^(lee también|también puedes leer|te puede interesar|suscríbete|regístrate|publicidad|newsletter|síguenos|más información|contenido patrocinado)/i;
+  const paragraphs=[];const seen=new Set();
+  for(const p of raw){
+    if(reject.test(p))continue;
+    const key=p.toLowerCase();if(seen.has(key))continue;seen.add(key);paragraphs.push(p);
+  }
+  if(!paragraphs.length)return String(body||'').slice(0,maxChars);
+  const joined=paragraphs.join('\n\n');if(joined.length<=maxChars)return joined;
+
+  const selected=new Set();let chars=0;
+  const add=i=>{if(selected.has(i))return false;const extra=paragraphs[i].length+(selected.size?2:0);if(chars+extra>maxChars)return false;selected.add(i);chars+=extra;return true;};
+  for(let i=0;i<Math.min(6,paragraphs.length);i++)add(i);
+  const factRich=/\d|%|S\/|US\$|\$|“|”|\"|según|informó|señaló|dijo|afirmó|explicó|anunció|precisó|indicó|declaró|millones|miles|lunes|martes|miércoles|jueves|viernes|sábado|domingo/i;
+  for(let i=6;i<paragraphs.length;i++)if(factRich.test(paragraphs[i]))add(i);
+  if(chars<maxChars*0.82){for(let i=6;i<paragraphs.length;i++)add(i);}
+  return [...selected].sort((a,b)=>a-b).map(i=>paragraphs[i]).join('\n\n').slice(0,maxChars);
+}
+
+function buildPrompt(story,article,targetSeconds){
+  const body=compactBody(article.body || story.description || '',12000);
+  const prompt=`Eres editor de noticias. Convierte la fuente siguiente en un guion locutable en español neutro latinoamericano, informativo y sobrio, de aproximadamente ${targetSeconds} segundos.
 
 REGLAS OBLIGATORIAS:
 - Usa únicamente datos presentes en la fuente.
 - No inventes nombres, fechas, cifras, cargos, contexto ni citas.
 - Conserva nombres propios, cifras y fechas con precisión.
+- Prioriza los hechos esenciales y evita detalles secundarios.
+- Para un guion de 60 segundos, apunta a 145-165 palabras.
 - Redacta para ser escuchado, con frases naturales y claras.
 - Evita editorializar y evita lenguaje sensacionalista.
 - No incluyas saludos, despedidas ni indicaciones de producción.
@@ -42,8 +67,9 @@ ${story.description || article.description || ''}
 CATEGORÍA:
 ${story.category || article.category || ''}
 
-CUERPO:
-${article.body || story.description || ''}`;
+CUERPO DEPURADO:
+${body}`;
+  return {prompt,inputChars:body.length};
 }
 
 class ProviderError extends Error {
@@ -53,27 +79,29 @@ class ProviderError extends Error {
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 function retryableError(e){
   const code=String(e?.code||'');
-  if(['NO_KEY','401','403','NO_MODEL'].includes(code)) return false;
+  if(['NO_KEY','401','403','NO_MODEL','404'].includes(code)) return false;
   return true;
 }
 function claudeBody(model,maxTokens,messages){
   const body={model,max_tokens:maxTokens,messages};
-  if(/claude-(?:sonnet-5|opus-5|opus-4-[78])/i.test(String(model||''))) body.thinking={type:'disabled'};
+  if(/claude-(?:sonnet-5|opus-5)/i.test(String(model||''))) body.thinking={type:'disabled'};
   return body;
 }
-async function claudeRequest(apiKey,body){
+async function claudeRequest(apiKey,body,timeout=90000){
+  const started=Date.now();
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:{'content-type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
     body:JSON.stringify(body),
-    signal:AbortSignal.timeout(90000)
+    signal:AbortSignal.timeout(timeout)
   });
   if (!r.ok) {
     const retry = Number(r.headers.get('retry-after') || 0);
     const text = await r.text();
     throw new ProviderError('claude', `Claude HTTP ${r.status}: ${text.slice(0,500)}`, String(r.status), retry);
   }
-  return r.json();
+  const json=await r.json();
+  return {json,elapsedMs:Date.now()-started};
 }
 
 async function listClaudeModels(apiKey) {
@@ -89,23 +117,19 @@ async function listClaudeModels(apiKey) {
 
 async function claudeGenerate(apiKey, model, prompt) {
   if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
-  let m = model;
-  if (!m) {
-    const models = await listClaudeModels(apiKey);
-    m = models.find(x=>/sonnet/i.test(x)) || models[0];
-  }
-  if (!m) throw new ProviderError('claude','No se encontró un modelo Claude disponible','NO_MODEL');
-  const j=await claudeRequest(apiKey,claudeBody(m,2400,[{role:'user',content:prompt}]));
+  const m=String(model||'').trim()||DEFAULT_CLAUDE_MODEL;
+  const {json:j,elapsedMs}=await claudeRequest(apiKey,claudeBody(m,800,[{role:'user',content:prompt}]));
   const out = (j.content || []).filter(x=>x.type==='text').map(x=>x.text).join('\n');
-  return {model:m,result:extractJson(out)};
+  const usage=j.usage||{};
+  return {model:m,result:extractJson(out),metrics:{elapsedMs,inputTokens:Number(usage.input_tokens||0),outputTokens:Number(usage.output_tokens||0)}};
 }
 
 async function claudeProbe(apiKey,model){
   if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
-  const j=await claudeRequest(apiKey,claudeBody(model,32,[{role:'user',content:'Responde únicamente con la palabra OK.'}]));
+  const {json:j,elapsedMs}=await claudeRequest(apiKey,claudeBody(model,32,[{role:'user',content:'Responde únicamente con la palabra OK.'}]),30000);
   const out=(j.content||[]).filter(x=>x.type==='text').map(x=>x.text).join(' ').trim();
   if(!/^OK\b/i.test(out)) throw new ProviderError('claude',`La API respondió, pero la prueba de generación devolvió: ${out.slice(0,120)||'vacío'}`,'PROBE_FAILED');
-  return true;
+  return {elapsedMs};
 }
 
 async function listGeminiModels(apiKey) {
@@ -128,6 +152,7 @@ async function geminiGenerate(apiKey, model, prompt) {
   }
   if (!m) throw new ProviderError('gemini','No se encontró un modelo Gemini disponible','NO_MODEL');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const started=Date.now();
   const r = await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.15,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(90000)});
   if (!r.ok) {
     const body = await r.text();
@@ -135,7 +160,7 @@ async function geminiGenerate(apiKey, model, prompt) {
   }
   const j = await r.json();
   const out = j?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('\n') || '';
-  return {model:m,result:extractJson(out)};
+  return {model:m,result:extractJson(out),metrics:{elapsedMs:Date.now()-started,inputTokens:Number(j?.usageMetadata?.promptTokenCount||0),outputTokens:Number(j?.usageMetadata?.candidatesTokenCount||0)}};
 }
 
 class Providers {
@@ -143,17 +168,24 @@ class Providers {
     this.settingsStore=settingsStore;
     this.localRuntime=localRuntime;
     this.cooldownUntil={claude:0,gemini:0,local:0};
+    this.claudeModelsCache={items:[],at:0};
+  }
+
+  async getClaudeModels(key,force=false){
+    if(!force&&this.claudeModelsCache.items.length&&Date.now()-this.claudeModelsCache.at<30*60000)return this.claudeModelsCache.items;
+    const items=await listClaudeModels(key);this.claudeModelsCache={items,at:Date.now()};return items;
   }
 
   async test(provider, settings) {
     if (provider==='local') return this.localRuntime.status();
     if (provider==='claude') {
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
-      const models=await listClaudeModels(key);
-      const model=settings.ai.claudeModel||models.find(x=>/sonnet/i.test(x))||models[0]||'';
+      const models=await this.getClaudeModels(key,true);
+      let model=String(settings.ai.claudeModel||'').trim()||DEFAULT_CLAUDE_MODEL;
+      if(!models.includes(model)) model=models.find(x=>/haiku-4-5/i.test(x))||models.find(x=>/haiku/i.test(x))||models.find(x=>/sonnet/i.test(x))||models[0]||'';
       if(!model) throw new ProviderError('claude','No se encontró un modelo Claude disponible','NO_MODEL');
-      await claudeProbe(key,model);
-      return {ok:true,keyStored:!!settings.ai.claudeKeyEnc,models,model,generationOk:true};
+      const probe=await claudeProbe(key,model);
+      return {ok:true,keyStored:!!settings.ai.claudeKeyEnc,models,model,generationOk:true,elapsedMs:probe.elapsedMs};
     }
     if (provider==='gemini') {
       const key=this.settingsStore.decryptSecret(settings.ai.geminiKeyEnc);
@@ -168,20 +200,22 @@ class Providers {
   }
   async callProvider(provider,prompt,settings){
     if(provider==='local'){
+      this.localRuntime.configure(settings.ai.localResourceMode||'safe_streaming');
       const onDemand=this.localIsBackup(settings) && (settings.ai.localBackupMode||'on_demand')==='on_demand';
+      const started=Date.now();
       try{
         const text=await this.localRuntime.generate(prompt);
-        return {model:'Qwen3-8B-Q4_K_M',result:extractJson(text)};
+        return {model:'Qwen3-8B-Q4_K_M',result:extractJson(text),metrics:{elapsedMs:Date.now()-started,inputTokens:0,outputTokens:0}};
       } finally {
         if(onDemand){
-          const minutes=Math.max(1,Math.min(60,Number(settings.ai.localIdleMinutes)||10));
+          const minutes=Math.max(1,Math.min(60,Number(settings.ai.localIdleMinutes)||5));
           this.localRuntime.scheduleIdleStop(minutes*60000);
         }
       }
     }
     if(provider==='claude'){
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
-      return claudeGenerate(key,settings.ai.claudeModel,prompt);
+      return claudeGenerate(key,settings.ai.claudeModel||DEFAULT_CLAUDE_MODEL,prompt);
     }
     if(provider==='gemini'){
       const key=this.settingsStore.decryptSecret(settings.ai.geminiKeyEnc);
@@ -197,7 +231,7 @@ class Providers {
   }
 
   async generate(story, article, settings) {
-    const prompt = promptFor(story, article, settings.ai.targetSeconds || 60);
+    const built=buildPrompt(story, article, settings.ai.targetSeconds || 60);
     const order = [settings.ai.primary, settings.ai.backup1, settings.ai.backup2].filter((x,i,a)=>x && x!=='none' && a.indexOf(x)===i);
     const attempts=[];
     for (const provider of order) {
@@ -208,9 +242,10 @@ class Providers {
       }
       for(let n=1;n<=2;n++){
         try {
-          const out=await this.callProvider(provider,prompt,settings);
-          attempts.push({provider,attempt:n,ok:true,model:out.model||''});
-          return {provider,model:out.model||'',result:out.result,attempts};
+          const out=await this.callProvider(provider,built.prompt,settings);
+          const metrics={...(out.metrics||{}),inputChars:built.inputChars};
+          attempts.push({provider,attempt:n,ok:true,model:out.model||'',elapsedMs:metrics.elapsedMs||0});
+          return {provider,model:out.model||'',result:out.result,attempts,metrics};
         } catch (e) {
           this.setCooldown(provider,e);
           attempts.push({provider,attempt:n,ok:false,message:e.message,code:e.code||''});
@@ -226,4 +261,4 @@ class Providers {
   }
 }
 
-module.exports = { Providers, ProviderError, listClaudeModels, listGeminiModels, extractJson };
+module.exports = { Providers, ProviderError, listClaudeModels, listGeminiModels, extractJson, compactBody, DEFAULT_CLAUDE_MODEL };

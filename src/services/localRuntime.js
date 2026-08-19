@@ -1,9 +1,16 @@
-const fs=require('fs'); const path=require('path');
+const fs=require('fs');
+const path=require('path');
 const {spawn}=require('child_process');
 const {Readable}=require('stream');
 
 const MODEL_URL='https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf?download=true';
 const MODEL_NAME='Qwen3-8B-Q4_K_M.gguf';
+
+const RESOURCE_PROFILES={
+  safe_streaming:{label:'Seguro para streaming',ctx:4096,gpuLayers:20,batch:256,ubatch:128,threads:6,parallel:1,prio:-1,poll:0,warmup:false},
+  balanced:{label:'Equilibrado',ctx:4096,gpuLayers:28,batch:512,ubatch:256,threads:8,parallel:1,prio:-1,poll:0,warmup:false},
+  performance:{label:'Máximo rendimiento',ctx:8192,gpuLayers:99,batch:512,ubatch:256,threads:12,parallel:1,prio:0,poll:50,warmup:true}
+};
 
 function findRecursive(dir,filename){
   if(!fs.existsSync(dir))return'';
@@ -22,13 +29,25 @@ class LocalRuntime{
     this.modelDir=path.join(dataDir,'models');
     this.modelPath=path.join(this.modelDir,MODEL_NAME);
     this.server=null;this.port=8766;this.startingPromise=null;this.idleTimer=null;this.idleDeadline=0;
+    this.resourceMode='safe_streaming';
     fs.mkdirSync(this.modelDir,{recursive:true});
   }
   serverExe(){return findRecursive(this.runtimeDir,'llama-server.exe');}
   modelReady(){return fs.existsSync(this.modelPath)&&fs.statSync(this.modelPath).size>4_000_000_000;}
+  profile(){return RESOURCE_PROFILES[this.resourceMode]||RESOURCE_PROFILES.safe_streaming;}
+  configure(mode='safe_streaming'){
+    const next=RESOURCE_PROFILES[mode]?mode:'safe_streaming';
+    if(next===this.resourceMode)return;
+    const wasRunning=!!this.server;
+    this.resourceMode=next;
+    if(wasRunning)this.stop('profile-change');
+    this.onEvent({type:'local-ai-profile',mode:this.resourceMode,profile:this.profile()});
+  }
   async status(){
+    const p=this.profile();
     return{
       ok:!!this.serverExe(),runtime:!!this.serverExe(),model:this.modelReady(),running:!!this.server,
+      resourceMode:this.resourceMode,profile:{label:p.label,ctx:p.ctx,gpuLayers:p.gpuLayers,threads:p.threads,batch:p.batch,ubatch:p.ubatch,parallel:p.parallel},
       idleStopScheduled:!!this.idleTimer,idleStopInSec:this.idleDeadline?Math.max(0,Math.ceil((this.idleDeadline-Date.now())/1000)):0
     };
   }
@@ -36,10 +55,10 @@ class LocalRuntime{
     if(this.idleTimer){clearTimeout(this.idleTimer);this.idleTimer=null;}
     this.idleDeadline=0;
   }
-  scheduleIdleStop(ms=600000){
+  scheduleIdleStop(ms=300000){
     this.cancelIdleStop();
     if(!this.server)return;
-    const delay=Math.max(60000,Number(ms)||600000);
+    const delay=Math.max(60000,Number(ms)||300000);
     this.idleDeadline=Date.now()+delay;
     this.idleTimer=setTimeout(()=>{
       this.idleTimer=null;this.idleDeadline=0;
@@ -74,12 +93,22 @@ class LocalRuntime{
     const exe=this.serverExe();
     if(!exe)throw new Error('Runtime llama.cpp no incluido en esta compilación');
     if(!this.modelReady())throw new Error('MODEL_MISSING');
-    const args=['-m',this.modelPath,'--host','127.0.0.1','--port',String(this.port),'-c','8192','-ngl','99'];
-    this.server=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:true,stdio:['ignore','pipe','pipe']});
+    const p=this.profile();
+    const args=[
+      '-m',this.modelPath,'--host','127.0.0.1','--port',String(this.port),
+      '-c',String(p.ctx),'-ngl',String(p.gpuLayers),
+      '-b',String(p.batch),'-ub',String(p.ubatch),
+      '-t',String(p.threads),'-tb',String(p.threads),'-np',String(p.parallel),
+      '--prio',String(p.prio),'--poll',String(p.poll)
+    ];
+    if(!p.warmup)args.push('--no-warmup');
+    this.onEvent({type:'local-ai-starting',mode:this.resourceMode,profile:p});
+    this.server=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:true,stdio:['ignore','ignore','ignore']});
     this.server.on('exit',()=>{this.server=null;this.cancelIdleStop();this.onEvent({type:'local-ai-exit'});});
     const started=Date.now();
     while(Date.now()-started<120000){
-      try{const r=await fetch(`http://127.0.0.1:${this.port}/health`,{signal:AbortSignal.timeout(3000)});if(r.ok){this.onEvent({type:'local-ai-started'});return;}}catch{}
+      if(!this.server)throw new Error('La IA local se cerró durante el inicio');
+      try{const r=await fetch(`http://127.0.0.1:${this.port}/health`,{signal:AbortSignal.timeout(3000)});if(r.ok){this.onEvent({type:'local-ai-started',mode:this.resourceMode,profile:p});return;}}catch{}
       await new Promise(r=>setTimeout(r,1000));
     }
     this.stop('start-timeout');throw new Error('La IA local no terminó de iniciar');
@@ -94,11 +123,11 @@ class LocalRuntime{
     const directPrompt=`/no_think\n${prompt}\n\nIMPORTANTE: no expliques tu razonamiento; entrega únicamente el JSON solicitado.`;
     const r=await fetch(`http://127.0.0.1:${this.port}/v1/chat/completions`,{
       method:'POST',headers:{'content-type':'application/json'},
-      body:JSON.stringify({model:'local',messages:[{role:'system',content:'Responde exactamente en el formato solicitado. No uses bloques <think> y no agregues texto fuera del JSON.'},{role:'user',content:directPrompt}],temperature:0.1,max_tokens:1600,stream:false}),
+      body:JSON.stringify({model:'local',messages:[{role:'system',content:'Responde exactamente en el formato solicitado. No uses bloques <think> y no agregues texto fuera del JSON.'},{role:'user',content:directPrompt}],temperature:0.1,max_tokens:900,stream:false}),
       signal:AbortSignal.timeout(120000)
     });
     if(!r.ok)throw new Error(`IA local HTTP ${r.status}: ${(await r.text()).slice(0,300)}`);
     const j=await r.json();return j?.choices?.[0]?.message?.content||'';
   }
 }
-module.exports={LocalRuntime,MODEL_URL,MODEL_NAME};
+module.exports={LocalRuntime,MODEL_URL,MODEL_NAME,RESOURCE_PROFILES};
