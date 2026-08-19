@@ -56,13 +56,32 @@ function retryableError(e){
   if(['NO_KEY','401','403','NO_MODEL'].includes(code)) return false;
   return true;
 }
+function claudeBody(model,maxTokens,messages){
+  const body={model,max_tokens:maxTokens,messages};
+  if(/claude-(?:sonnet-5|opus-5|opus-4-[78])/i.test(String(model||''))) body.thinking={type:'disabled'};
+  return body;
+}
+async function claudeRequest(apiKey,body){
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{'content-type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+    body:JSON.stringify(body),
+    signal:AbortSignal.timeout(90000)
+  });
+  if (!r.ok) {
+    const retry = Number(r.headers.get('retry-after') || 0);
+    const text = await r.text();
+    throw new ProviderError('claude', `Claude HTTP ${r.status}: ${text.slice(0,500)}`, String(r.status), retry);
+  }
+  return r.json();
+}
 
 async function listClaudeModels(apiKey) {
   if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
   const r = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': apiKey, 'anthropic-version':'2023-06-01' }, signal:AbortSignal.timeout(20000) });
   if (!r.ok) {
     const body=await r.text();
-    throw new ProviderError('claude', `Claude HTTP ${r.status}: ${body.slice(0,220)}`, String(r.status), Number(r.headers.get('retry-after')||0));
+    throw new ProviderError('claude', `Claude HTTP ${r.status}: ${body.slice(0,300)}`, String(r.status), Number(r.headers.get('retry-after')||0));
   }
   const j = await r.json();
   return (j.data || []).map(x=>x.id);
@@ -76,20 +95,17 @@ async function claudeGenerate(apiKey, model, prompt) {
     m = models.find(x=>/sonnet/i.test(x)) || models[0];
   }
   if (!m) throw new ProviderError('claude','No se encontró un modelo Claude disponible','NO_MODEL');
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST',
-    headers:{'content-type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
-    body:JSON.stringify({model:m,max_tokens:1600,temperature:0.15,messages:[{role:'user',content:prompt}]}),
-    signal:AbortSignal.timeout(90000)
-  });
-  if (!r.ok) {
-    const retry = Number(r.headers.get('retry-after') || 0);
-    const body = await r.text();
-    throw new ProviderError('claude', `Claude HTTP ${r.status}: ${body.slice(0,300)}`, String(r.status), retry);
-  }
-  const j = await r.json();
+  const j=await claudeRequest(apiKey,claudeBody(m,2400,[{role:'user',content:prompt}]));
   const out = (j.content || []).filter(x=>x.type==='text').map(x=>x.text).join('\n');
   return {model:m,result:extractJson(out)};
+}
+
+async function claudeProbe(apiKey,model){
+  if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
+  const j=await claudeRequest(apiKey,claudeBody(model,32,[{role:'user',content:'Responde únicamente con la palabra OK.'}]));
+  const out=(j.content||[]).filter(x=>x.type==='text').map(x=>x.text).join(' ').trim();
+  if(!/^OK\b/i.test(out)) throw new ProviderError('claude',`La API respondió, pero la prueba de generación devolvió: ${out.slice(0,120)||'vacío'}`,'PROBE_FAILED');
+  return true;
 }
 
 async function listGeminiModels(apiKey) {
@@ -97,7 +113,7 @@ async function listGeminiModels(apiKey) {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,{signal:AbortSignal.timeout(20000)});
   if (!r.ok) {
     const body=await r.text();
-    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,220)}`, String(r.status), Number(r.headers.get('retry-after')||0));
+    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,300)}`, String(r.status), Number(r.headers.get('retry-after')||0));
   }
   const j = await r.json();
   return (j.models || []).filter(x => (x.supportedGenerationMethods||[]).includes('generateContent')).map(x=>x.name.replace(/^models\//,''));
@@ -115,7 +131,7 @@ async function geminiGenerate(apiKey, model, prompt) {
   const r = await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.15,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(90000)});
   if (!r.ok) {
     const body = await r.text();
-    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,300)}`, String(r.status), Number(r.headers.get('retry-after')||0));
+    throw new ProviderError('gemini', `Gemini HTTP ${r.status}: ${body.slice(0,500)}`, String(r.status), Number(r.headers.get('retry-after')||0));
   }
   const j = await r.json();
   const out = j?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('\n') || '';
@@ -134,7 +150,10 @@ class Providers {
     if (provider==='claude') {
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
       const models=await listClaudeModels(key);
-      return {ok:true,keyStored:!!settings.ai.claudeKeyEnc,models,model:settings.ai.claudeModel||models.find(x=>/sonnet/i.test(x))||models[0]||''};
+      const model=settings.ai.claudeModel||models.find(x=>/sonnet/i.test(x))||models[0]||'';
+      if(!model) throw new ProviderError('claude','No se encontró un modelo Claude disponible','NO_MODEL');
+      await claudeProbe(key,model);
+      return {ok:true,keyStored:!!settings.ai.claudeKeyEnc,models,model,generationOk:true};
     }
     if (provider==='gemini') {
       const key=this.settingsStore.decryptSecret(settings.ai.geminiKeyEnc);
@@ -144,8 +163,22 @@ class Providers {
     return {ok:false};
   }
 
+  localIsBackup(settings){
+    return settings.ai.primary!=='local' && [settings.ai.backup1,settings.ai.backup2].includes('local');
+  }
   async callProvider(provider,prompt,settings){
-    if(provider==='local') return {model:'Qwen3-8B-Q4_K_M',result:extractJson(await this.localRuntime.generate(`/no_think\n${prompt}`))};
+    if(provider==='local'){
+      const onDemand=this.localIsBackup(settings) && (settings.ai.localBackupMode||'on_demand')==='on_demand';
+      try{
+        const text=await this.localRuntime.generate(prompt);
+        return {model:'Qwen3-8B-Q4_K_M',result:extractJson(text)};
+      } finally {
+        if(onDemand){
+          const minutes=Math.max(1,Math.min(60,Number(settings.ai.localIdleMinutes)||10));
+          this.localRuntime.scheduleIdleStop(minutes*60000);
+        }
+      }
+    }
     if(provider==='claude'){
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
       return claudeGenerate(key,settings.ai.claudeModel,prompt);

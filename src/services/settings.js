@@ -26,7 +26,9 @@ class SettingsStore {
         claudeModel: '',
         geminiKeyEnc: '',
         geminiModel: '',
-        targetSeconds: 60
+        targetSeconds: 60,
+        localBackupMode: 'on_demand',
+        localIdleMinutes: 10
       },
       tts: {
         voice: 'ef_dora',

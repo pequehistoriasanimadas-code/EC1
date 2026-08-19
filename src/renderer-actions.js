@@ -3,11 +3,13 @@ $('#openOutput').onclick=async()=>{try{await window.ECAPI.openOutput();status('O
 $('#addFeed').onclick=()=>{settings.rssFeeds.push({id:`rss-${Date.now()}`,name:'Nuevo RSS',url:'',enabled:true,priority:50});renderFeeds();};
 $('#pickFallback').onclick=async()=>{const r=await window.ECAPI.pickFallback();if(r.ok){settings.visual.fallbackImage=r.path;settings.visual.fallbackImageUrl=r.url;$('#fallbackInfo').textContent=r.path;refreshPreview();}};
 $('#save').onclick=()=>saveSettings();
-['primary','backup1','backup2'].forEach(id=>$('#'+id).onchange=()=>normalizeProviders(true));
-$('#testClaude').onclick=async()=>{try{await saveSettings({quiet:true});$('#claudeStatus').textContent='Probando conexión...';status('Probando Claude...');const r=await window.ECAPI.testProvider('claude');settings.ai.hasClaudeKey=!!r.keyStored;$('#claudeStatus').textContent=`Conexión OK ✓ · API guardada ✓ · ${r.model||r.models?.[0]||'modelo detectado'}`;refreshProviderUi();$('#claudeStatus').textContent=`Conexión OK ✓ · API guardada ✓ · ${r.model||r.models?.[0]||'modelo detectado'}`;status(`Claude OK · ${r.models?.length||0} modelos disponibles`);}catch(e){$('#claudeStatus').textContent=`Error: ${e.message||e}`;status(`Claude error: ${e.message||e}`);}};
+['primary','backup1','backup2'].forEach(id=>$('#'+id).onchange=()=>{normalizeProviders(true);refreshLocalPolicyUi();});
+$('#localBackupMode').onchange=refreshLocalPolicyUi;
+$('#testClaude').onclick=async()=>{try{await saveSettings({quiet:true});$('#claudeStatus').textContent='Probando conexión y generación real...';status('Probando Claude con una generación real...');const r=await window.ECAPI.testProvider('claude');settings.ai.hasClaudeKey=!!r.keyStored;refreshProviderUi();$('#claudeStatus').textContent=`Conexión y generación OK ✓ · API guardada ✓ · ${r.model||r.models?.[0]||'modelo detectado'}`;status(`Claude OK · generación real correcta · ${r.models?.length||0} modelos disponibles`);}catch(e){$('#claudeStatus').textContent=`Error real de Claude: ${e.message||e}`;status(`Claude error: ${e.message||e}`);}};
 $('#testGemini').onclick=async()=>{try{await saveSettings({quiet:true});$('#geminiStatus').textContent='Probando conexión...';status('Probando Gemini...');const r=await window.ECAPI.testProvider('gemini');settings.ai.hasGeminiKey=!!r.keyStored;refreshProviderUi();$('#geminiStatus').textContent=`Conexión OK ✓ · API guardada ✓ · ${r.model||r.models?.[0]||'modelo detectado'}`;status(`Gemini OK · ${r.models?.length||0} modelos disponibles`);}catch(e){$('#geminiStatus').textContent=`Error: ${e.message||e}`;status(`Gemini error: ${e.message||e}`);}};
-$('#downloadModel').onclick=async()=>{status('Descargando Qwen (~5 GB)...');try{await window.ECAPI.downloadLocalModel();status('Qwen descargado');await refreshRuntimeStatus();}catch(e){status(`Descarga error: ${e.message||e}`);}};
-$('#startLocal').onclick=async()=>{status('Iniciando IA local...');try{await window.ECAPI.startLocal();status('IA local lista');await refreshRuntimeStatus();}catch(e){status(String(e.message||e).includes('MODEL_MISSING')?'Primero descarga Qwen':`IA local error: ${e.message||e}`);}};
+$('#downloadModel').onclick=async()=>{status('Descargando Qwen (~5 GB)...');try{await window.ECAPI.downloadLocalModel();status('Qwen descargado. Ya puedes activarlo o dejar que se inicie automáticamente si entra como respaldo.');await refreshRuntimeStatus();}catch(e){status(`Descarga error: ${e.message||e}`);}};
+$('#startLocal').onclick=async()=>{status('Activando IA local...');try{await window.ECAPI.startLocal();status('IA local activa. Mientras permanezca activa consume recursos del equipo.');await refreshRuntimeStatus();}catch(e){status(String(e.message||e).includes('MODEL_MISSING')?'Primero descarga Qwen':`IA local error: ${e.message||e}`);}};
+$('#stopLocal').onclick=async()=>{try{await window.ECAPI.stopLocal();status('IA local detenida. El modelo sigue descargado y se han liberado sus recursos de ejecución.');await refreshRuntimeStatus();}catch(e){status(`No se pudo detener la IA local: ${e.message||e}`);}};
 
 $('#genScript').onclick=async()=>{if(!currentStory)return;await saveSettings({quiet:true});status('Generando guion...');try{const r=await window.ECAPI.generate(currentStory,currentArticle||{});currentGenerated=r;$('#title').value=r.result.title||currentStory.title;$('#category').value=r.result.category||'ACTUALIDAD';$('#summary').value=r.result.summary||'';$('#script').value=r.result.script||'';refreshPreview();const fallbacks=(r.attempts||[]).filter(a=>!a.ok).map(a=>providerName(a.provider));status(`Guion generado con ${providerName(r.provider)}${fallbacks.length?` · fallback tras ${[...new Set(fallbacks)].join(', ')}`:''}`);}catch(e){status(`IA error: ${e.message||e}`);}};
 $('#genVoice').onclick=async()=>{const text=$('#script').value.trim();if(!text)return status('Primero genera o escribe el guion');await saveSettings({quiet:true});status('Generando voz con Kokoro...');try{currentAudio=await window.ECAPI.generateTts(text);$('#previewAudio').src=currentAudio.url;status(`Voz lista · ${Math.round(currentAudio.durationSec||0)} s`);}catch(e){status(`Kokoro error: ${e.message||e}`);}};
@@ -30,9 +32,16 @@ $('#saveDesign').onclick=async()=>{await saveSettings({quiet:true});status('Dise
 $('#resetDesign').onclick=()=>{settings.visual.output={...DESIGN_DEFAULT};setDesignControls(settings.visual.output);updateDesignFromControls(true);status('Diseño restaurado. Pulsa Guardar diseño para conservarlo.');};
 
 window.ECAPI.on('automation:state',refreshAutomation);
-window.ECAPI.on('automation:itemError',e=>{const d=(e.details||[]).map(x=>`${providerName(x.provider)}: ${x.message}`).join(' | ');status(`Automático · ${e.stage||'error'}: ${e.error}${d?` · ${d}`:''}`);});
+window.ECAPI.on('automation:itemError',e=>{const d=(e.details||[]).map(x=>`${providerName(x.provider)}${x.code?` [${x.code}]`:''}: ${x.message}`).join(' | ');status(`Automático · ${e.stage||'error'}: ${e.error}${d?` · ${d}`:''}`);});
 window.ECAPI.on('automation:engineError',e=>status(`Automático: ${e.message}`));
 window.ECAPI.on('output:state',refreshOutputStatus);
-window.ECAPI.on('local:event',e=>{if(e.type==='model-download'){$('#downloadProgress div').style.width=`${e.percent||0}%`;status(`Descargando Qwen: ${e.percent||0}%`);}if(e.type==='local-ai-exit')refreshRuntimeStatus();});
+window.ECAPI.on('local:event',e=>{
+  if(e.type==='model-download'){$('#downloadProgress div').style.width=`${e.percent||0}%`;status(`Descargando Qwen: ${e.percent||0}%`);}
+  if(e.type==='local-ai-started')status('IA local activa.');
+  if(e.type==='local-ai-idle-scheduled')status(`Qwen se apagará automáticamente tras ${Math.round((e.seconds||0)/60)} min sin uso.`);
+  if(e.type==='local-ai-stopped'&&e.reason==='idle')status('Qwen se apagó automáticamente por inactividad y liberó recursos.');
+  if(e.type==='local-ai-error')status(`IA local: ${e.message||'error'}`);
+  if(['local-ai-exit','local-ai-started','local-ai-stopped','local-ai-idle-scheduled'].includes(e.type))refreshRuntimeStatus();
+});
 
 (async()=>{await loadSettings();await loadNews();})();

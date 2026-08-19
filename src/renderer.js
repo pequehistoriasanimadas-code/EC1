@@ -43,6 +43,20 @@ function refreshOutputStatus(s=currentOutputState){
   el.textContent=`OUTPUT · ${source}${s.title?` · ${s.title.slice(0,48)}`:''}`;
   el.className=`status-pill ${s.source==='automatic'?'live':s.source==='editor'?'pause':'ok'}`;
 }
+function refreshLocalPolicyUi(){
+  if(!$('#localBackupMode'))return;
+  const mode=$('#localBackupMode').value||'on_demand';
+  const primary=$('#primary')?.value||settings?.ai?.primary;
+  const backups=[$('#backup1')?.value,$('#backup2')?.value];
+  const asBackup=primary!=='local'&&backups.includes('local');
+  const asPrimary=primary==='local';
+  $('#localIdleRow').classList.toggle('hidden',mode!=='on_demand');
+  const info=$('#localPolicyInfo');
+  if(asPrimary) info.textContent='Qwen está configurado como principal: se activará automáticamente al primer uso y permanecerá activo hasta que lo detengas o cierres la app.';
+  else if(asBackup&&mode==='always') info.textContent='Qwen está como respaldo y se mantendrá cargado para responder inmediatamente si falla el proveedor principal.';
+  else if(asBackup) info.textContent='Qwen está como respaldo bajo demanda: permanece apagado mientras el principal funcione; si hace falta, se activa automáticamente y se apaga tras el tiempo sin uso indicado.';
+  else info.textContent='Esta opción se aplica cuando Qwen está configurado como respaldo. Si Qwen no está en la cadena, puede permanecer apagado.';
+}
 function refreshProviderUi(){
   if(!settings)return;
   const chain=[settings.ai.primary,settings.ai.backup1,settings.ai.backup2].filter(x=>x&&x!=='none');
@@ -51,6 +65,7 @@ function refreshProviderUi(){
   $('#geminiStatus').textContent=settings.ai.hasGeminiKey?'API Key guardada ✓':'API Key: no configurada';
   $('#claudeKey').placeholder=settings.ai.hasClaudeKey?'••••••••  API guardada · pega otra para reemplazar':'Pega una clave nueva';
   $('#geminiKey').placeholder=settings.ai.hasGeminiKey?'••••••••  API guardada · pega otra para reemplazar':'Pega una clave nueva';
+  refreshLocalPolicyUi();
 }
 function normalizeProviders(showMessage=false){
   const p=$('#primary').value;let b1=$('#backup1').value,b2=$('#backup2').value;const changes=[];
@@ -83,6 +98,7 @@ async function loadSettings(){
   settings.visual.output={...DESIGN_DEFAULT,...(settings.visual.output||{})};
   $('#primary').value=settings.ai.primary;$('#backup1').value=settings.ai.backup1;$('#backup2').value=settings.ai.backup2;
   $('#claudeModel').value=settings.ai.claudeModel||'';$('#geminiModel').value=settings.ai.geminiModel||'';
+  $('#localBackupMode').value=settings.ai.localBackupMode||'on_demand';$('#localIdleMinutes').value=settings.ai.localIdleMinutes||10;
   $('#voiceSpeed').value=settings.tts.speed||1;$('#bufferReady').value=settings.automation.bufferReady||5;$('#pauseSeconds').value=settings.visual.pauseSeconds||2.5;$('#maxAge').value=settings.automation.maxAgeHours||6;$('#avoidRepeats').checked=settings.automation.avoidRepeats!==false;
   $('#fallbackInfo').textContent=settings.visual.fallbackImage||'Sin imagen fallback';
   setDesignControls(settings.visual.output);renderFeeds();refreshProviderUi();refreshPreview();await refreshRuntimeStatus();

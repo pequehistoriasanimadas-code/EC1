@@ -63,6 +63,21 @@ function currentDesign(){return settingsStore?.load()?.visual?.output||{};}
 function broadcastOutputState(){sendControl('output:state',{...outputState});}
 function setOutputState(patch){outputState={...outputState,...patch};broadcastOutputState();}
 
+async function syncLocalPolicy(settings=settingsStore?.load()){
+  if(!settings||!localRuntime)return;
+  const ai=settings.ai||{};
+  const localAsBackup=ai.primary!=='local'&&[ai.backup1,ai.backup2].includes('local');
+  if(localAsBackup&&(ai.localBackupMode||'on_demand')==='always'){
+    try{
+      const st=await localRuntime.status();
+      if(st.model&&!st.running) await localRuntime.start();
+    }catch(e){sendControl('local:event',{type:'local-ai-error',message:e.message||String(e)});}
+  } else if(localAsBackup&&(ai.localBackupMode||'on_demand')==='on_demand'){
+    const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||10));
+    localRuntime.scheduleIdleStop(minutes*60000);
+  }
+}
+
 function createControlWindow() {
   controlWindow = new BrowserWindow({
     width: 1500, height: 940, minWidth: 1100, minHeight: 720,
@@ -148,6 +163,7 @@ function initServices() {
   });
   automation.on('error-item',e=>sendControl('automation:itemError',e));
   automation.on('engine-error',e=>sendControl('automation:engineError',{message:e.message}));
+  setTimeout(()=>syncLocalPolicy(settingsStore.load()),800);
   logEvent('SERVICES','initialized');
 }
 
@@ -174,15 +190,15 @@ app.whenReady().then(async()=>{
     createControlWindow();logEvent('WINDOW','control created');
   } catch (e) { fatalError('La aplicación no pudo iniciar',e);app.exit(1); }
 });
-app.on('window-all-closed',()=>{ localRuntime?.stop(); if(process.platform!=='darwin') app.quit(); });
-app.on('before-quit',()=>localRuntime?.stop());
+app.on('window-all-closed',()=>{ localRuntime?.stop('app-close'); if(process.platform!=='darwin') app.quit(); });
+app.on('before-quit',()=>localRuntime?.stop('app-quit'));
 
 ipcMain.handle('settings:get',()=>{
   const s=settingsStore.load();
   const { claudeKeyEnc, geminiKeyEnc, ...publicAi } = s.ai;
   return {...s,visual:{...s.visual,fallbackImageUrl:fallbackUrl()},ai:{...publicAi,claudeKey:'',geminiKey:'',hasClaudeKey:!!claudeKeyEnc,hasGeminiKey:!!geminiKeyEnc}};
 });
-ipcMain.handle('settings:save',(_,incoming)=>{
+ipcMain.handle('settings:save',async(_,incoming)=>{
   const current=settingsStore.load();
   const incomingAi={...(incoming.ai||{})};
   const claudePlain=String(incomingAi.claudeKey||'').trim();
@@ -198,6 +214,7 @@ ipcMain.handle('settings:save',(_,incoming)=>{
   if(claudePlain) next.ai.claudeKeyEnc=settingsStore.encryptSecret(claudePlain); else next.ai.claudeKeyEnc=current.ai.claudeKeyEnc||'';
   if(geminiPlain) next.ai.geminiKeyEnc=settingsStore.encryptSecret(geminiPlain); else next.ai.geminiKeyEnc=current.ai.geminiKeyEnc||'';
   settingsStore.save(next);
+  syncLocalPolicy(next);
   if(outputReady()){
     outputWindow.webContents.send('output:design',next.visual.output);
     if(next.visual.output.format!==outputState.format)applyOutputWindowFormat(next.visual.output.format,true);
@@ -213,7 +230,7 @@ ipcMain.handle('providers:generate',async(_,story,article)=>providers.generate(s
 ipcMain.handle('local:status',()=>localRuntime.status());
 ipcMain.handle('local:downloadModel',()=>localRuntime.downloadModel());
 ipcMain.handle('local:start',async()=>{await localRuntime.start();return localRuntime.status();});
-ipcMain.handle('local:stop',()=>{localRuntime.stop();return{ok:true};});
+ipcMain.handle('local:stop',async()=>{localRuntime.stop('manual');return localRuntime.status();});
 ipcMain.handle('tts:status',async()=>({ready:kokoro.ready(),voices:kokoro.ready()?await kokoro.listVoices():[]}));
 ipcMain.handle('tts:generate',(_,text)=>kokoro.generate(text,{voice:settingsStore.load().tts.voice,speed:settingsStore.load().tts.speed}));
 
