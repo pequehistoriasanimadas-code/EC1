@@ -1,4 +1,4 @@
-import argparse, json, sys
+import argparse, json, re, sys
 import numpy as np
 import soundfile as sf
 
@@ -46,10 +46,32 @@ ort.InferenceSession=_limited_inference_session
 from kokoro_onnx import Kokoro
 from misaki.espeak import EspeakG2P
 
+def _currency_phrase(amount, scale, currency):
+    scale=(scale or '').strip()
+    if not scale:
+        return f'{amount} {currency}'
+    needs_de=scale.lower().startswith(('millón','millones','billón','billones'))
+    return f'{amount} {scale}{" de" if needs_de else ""} {currency}'
+
+def normalize_currency(text):
+    # Formas editoriales originales: S/900 millones, US$25 millones, USD 3 mil, $40.
+    def soles(m): return _currency_phrase(m.group(1),m.group(2),'soles')
+    def dollars(m): return _currency_phrase(m.group(1),m.group(2),'dólares')
+    scale=r'(millones?|billones?|miles?|mil)?'
+    text=re.sub(r'S/\s*(\d+(?:[.,]\d+)?)\s*'+scale,soles,text,flags=re.I)
+    text=re.sub(r'(?:US\$|USD|\$)\s*(\d+(?:[.,]\d+)?)\s*'+scale,dollars,text,flags=re.I)
+    # Corrige la forma que podía producir el normalizador anterior: "900 soles millones".
+    text=re.sub(r'(\d+(?:[.,]\d+)?)\s+soles\s+(millones?|billones?)',lambda m:f'{m.group(1)} {m.group(2)} de soles',text,flags=re.I)
+    text=re.sub(r'(\d+(?:[.,]\d+)?)\s+dólares\s+(millones?|billones?)',lambda m:f'{m.group(1)} {m.group(2)} de dólares',text,flags=re.I)
+    text=re.sub(r'(\d+(?:[.,]\d+)?)\s+soles\s+(mil|miles)',lambda m:f'{m.group(1)} {m.group(2)} soles',text,flags=re.I)
+    text=re.sub(r'(\d+(?:[.,]\d+)?)\s+dólares\s+(mil|miles)',lambda m:f'{m.group(1)} {m.group(2)} dólares',text,flags=re.I)
+    return text
+
 with open(a.text_file,'r',encoding='utf-8') as f:
     text=f.read().strip()
 if not text:
     raise SystemExit('Texto vacío')
+text=normalize_currency(text)
 
 styles=np.load(a.voices)
 voice=a.voice if a.voice in styles.files else next((v for v in styles.files if v.startswith('e')), styles.files[0])
