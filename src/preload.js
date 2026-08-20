@@ -9,6 +9,7 @@ let ttsProfileOverride='';
 let ttsReadyState=null;
 let aiPrimary='local';
 let localStarting=false;
+let soundSaveTimer=null;
 
 function profileInfo(name=ttsProfileOverride){const key=TTS_PROFILES[name]?name:'safe_streaming';return{key,...TTS_PROFILES[key]};}
 async function getSettings(){
@@ -71,6 +72,7 @@ contextBridge.exposeInMainWorld('ECAPI',{
   emissionResume:()=>ipcRenderer.invoke('automation:emissionResume'),
   emissionStop:()=>ipcRenderer.invoke('automation:emissionStop'),
   clearQueue:()=>ipcRenderer.invoke('automation:clearQueue'),
+  resetSessionCounters:()=>ipcRenderer.invoke('automation:resetCounters'),
   resetHistory:()=>ipcRenderer.invoke('history:reset'),
   notify:p=>ipcRenderer.send('notify',p),
   on:(channel,cb)=>{
@@ -136,10 +138,61 @@ async function injectTtsProfileControl(){
   if(queue)new MutationObserver(prettyProcessingStages).observe(queue,{childList:true,subtree:true});
 }
 
+function updateSessionCounters(state={}){
+  const session=state.session||{};
+  const news=document.getElementById('sessionNewsEmitted');
+  const canned=document.getElementById('sessionCannedEmitted');
+  if(news)news.textContent=String(session.newsEmitted||0);
+  if(canned)canned.textContent=String(session.cannedEmitted||0);
+}
+function injectSessionCounters(){
+  const summary=document.getElementById('queueSummary');
+  if(!summary||document.getElementById('sessionCounters'))return;
+  const row=document.createElement('div');
+  row.id='sessionCounters';row.className='queue-summary';row.style.marginTop='10px';
+  row.innerHTML='<div class="queue-stat"><b id="sessionNewsEmitted">0</b><span>NOTAS EMITIDAS</span></div><div class="queue-stat"><b id="sessionCannedEmitted">0</b><span>ENLATADOS EMITIDOS</span></div><div class="queue-stat"><button id="resetSessionCounters" class="dark compact">Reiniciar contadores</button><span>SESIÓN ACTUAL</span></div>';
+  summary.insertAdjacentElement('afterend',row);
+  const btn=document.getElementById('resetSessionCounters');
+  if(btn)btn.addEventListener('click',async()=>{
+    try{const state=await ipcRenderer.invoke('automation:resetCounters');updateSessionCounters(state);}catch{}
+  });
+  ipcRenderer.invoke('automation:status').then(updateSessionCounters).catch(()=>{});
+}
+
+async function persistSoundControls(){
+  try{
+    const current=await ipcRenderer.invoke('settings:get');
+    const output={...(current?.visual?.output||{})};
+    const musicEnabled=document.getElementById('musicEnabled');
+    const musicLoop=document.getElementById('musicLoop');
+    const musicVolume=document.getElementById('musicVolume');
+    const voiceVolume=document.getElementById('voiceVolume');
+    const cannedVolume=document.getElementById('cannedVolume');
+    if(musicEnabled)output.musicEnabled=!!musicEnabled.checked;
+    if(musicLoop)output.musicLoop=!!musicLoop.checked;
+    if(musicVolume)output.musicVolume=Number(musicVolume.value||0);
+    if(voiceVolume)output.voiceVolume=Number(voiceVolume.value||0);
+    if(cannedVolume)output.cannedVolume=Number(cannedVolume.value||0);
+    await ipcRenderer.invoke('settings:save',{...current,visual:{...(current.visual||{}),output}});
+  }catch{}
+}
+function injectSoundAutoSave(){
+  const ids=['musicEnabled','musicLoop','musicVolume','voiceVolume','cannedVolume'];
+  for(const id of ids){
+    const el=document.getElementById(id);if(!el||el.dataset.autoSaveBound==='1')continue;
+    el.dataset.autoSaveBound='1';
+    const schedule=()=>{clearTimeout(soundSaveTimer);soundSaveTimer=setTimeout(persistSoundControls,300);};
+    el.addEventListener('input',schedule);el.addEventListener('change',schedule);
+  }
+}
+
 ipcRenderer.on('local:event',(_,e)=>{
   if(e?.type==='local-ai-starting')localStarting=true;
   if(['local-ai-started','local-ai-exit','local-ai-stopped','local-ai-error'].includes(e?.type))localStarting=false;
   prettyProcessingStages();
 });
+ipcRenderer.on('automation:state',(_,state)=>updateSessionCounters(state||{}));
 
-window.addEventListener('DOMContentLoaded',()=>setTimeout(injectTtsProfileControl,0));
+window.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{
+  injectTtsProfileControl();injectSessionCounters();injectSoundAutoSave();
+},0));
