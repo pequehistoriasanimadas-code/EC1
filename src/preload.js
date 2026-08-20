@@ -96,6 +96,7 @@ function prettyProcessingStages(){
     t=t.replace(/Etapa:\s*ai\b/gi,localStarting&&aiPrimary==='local'?'Cargando Qwen 8B…':`Generando guion con ${provider}…`);
     t=t.replace(/Etapa:\s*pronunciation\b/gi,'Ajustando pronunciación…');
     t=t.replace(/Etapa:\s*tts\b/gi,'Generando voz con Kokoro…');
+    t=t.replace(/TTS\s+([\d.]+)\s+s\s+·\s+(\d+)\s+hilos/gi,'TTS $1 s · ONNX $2 hilos');
     if(t!==el.textContent)el.textContent=t;
   });
 }
