@@ -4,8 +4,9 @@ const os=require('os');
 const {spawn}=require('child_process');
 const {Readable}=require('stream');
 
-const MODEL_URL='https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true';
-const MODEL_NAME='Qwen3-0.6B-Q4_K_M.gguf';
+// Fuente estable mantenida por ggml-org. Q4_0 es suficiente para esta tarea corta y reduce tamaño/consumo.
+const MODEL_URL='https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf?download=true';
+const MODEL_NAME='Qwen3-0.6B-Q4_0.gguf';
 
 function findRecursive(dir,filename){
   if(!fs.existsSync(dir))return'';
@@ -80,14 +81,22 @@ class PronunciationNormalizer{
   }
   async downloadModel(){
     if(this.modelReady())return{ok:true,path:this.modelPath,already:true};
+    fs.mkdirSync(this.modelDir,{recursive:true});
     const tmp=this.modelPath+'.part';
-    const res=await fetch(MODEL_URL,{redirect:'follow'});
-    if(!res.ok)throw new Error(`Descarga normalizador HTTP ${res.status}`);
+    try{if(fs.existsSync(tmp))fs.unlinkSync(tmp);}catch{}
+    const res=await fetch(MODEL_URL,{redirect:'follow',headers:{'user-agent':'EC-Automatic-News/0.3.4'}});
+    if(!res.ok)throw new Error(`HTTP ${res.status} al descargar el normalizador`);
+    if(!res.body)throw new Error('El servidor no devolvió datos del modelo');
     const total=Number(res.headers.get('content-length')||0);let done=0;
     const out=fs.createWriteStream(tmp);const stream=Readable.fromWeb(res.body);
     stream.on('data',chunk=>{done+=chunk.length;this.onEvent({type:'pronunciation-download',done,total,percent:total?Math.round(done*100/total):0});});
-    await new Promise((resolve,reject)=>{stream.pipe(out);out.on('finish',resolve);out.on('error',reject);stream.on('error',reject);});
-    fs.renameSync(tmp,this.modelPath);this.onEvent({type:'pronunciation-downloaded'});
+    try{
+      await new Promise((resolve,reject)=>{stream.pipe(out);out.on('finish',resolve);out.on('error',reject);stream.on('error',reject);});
+      const size=fs.existsSync(tmp)?fs.statSync(tmp).size:0;
+      if(size<300_000_000)throw new Error(`Descarga incompleta (${Math.round(size/1048576)} MB)`);
+      fs.renameSync(tmp,this.modelPath);
+    }catch(e){try{if(fs.existsSync(tmp))fs.unlinkSync(tmp);}catch{}throw e;}
+    this.onEvent({type:'pronunciation-downloaded'});
     return{ok:true,path:this.modelPath};
   }
   async start(){
