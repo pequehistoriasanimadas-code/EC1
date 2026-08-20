@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, screen } = require('electron');
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 const path = require('path');
 const fs = require('fs');
@@ -8,6 +8,7 @@ const rss = require('./services/rss');
 const { fetchArticle } = require('./services/article');
 const { SettingsStore } = require('./services/settings');
 const { LocalRuntime } = require('./services/localRuntime');
+const { PronunciationNormalizer } = require('./services/pronunciation');
 const { KokoroTTS } = require('./services/kokoro');
 const { Providers } = require('./services/providers');
 const { HistoryStore } = require('./services/history');
@@ -17,6 +18,7 @@ let controlWindow;
 let outputWindow;
 let settingsStore;
 let localRuntime;
+let pronunciation;
 let kokoro;
 let providers;
 let history;
@@ -24,7 +26,7 @@ let automation;
 let dataDir;
 let resourcesDir;
 let startupLogFile = '';
-let outputState={open:false,source:'none',title:'',format:'16:9'};
+let outputState={open:false,source:'none',title:'',format:'16:9',resolution:'1920×1080'};
 
 function portableDataDir() {
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
@@ -62,6 +64,15 @@ function fallbackUrl() {
 function currentDesign(){return settingsStore?.load()?.visual?.output||{};}
 function broadcastOutputState(){sendControl('output:state',{...outputState});}
 function setOutputState(patch){outputState={...outputState,...patch};broadcastOutputState();}
+function nativeOutputSize(format,win=null){
+  const px=format==='9:16'?{width:1080,height:1920,resolution:'1080×1920'}:{width:1920,height:1080,resolution:'1920×1080'};
+  let scaleFactor=1;
+  try{
+    const d=win&&!win.isDestroyed()?screen.getDisplayMatching(win.getBounds()):screen.getPrimaryDisplay();
+    scaleFactor=Number(d?.scaleFactor)||1;
+  }catch{}
+  return {...px,dipWidth:Math.max(1,Math.round(px.width/scaleFactor)),dipHeight:Math.max(1,Math.round(px.height/scaleFactor)),scaleFactor};
+}
 
 async function syncLocalPolicy(settings=settingsStore?.load()){
   if(!settings||!localRuntime)return;
@@ -73,7 +84,7 @@ async function syncLocalPolicy(settings=settingsStore?.load()){
       if(st.model&&!st.running) await localRuntime.start();
     }catch(e){sendControl('local:event',{type:'local-ai-error',message:e.message||String(e)});}
   } else if(localAsBackup&&(ai.localBackupMode||'on_demand')==='on_demand'){
-    const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||10));
+    const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||5));
     localRuntime.scheduleIdleStop(minutes*60000);
   }
 }
@@ -92,31 +103,42 @@ function createControlWindow() {
 function applyOutputWindowFormat(format,resize=false){
   if(!outputWindow||outputWindow.isDestroyed()) return;
   const vertical=format==='9:16';
+  const n=nativeOutputSize(format,outputWindow);
   try{outputWindow.setAspectRatio(vertical?9/16:16/9);}catch{}
-  if(resize){
-    try{outputWindow.setContentSize(vertical?540:1280,vertical?960:720,true);}catch{}
-  }
-  setOutputState({format:vertical?'9:16':'16:9'});
+  if(resize){try{outputWindow.setContentSize(n.dipWidth,n.dipHeight,false);}catch{}}
+  setOutputState({format:vertical?'9:16':'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});
 }
 function createOutputWindow() {
   if (outputWindow && !outputWindow.isDestroyed()) { outputWindow.show(); return outputWindow; }
   const design=currentDesign();
-  const vertical=design.format==='9:16';
+  const n=nativeOutputSize(design.format);
   outputWindow = new BrowserWindow({
-    width:vertical?540:1280,height:vertical?960:720,
-    minWidth:360,minHeight:360,
+    width:n.dipWidth,height:n.dipHeight,
     useContentSize:true,
+    frame:false,
+    resizable:false,
+    maximizable:false,
+    fullscreenable:false,
+    roundedCorners:false,
+    hasShadow:false,
     title:'EC Automatic News — OUTPUT',
     backgroundColor:'#000000',autoHideMenuBar:true,
-    webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
+    webPreferences:{
+      preload:path.join(__dirname,'preload.js'),
+      contextIsolation:true,nodeIntegration:false,
+      backgroundThrottling:false
+    }
   });
+  try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
   outputWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('OUTPUT_LOAD_FAIL',`${code} ${desc} ${url}`));
   outputWindow.webContents.on('render-process-gone',(_,details)=>logEvent('OUTPUT_RENDER_GONE',JSON.stringify(details)));
   outputWindow.loadFile(path.join(__dirname,'output.html')).catch(e=>fatalError('No se pudo cargar Output',e));
   outputWindow.webContents.once('did-finish-load',()=>{
+    try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
     outputWindow.webContents.send('output:design',design);
-    setOutputState({open:true,source:outputState.source||'none',title:outputState.title||'',format:design.format||'16:9'});
+    const actual=nativeOutputSize(design.format,outputWindow);setOutputState({open:true,source:outputState.source||'none',title:outputState.title||'',format:design.format||'16:9',resolution:actual.resolution,scaleFactor:actual.scaleFactor});
   });
+  outputWindow.on('move',()=>{try{applyOutputWindowFormat(currentDesign().format||'16:9',true);}catch{}});
   outputWindow.on('closed',()=>{
     outputWindow=null;
     automation?.outputClosed();
@@ -147,10 +169,11 @@ function initServices() {
   settingsStore = new SettingsStore(dataDir);
   history = new HistoryStore(dataDir);
   localRuntime = new LocalRuntime({resourcesDir,dataDir,onEvent:e=>sendControl('local:event',e)});
+  pronunciation = new PronunciationNormalizer({resourcesDir,dataDir,onEvent:e=>sendControl('pronunciation:event',e)});
   kokoro = new KokoroTTS({resourcesDir,dataDir});
   providers = new Providers({settingsStore,localRuntime});
   automation = new AutomationEngine({
-    rss,fetchArticle,providers,kokoro,history,
+    rss,fetchArticle,providers,kokoro,pronunciation,history,
     getSettings:()=>settingsStore.load(),
     getFallbackUrl:fallbackUrl,
     sendAutomaticOutput,
@@ -190,8 +213,11 @@ app.whenReady().then(async()=>{
     createControlWindow();logEvent('WINDOW','control created');
   } catch (e) { fatalError('La aplicación no pudo iniciar',e);app.exit(1); }
 });
-app.on('window-all-closed',()=>{ localRuntime?.stop('app-close'); if(process.platform!=='darwin') app.quit(); });
-app.on('before-quit',()=>localRuntime?.stop('app-quit'));
+app.on('window-all-closed',()=>{
+  localRuntime?.stop('app-close');pronunciation?.stop('app-close');
+  if(process.platform!=='darwin') app.quit();
+});
+app.on('before-quit',()=>{localRuntime?.stop('app-quit');pronunciation?.stop('app-quit');});
 
 ipcMain.handle('settings:get',()=>{
   const s=settingsStore.load();
@@ -231,8 +257,16 @@ ipcMain.handle('local:status',()=>localRuntime.status());
 ipcMain.handle('local:downloadModel',()=>localRuntime.downloadModel());
 ipcMain.handle('local:start',async()=>{await localRuntime.start();return localRuntime.status();});
 ipcMain.handle('local:stop',async()=>{localRuntime.stop('manual');return localRuntime.status();});
-ipcMain.handle('tts:status',async()=>({ready:kokoro.ready(),voices:kokoro.ready()?await kokoro.listVoices():[]}));
-ipcMain.handle('tts:generate',(_,text)=>kokoro.generate(text,{voice:settingsStore.load().tts.voice,speed:settingsStore.load().tts.speed}));
+ipcMain.handle('pronunciation:status',()=>pronunciation.status());
+ipcMain.handle('pronunciation:downloadModel',()=>pronunciation.downloadModel());
+ipcMain.handle('pronunciation:stop',()=>{pronunciation.stop('manual');return pronunciation.status();});
+ipcMain.handle('tts:status',async()=>({ready:kokoro.ready(),voices:kokoro.ready()?await kokoro.listVoices():[],threads:4}));
+ipcMain.handle('tts:generate',async(_,text)=>{
+  const s=settingsStore.load();
+  const loc=await pronunciation.normalize(text,{smart:s.tts?.pronunciationSmart!==false});
+  const audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});
+  return {...audio,ttsScript:loc.text,pronunciation:loc};
+});
 
 ipcMain.handle('fallback:pick',async()=>{
   const r=await dialog.showOpenDialog({properties:['openFile'],filters:[{name:'Imágenes',extensions:['png','jpg','jpeg','webp']}]});
