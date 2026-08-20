@@ -9,19 +9,26 @@
 <body>
 <div id="viewport">
   <div id="dragRegion" aria-hidden="true"></div>
-  <div id="stage" data-format="16:9" data-safe="none">
-    <img id="image" alt="">
-    <div id="shade"></div>
-    <div id="lower">
-      <div id="lowerContent">
-        <div id="cat">ACTUALIDAD</div>
-        <div id="title">Titular</div>
-        <div id="summary"></div>
+  <div id="stage" data-format="16:9" data-safe="none" data-kind="news">
+    <div id="storyLayer" class="content-layer">
+      <img id="image" alt="">
+      <div id="shade"></div>
+      <div id="lower">
+        <div id="lowerContent">
+          <div id="cat">ACTUALIDAD</div>
+          <div id="title">Titular</div>
+          <div id="summary"></div>
+        </div>
       </div>
+    </div>
+    <div id="cannedLayer" class="content-layer hidden-layer">
+      <div id="cannedBg"></div>
+      <video id="cannedVideo" preload="auto" playsinline></video>
     </div>
   </div>
 </div>
 <audio id="audio"></audio>
+<audio id="music" preload="auto"></audio>
 <script src="output.js"></script>
 </body>
 </html>
