@@ -13,7 +13,7 @@ const audio=document.getElementById('audio');
 const music=document.getElementById('music');
 let fallback='';
 let source='none';
-let activeKind='news';
+let activeKind='none';
 let preloaded=null;
 let contentSerial=0;
 let suppressVideoError=false;
@@ -173,7 +173,16 @@ function waitVideoReady(timeout=1800){
     cannedVideo.addEventListener('loadeddata',finish,{once:true});cannedVideo.addEventListener('canplay',finish,{once:true});
   });
 }
-function setStoryContent(p){
+function waitImageReady(src,timeout=2200){
+  if(!src||img.complete&&img.naturalWidth>0)return Promise.resolve();
+  return new Promise(resolve=>{
+    let done=false;
+    const finish=()=>{if(done)return;done=true;clearTimeout(timer);img.removeEventListener('load',finish);img.removeEventListener('error',finish);resolve();};
+    const timer=setTimeout(finish,timeout);
+    img.addEventListener('load',finish,{once:true});img.addEventListener('error',finish,{once:true});
+  });
+}
+async function setStoryContent(p){
   cat.textContent=(p.category||'ACTUALIDAD').toUpperCase();
   pubDate.textContent=formatDate(p.pubDate||p.date||'');
   title.textContent=p.title||'';summary.textContent=p.summary||'';
@@ -181,14 +190,17 @@ function setStoryContent(p){
   const nextSrc=p.image||fallback||'';
   if(nextSrc&&preloaded&&preloaded.complete&&preloaded.src===nextSrc)img.src=preloaded.src;else img.src=nextSrc;
   preload(p.preloadImage||'');
+  await waitImageReady(nextSrc);
 }
 async function showStory(p,serial){
   const previous=activeKind;
   if(serial!==contentSerial)return;
   if(previous==='news'){
-    await revealStoryFromStory(async()=>{if(serial===contentSerial)setStoryContent(p);});
+    await revealStoryFromStory(async()=>{if(serial===contentSerial)await setStoryContent(p);});
+  }else if(previous==='canned'){
+    await crossfadeLayers(cannedLayer,storyLayer,async()=>{if(serial===contentSerial)await setStoryContent(p);});
   }else{
-    await crossfadeLayers(cannedLayer,storyLayer,async()=>{if(serial===contentSerial)setStoryContent(p);});
+    await setStoryContent(p);storyLayer.classList.remove('hidden-layer');cannedLayer.classList.add('hidden-layer');
   }
   if(serial!==contentSerial)return;
   if(previous==='canned')clearCannedVideo();
@@ -212,13 +224,16 @@ async function showCanned(p,serial){
     applyCannedBackground();cannedLayer.classList.remove('hidden-layer');cannedLayer.style.opacity='1';
     if(transitionEnabled())await sleep(transitionMs()/2);
     cannedLayer.style.transition='';
-  }else{
+  }else if(previous==='news'){
     suppressVideoError=true;cannedVideo.src=p.videoUrl||'';cannedVideo.volume=volume(design.cannedVolume==null?100:design.cannedVolume);cannedVideo.load();await waitVideoReady();suppressVideoError=false;
     if(serial!==contentSerial)return;
     await Promise.all([
       stopMusicForCanned(),
       crossfadeLayers(storyLayer,cannedLayer,async()=>{applyCannedBackground();})
     ]);
+  }else{
+    suppressVideoError=true;cannedVideo.src=p.videoUrl||'';cannedVideo.volume=volume(design.cannedVolume==null?100:design.cannedVolume);cannedVideo.load();await waitVideoReady();suppressVideoError=false;
+    applyCannedBackground();cannedLayer.classList.remove('hidden-layer');storyLayer.classList.add('hidden-layer');
   }
   if(serial!==contentSerial)return;
   activeKind='canned';stage.dataset.kind='canned';
