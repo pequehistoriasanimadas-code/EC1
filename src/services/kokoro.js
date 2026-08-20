@@ -12,12 +12,17 @@ class KokoroTTS {
     this.model=path.join(resourcesDir,'runtime','kokoro','kokoro-v1.0.int8.onnx');
     this.voices=path.join(resourcesDir,'runtime','kokoro','voices-v1.0.bin');
     this.audioDir=path.join(dataDir,'audio'); fs.mkdirSync(this.audioDir,{recursive:true});
+    this.generationTail=Promise.resolve();
   }
   ready(){ return [this.python,this.script,this.model,this.voices].every(fs.existsSync); }
   run(args){
     return new Promise((resolve,reject)=>{
       if(!this.ready()) return reject(new Error('Kokoro runtime no incluido o incompleto'));
-      const env={...process.env,OMP_NUM_THREADS:'6',OPENBLAS_NUM_THREADS:'6',MKL_NUM_THREADS:'6',NUMEXPR_NUM_THREADS:'6',OMP_WAIT_POLICY:'PASSIVE'};
+      const env={
+        ...process.env,
+        OMP_NUM_THREADS:'4',OMP_THREAD_LIMIT:'4',OMP_DYNAMIC:'FALSE',OMP_WAIT_POLICY:'PASSIVE',
+        OPENBLAS_NUM_THREADS:'4',MKL_NUM_THREADS:'4',NUMEXPR_NUM_THREADS:'4'
+      };
       const p=spawn(this.python,[this.script,...args],{windowsHide:true,env}); let out='',err='';
       try{os.setPriority(p.pid,os.constants.priority.PRIORITY_BELOW_NORMAL);}catch{}
       p.stdout.on('data',d=>out+=d); p.stderr.on('data',d=>err+=d);
@@ -29,14 +34,20 @@ class KokoroTTS {
     const out=await this.run(['--list-voices','--voices',this.voices]);
     try{return JSON.parse(out).voices||[];}catch{return[];}
   }
-  async generate(text,{voice='ef_dora',speed=1.0}={}){
-    const id=`news-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const txt=path.join(this.audioDir,`${id}.txt`), wav=path.join(this.audioDir,`${id}.wav`);
-    fs.writeFileSync(txt,text,'utf8');
-    const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices]);
-    try{fs.unlinkSync(txt);}catch{}
-    let meta={}; try{meta=JSON.parse(out);}catch{}
-    return {path:wav,url:pathToFileURL(wav).href,durationSec:Number(meta.duration_sec||0),voice:meta.voice||voice};
+  generate(text,{voice='ef_dora',speed=1.0}={}){
+    const task=async()=>{
+      const started=Date.now();
+      const id=`news-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const txt=path.join(this.audioDir,`${id}.txt`), wav=path.join(this.audioDir,`${id}.wav`);
+      fs.writeFileSync(txt,text,'utf8');
+      const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices]);
+      try{fs.unlinkSync(txt);}catch{}
+      let meta={}; try{meta=JSON.parse(out);}catch{}
+      return {path:wav,url:pathToFileURL(wav).href,durationSec:Number(meta.duration_sec||0),voice:meta.voice||voice,elapsedMs:Date.now()-started,threads:4};
+    };
+    const queued=this.generationTail.then(task,task);
+    this.generationTail=queued.catch(()=>{});
+    return queued;
   }
 }
 module.exports={KokoroTTS};
