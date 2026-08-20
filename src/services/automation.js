@@ -1,6 +1,15 @@
 const {EventEmitter}=require('events');
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function locutionSource(title,script){
+  const t=String(title||'').trim();
+  const s=String(script||'').trim();
+  if(!t)return s;if(!s)return t;
+  const clean=x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const ct=clean(t),cs=clean(s.slice(0,Math.max(t.length*2,220)));
+  if(ct&&cs.startsWith(ct))return s;
+  return `${t}. ${s}`;
+}
 
 class AutomationEngine extends EventEmitter {
   constructor({rss,fetchArticle,providers,kokoro,pronunciation,canned,history,getSettings,getFallbackUrl,sendAutomaticOutput,isOutputReady,controlOutput}) {
@@ -238,9 +247,10 @@ class AutomationEngine extends EventEmitter {
 
     const local=await this.runLocalHeavy(async()=>{
       holder.stage='pronunciation';this.state();
-      let locution={text:ai.result.script,elapsedMs:0,smartUsed:false};
+      const spoken=locutionSource(ai.result.title||story.title,ai.result.script);
+      let locution={text:spoken,elapsedMs:0,smartUsed:false};
       if(this.pronunciation){
-        locution=await this.pronunciation.normalize(ai.result.script,{smart:s.tts?.pronunciationSmart!==false});
+        locution=await this.pronunciation.normalize(spoken,{smart:s.tts?.pronunciationSmart!==false});
       }
       holder.metrics={...(holder.metrics||{}),pronunciationElapsedMs:locution.elapsedMs||0,pronunciationSmart:!!locution.smartUsed};
       await wait(300);
@@ -249,7 +259,11 @@ class AutomationEngine extends EventEmitter {
       let audio;
       try{audio=await this.kokoro.generate(locution.text,{voice:s.tts.voice,speed:s.tts.speed});}
       catch(e){e.message=`Kokoro: ${e.message}`;e.details=ai.attempts||[];throw e;}
-      holder.metrics={...(holder.metrics||{}),ttsElapsedMs:audio.elapsedMs||0,ttsThreads:audio.threads||4};
+      holder.metrics={
+        ...(holder.metrics||{}),ttsElapsedMs:audio.elapsedMs||0,ttsThreads:audio.threads||4,
+        audioDurationSec:audio.durationSec||0,ttsRealtimeFactor:audio.realtimeFactor||0,
+        ttsProfile:audio.performanceLabel||audio.performanceProfile||''
+      };
       return{locution,audio};
     });
     const {locution,audio}=local;
@@ -327,6 +341,7 @@ class AutomationEngine extends EventEmitter {
         source:'automatic',kind:'news',
         title:item.result.title||item.story.title,
         category:item.result.category||item.story.category||'ACTUALIDAD',
+        pubDate:item.story.pubDate||item.article?.pubDate||'',
         summary:item.result.summary||'',
         script:item.result.script,
         image:item.image,
@@ -358,4 +373,4 @@ class AutomationEngine extends EventEmitter {
   }
 }
 
-module.exports={AutomationEngine};
+module.exports={AutomationEngine,locutionSource};
