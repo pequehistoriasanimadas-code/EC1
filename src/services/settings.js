@@ -56,8 +56,24 @@ class SettingsStore {
           animation: 'auto',
           motionSpeed: 'normal',
           tiktokSafe: true,
-          showSafeGuides: true
+          showSafeGuides: true,
+          verticalVideoBackground: '',
+          musicFile: '',
+          musicEnabled: false,
+          musicLoop: true,
+          musicVolume: 20,
+          voiceVolume: 100,
+          cannedVolume: 100,
+          transitionEnabled: true,
+          transitionType: 'fade',
+          transitionDuration: 0.7
         }
+      },
+      canned: {
+        enabled: false,
+        folder: '',
+        emergency: true,
+        interval: 10
       },
       automation: {
         updateMinutes: 2,
@@ -88,7 +104,6 @@ class SettingsStore {
       if (Number(raw.ai.localIdleMinutes) === 10) data.ai.localIdleMinutes = 5;
     }
 
-    // Migración 0.3.3: amplía el buffer recomendado sin sobrescribir una elección explícita reciente.
     if (raw?.automation && Number(raw.automation.bufferReady) === 5 && Number(raw.automation.queueMax) === 12) {
       data.automation.bufferReady = 15;
       data.automation.queueMax = 30;
