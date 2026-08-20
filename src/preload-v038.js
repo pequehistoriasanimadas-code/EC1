@@ -1,6 +1,6 @@
 'use strict';
 
-// Load the complete 0.3.7 bridge/UI helpers first.
+// Load the complete base bridge/UI helpers first.
 require('./preload.js');
 
 const { ipcRenderer } = require('electron');
@@ -61,9 +61,9 @@ function injectAdsCard() {
       <h3>Anuncios</h3>
       <span id="adsState" class="status-pill neutral">SIN CARPETA</span>
     </div>
-    <p class="note">Biblioteca independiente para spots, promociones y avisos. No forma parte del buffer de noticias.</p>
+    <p class="note">Biblioteca independiente para spots, promociones y avisos. No forma parte del buffer de noticias ni comparte carpeta con los contenidos.</p>
     <label class="switch-row">
-      <span><b>Insertar un anuncio después de cada enlatado</b><small>Cuando termina un contenido enlatado, reproduce automáticamente un anuncio y luego vuelve al flujo normal.</small></span>
+      <span><b>Insertar un anuncio después de cada contenido enlatado</b><small>Cuando termina un contenido enlatado, reproduce automáticamente un anuncio y luego vuelve al flujo normal.</small></span>
       <input id="adsAfterCanned" type="checkbox">
       <span class="switch-ui"></span>
     </label>
@@ -100,7 +100,7 @@ function injectAdsCard() {
     try {
       await setAdsAfterCanned(e.target.checked);
       await refreshAdsLibrary();
-      setStatus(e.target.checked ? 'Anuncio después de cada enlatado: activado.' : 'Anuncio después de cada enlatado: desactivado.');
+      setStatus(e.target.checked ? 'Anuncio después de cada contenido enlatado: activado.' : 'Anuncio después de cada contenido enlatado: desactivado.');
     } catch (err) {
       setStatus(`Anuncios: ${err.message || err}`);
     }
@@ -154,7 +154,13 @@ async function refreshAdsLibrary() {
 
 function injectAdsCounter() {
   const row = document.getElementById('sessionCounters');
-  if (!row || document.getElementById('sessionAdsEmitted')) return;
+  if (!row) return;
+
+  const contentValue = document.getElementById('sessionCannedEmitted');
+  const contentLabel = contentValue?.closest('.queue-stat')?.querySelector('span');
+  if (contentLabel) contentLabel.textContent = 'CONTENIDOS EMITIDOS';
+
+  if (document.getElementById('sessionAdsEmitted')) return;
   const resetCell = document.getElementById('resetSessionCounters')?.closest('.queue-stat');
   const cell = document.createElement('div');
   cell.className = 'queue-stat';
