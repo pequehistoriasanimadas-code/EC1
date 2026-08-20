@@ -48,8 +48,15 @@ try {
   const controlHtml=fs.readFileSync(path.join('src','control.html'),'utf8');
   for(const id of ['tab-canned','cannedEnabled','pickCannedFolder','musicEnabled','transitionEnabled','pickVerticalVideoBackground','testPronunciation'])if(!controlHtml.includes(`id="${id}"`))throw new Error(`Control UI missing ${id}`);
 
+  const ttsPy=fs.readFileSync(path.join('scripts','tts.py'),'utf8');
+  for(const token of ['SessionOptions','intra_op_num_threads','inter_op_num_threads','ORT_SEQUENTIAL','--onnx-intra','--onnx-inter'])if(!ttsPy.includes(token))throw new Error(`Kokoro ONNX limiter missing ${token}`);
+  const kokoroJs=fs.readFileSync(path.join('src','services','kokoro.js'),'utf8');
+  for(const token of ['safe_streaming','balanced','performance','intra:2','intra:3','intra:6','realtimeFactor'])if(!kokoroJs.includes(token))throw new Error(`Kokoro profile smoke test missing ${token}`);
+  const preload=fs.readFileSync(path.join('src','preload.js'),'utf8');
+  for(const token of ['ttsPerformanceProfile','Seguro para streaming','Generando voz con Kokoro','Cargando Qwen 8B'])if(!preload.includes(token))throw new Error(`TTS profile UI smoke test missing ${token}`);
+
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('JavaScript syntax OK · RSS OK · Enlatados OK · Pronunciación OK · UI multimedia OK');
+  console.log('JavaScript syntax OK · RSS OK · Enlatados OK · Pronunciación OK · UI multimedia OK · Kokoro ONNX limiter OK');
 } catch(e) {
   console.error(e.stack||e);process.exit(1);
 }
