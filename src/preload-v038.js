@@ -5,6 +5,7 @@ require('./preload.js');
 
 const { ipcRenderer } = require('electron');
 let lastAdsState = null;
+let last0310AutomationState = null;
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -194,10 +195,56 @@ function applyAdsAutomationState(state = {}) {
   }
 }
 
+// EC 0.3.10: detailed processing state and live date-font preview.
+function injectProcessingDetail0310() {
+  if (document.getElementById('processingDetail')) return;
+  const state = document.getElementById('processingState');
+  const card = state?.closest('.card');
+  if (!card) return;
+  const detail = document.createElement('p');
+  detail.id = 'processingDetail';
+  detail.className = 'note';
+  detail.textContent = 'Esperando inicio del procesamiento.';
+  const buttons = card.querySelector('.buttons');
+  if (buttons) buttons.insertAdjacentElement('afterend', detail); else card.appendChild(detail);
+}
+
+function applyAutomation0310(state = {}) {
+  last0310AutomationState = state;
+  const p = state.processing || {};
+  const detail = document.getElementById('processingDetail');
+  if (detail) detail.textContent = p.message || (!p.running ? 'Procesamiento detenido.' : p.paused ? 'Procesamiento pausado.' : 'Procesando noticias.');
+}
+
+function bindDateFontLive0310() {
+  let attempts = 0;
+  const bind = () => {
+    const select = document.getElementById('dateFontFamily');
+    if (!select) {
+      if (attempts++ < 60) setTimeout(bind, 100);
+      return;
+    }
+    if (select.dataset.live0310 === '1') return;
+    select.dataset.live0310 = '1';
+    const apply = async () => {
+      document.querySelectorAll('.preview-date').forEach(el => { el.style.fontFamily = `${select.value},sans-serif`; });
+      try {
+        const settings = await getSettings();
+        const design = { ...(settings.visual?.output || {}), dateFontFamily: select.value };
+        ipcRenderer.send('output:designPreview', design);
+      } catch {}
+    };
+    select.addEventListener('input', apply);
+    select.addEventListener('change', apply);
+  };
+  bind();
+}
+
 ipcRenderer.on('automation:state', (_, state) => {
   setTimeout(() => {
     injectAdsCounter();
     applyAdsAutomationState(state || {});
+    applyAutomation0310(state || {});
   }, 0);
 });
 
@@ -205,10 +252,14 @@ window.addEventListener('DOMContentLoaded', () => setTimeout(async () => {
   relabelContentLibrary();
   injectAdsCard();
   injectAdsCounter();
+  injectProcessingDetail0310();
+  bindDateFontLive0310();
   await refreshAdsLibrary();
   if (lastAdsState) applyAdsAutomationState(lastAdsState);
+  if (last0310AutomationState) applyAutomation0310(last0310AutomationState);
   try {
     const state = await ipcRenderer.invoke('automation:status');
     applyAdsAutomationState(state || {});
+    applyAutomation0310(state || {});
   } catch {}
 }, 60));
