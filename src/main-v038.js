@@ -1,7 +1,8 @@
 'use strict';
 
-// EC Automatic News 0.3.8 compatibility layer.
-// Keeps the 0.3.7 code intact while adding a second Enlatados library for ads.
+// EC Automatic News 0.3.9 compatibility layer.
+// Keeps the stable core intact while adding an independent ads library and exact
+// scheduled content insertion at total-note multiples (10, 20, 30, ...).
 const fs = require('fs');
 const path = require('path');
 const Module = require('module');
@@ -17,9 +18,25 @@ function ensureAdsRuntime(engine) {
   if (!engine._adsManager) engine._adsManager = new CannedManager();
   if (!Number.isFinite(engine.adsPlayed)) engine.adsPlayed = 0;
   if (!Number.isFinite(engine.adsUnavailableUntil)) engine.adsUnavailableUntil = 0;
+  if (!Number.isFinite(engine.lastScheduledCannedAt)) engine.lastScheduledCannedAt = -1;
 }
 
-// Extend the existing automatic engine without changing the stable 0.3.7 implementation.
+function scheduledProgress(engine, interval) {
+  const every = Math.max(0, Math.min(999, Number(interval) || 0));
+  const total = Math.max(0, Number(engine.newsEmitted) || 0);
+  if (!every) return { due: false, nextIn: null, remainder: 0 };
+  if (!total) return { due: false, nextIn: every, remainder: 0 };
+  const remainder = total % every;
+  const alreadyServed = engine.lastScheduledCannedAt === total;
+  const due = remainder === 0 && !alreadyServed;
+  return {
+    due,
+    remainder,
+    nextIn: due ? 0 : (remainder === 0 ? every : every - remainder)
+  };
+}
+
+// Extend the existing automatic engine without duplicating the stable processing pipeline.
 const baseSnapshot = AutomationEngine.prototype.snapshot;
 AutomationEngine.prototype.snapshot = function patchedSnapshot(extra = {}) {
   ensureAdsRuntime(this);
@@ -29,9 +46,18 @@ AutomationEngine.prototype.snapshot = function patchedSnapshot(extra = {}) {
   const canned = settings.canned || {};
   const adsFolder = String(canned.adsFolder || '').trim();
   const insertAfterCanned = canned.insertAdAfterContent !== false;
+  const contentEnabled = !!canned.enabled;
+  const progress = scheduledProgress(this, canned.interval);
+
   snap.session = { ...(snap.session || {}), adsEmitted: this.adsPlayed };
+  snap.canned = {
+    ...(snap.canned || {}),
+    newsSince: progress.remainder,
+    nextIn: contentEnabled ? progress.nextIn : null,
+    lastScheduledAt: this.lastScheduledCannedAt
+  };
   snap.ads = {
-    enabled: insertAfterCanned && !!adsFolder,
+    enabled: contentEnabled && insertAfterCanned && !!adsFolder,
     insertAfterCanned,
     folderConfigured: !!adsFolder,
     played: this.adsPlayed,
@@ -44,7 +70,21 @@ const baseResetSessionCounters = AutomationEngine.prototype.resetSessionCounters
 AutomationEngine.prototype.resetSessionCounters = function patchedResetSessionCounters() {
   ensureAdsRuntime(this);
   this.adsPlayed = 0;
+  this.lastScheduledCannedAt = -1;
   return baseResetSessionCounters.call(this);
+};
+
+// Scheduled Enlatados are tied to the TOTAL emitted-news counter: 10, 20, 30...
+// Manual or emergency Enlatados never move that schedule.
+AutomationEngine.prototype.cannedReason = function patchedCannedReason(settings, hasReadyNews) {
+  ensureAdsRuntime(this);
+  const canned = settings?.canned || {};
+  if (!canned.enabled || Date.now() < this.cannedUnavailableUntil) return '';
+  if (this.cannedRequested) return 'manual';
+  const progress = scheduledProgress(this, canned.interval);
+  if (progress.due) return 'scheduled';
+  if (!hasReadyNews && canned.emergency !== false) return 'emergency';
+  return '';
 };
 
 AutomationEngine.prototype.playAdAfterCanned = async function playAdAfterCanned(settings = {}, reason = '') {
@@ -75,8 +115,7 @@ AutomationEngine.prototype.playAdAfterCanned = async function playAdAfterCanned(
   this.currentItem = null;
   this.state({ notice: `Anuncio al aire: ${media.name}` });
 
-  // Output already knows how to reproduce kind=canned. mediaRole distinguishes the ad
-  // for state/UI purposes without duplicating the video renderer.
+  // Output uses the same video renderer as Enlatados. mediaRole distinguishes ads in state/UI.
   const sent = this.sendAutomaticOutput({
     source: 'automatic',
     kind: 'canned',
@@ -121,14 +160,24 @@ AutomationEngine.prototype.playAdAfterCanned = async function playAdAfterCanned(
 const basePlayCanned = AutomationEngine.prototype.playCanned;
 AutomationEngine.prototype.playCanned = async function patchedPlayCanned(settings, reason) {
   ensureAdsRuntime(this);
+  const contentsBefore = Number(this.cannedPlayed) || 0;
   const played = await basePlayCanned.call(this, settings, reason);
-  if (!played || !this.emissionRunning || this.emissionPaused) return played;
+  const completed = (Number(this.cannedPlayed) || 0) > contentsBefore;
+
+  // Only a successfully completed scheduled content marks this 10/20/30... slot as served.
+  if (completed && reason === 'scheduled') {
+    this.lastScheduledCannedAt = Math.max(0, Number(this.newsEmitted) || 0);
+    this.state();
+  }
+
+  if (!completed || !this.emissionRunning || this.emissionPaused) return played;
 
   let latest = settings || {};
   try { latest = this.getSettings?.() || latest; } catch {}
   const canned = latest.canned || {};
   if (canned.insertAdAfterContent === false || !String(canned.adsFolder || '').trim()) return played;
 
+  // Every completed content Enlatado (scheduled, emergency or manual) is immediately followed by one ad.
   await this.playAdAfterCanned(latest, reason);
   return played;
 };
@@ -181,8 +230,8 @@ electron.ipcMain.handle('canned:listAds', () => {
   return adsBrowserManager.list(settings.canned?.adsFolder || '');
 });
 
-// Swap only the preload used by the existing BrowserWindows. The original 0.3.7
-// main process stays untouched, which keeps its stable startup/self-test behavior.
+// Swap only the preload used by the existing BrowserWindows. The original main
+// process remains the stable base; this layer adds the Enlatados/Anuncios behavior.
 function BrowserWindow038(options = {}) {
   const next = {
     ...options,
