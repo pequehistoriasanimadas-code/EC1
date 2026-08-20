@@ -38,15 +38,34 @@ async function refreshRuntimeStatus(){
 async function refreshPronunciationStatus(){
   try{
     const p=await window.ECAPI.pronunciationStatus();
-    const el=$('#pronunciationInfo');
-    if(!el)return;
+    const el=$('#pronunciationInfo');if(!el)return;
     el.textContent=p.model
-      ?`Normalizador inteligente listo ✓ · Qwen 0.6B local · ${p.cacheEntries||0} pronunciaciones aprendidas${p.running?' · activo':' · bajo demanda'}`
+      ?`Normalizador inteligente listo ✓ · ${p.modelName||'Qwen 0.6B'} · ${p.cacheEntries||0} pronunciaciones aprendidas${p.running?' · procesando':' · bajo demanda'}`
       :'Reglas básicas activas ✓ · modelo inteligente opcional no descargado';
     $('#downloadPronunciationModel').disabled=!!p.model;
-  }catch(e){
-    if($('#pronunciationInfo'))$('#pronunciationInfo').textContent='Normalizador básico disponible; estado del modelo inteligente no disponible';
-  }
+  }catch(e){if($('#pronunciationInfo'))$('#pronunciationInfo').textContent='Normalizador básico disponible; estado del modelo inteligente no disponible';}
+}
+
+function refreshCannedIntervalUi(){
+  if(!$('#cannedInterval'))return;
+  $('#cannedCustomRow').classList.toggle('hidden',$('#cannedInterval').value!=='custom');
+}
+function readCannedInterval(){
+  const v=$('#cannedInterval').value;
+  if(v==='custom')return Math.max(1,Math.min(999,Number($('#cannedCustomInterval').value)||15));
+  return Math.max(0,Number(v)||0);
+}
+async function refreshCannedList(){
+  const box=$('#cannedList'),count=$('#cannedCount'),info=$('#cannedFolderInfo');
+  if(!box)return;
+  try{
+    const r=await window.ECAPI.cannedList();
+    if(r.folder)settings.canned.folder=r.folder;
+    info.textContent=r.folder?`${r.folder}${r.ok?` · ${r.count||0} videos compatibles`:''}`:'Sin carpeta seleccionada.';
+    count.textContent=`${r.count||0} videos`;
+    if(!r.files?.length){box.innerHTML=`<div class="empty">${escapeHtml(r.message||'No hay videos compatibles.')}</div>`;return;}
+    box.innerHTML=r.files.map(x=>`<div class="media-item"><div class="media-name">${escapeHtml(x.name)}</div><div class="media-meta">${Number(x.sizeMB||0).toFixed(1)} MB</div></div>`).join('');
+  }catch(e){box.innerHTML=`<div class="empty">${escapeHtml(e.message||e)}</div>`;count.textContent='0 videos';}
 }
 
 async function loadNews(){
@@ -74,8 +93,8 @@ async function saveSettings(options={}){
   settings.ai.claudeModel=$('#claudeModel').value.trim();settings.ai.geminiModel=$('#geminiModel').value.trim();settings.ai.claudeKey=$('#claudeKey').value.trim();settings.ai.geminiKey=$('#geminiKey').value.trim();
   settings.ai.localBackupMode=$('#localBackupMode').value||'on_demand';settings.ai.localIdleMinutes=Math.max(1,Math.min(60,Number($('#localIdleMinutes').value)||5));
   settings.tts.voice=$('#voice').value||settings.tts.voice;settings.tts.speed=Number($('#voiceSpeed').value||1);settings.tts.pronunciationSmart=true;
-  settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15));
-  settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);
+  settings.canned.enabled=$('#cannedEnabled').checked;settings.canned.emergency=$('#cannedEmergency').checked;settings.canned.interval=readCannedInterval();
+  settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15));settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);
   settings.automation.maxAgeHours=Number($('#maxAge').value||6);settings.automation.avoidRepeats=$('#avoidRepeats').checked;settings.visual.pauseSeconds=Number($('#pauseSeconds').value||2.5);
   const r=await window.ECAPI.saveSettings(settings);settings.ai.hasClaudeKey=!!r.hasClaudeKey;settings.ai.hasGeminiKey=!!r.hasGeminiKey;settings.ai.claudeKey='';settings.ai.geminiKey='';$('#claudeKey').value='';$('#geminiKey').value='';refreshProviderUi();await refreshRuntimeStatus();await refreshPronunciationStatus();if(!options.quiet)status('Ajustes guardados');return r;
 }
@@ -83,7 +102,7 @@ async function saveSettings(options={}){
 function stateText(group,type){
   if(!group.running)return type==='processing'?'DETENIDO':'DETENIDA';
   if(group.paused)return type==='processing'?'PAUSADO':'PAUSADA';
-  if(type==='emission')return group.currentTitle?'AL AIRE':'ACTIVA · EN ESPERA';
+  if(type==='emission')return group.currentTitle?(group.currentKind==='canned'?'ENLATADO AL AIRE':'AL AIRE'):'ACTIVA · EN ESPERA';
   return 'PROCESANDO';
 }
 function refreshAutomation(s){
@@ -92,8 +111,20 @@ function refreshAutomation(s){
   pe.className=`status-pill ${!p.running?'neutral':p.paused?'pause':'ok'}`;ee.className=`status-pill ${!e.running?'neutral':e.paused?'pause':'live'}`;
   $('#processStart').disabled=!!p.running&&!p.paused;$('#processPause').disabled=!p.running||p.paused;$('#processResume').disabled=!p.running||!p.paused;$('#processStop').disabled=!p.running;
   $('#emissionStart').disabled=!!e.running&&!e.paused;$('#emissionPause').disabled=!e.running||e.paused;$('#emissionResume').disabled=!e.running||!e.paused;$('#emissionStop').disabled=!e.running;
-  const c=s.counts||{},b=s.buffer||{};
+  const c=s.counts||{},b=s.buffer||{},cs=s.canned||{};
   $('#queueSummary').innerHTML=`<div class="queue-stat"><b>${c.ready||0}</b><span>LISTAS</span></div><div class="queue-stat"><b>~${b.autonomyMin??0}</b><span>MIN AUTONOMÍA</span></div><div class="queue-stat"><b>${c.processing||0}</b><span>PROCESANDO</span></div><div class="queue-stat"><b>${b.target||15}</b><span>OBJETIVO</span></div><div class="queue-stat"><b>${c.error||0}</b><span>ERRORES</span></div>`;
+  const cannedState=$('#cannedState');
+  if(cannedState){
+    cannedState.textContent=!cs.enabled?'DESACTIVADO':e.currentKind==='canned'?'AL AIRE':'ACTIVO';
+    cannedState.className=`status-pill ${!cs.enabled?'neutral':e.currentKind==='canned'?'live':'ok'}`;
+  }
+  if($('#launchCannedNow'))$('#launchCannedNow').disabled=!cs.enabled||!e.running;
+  if($('#nextCannedInfo')){
+    if(!cs.enabled)$('#nextCannedInfo').textContent='Enlatados: desactivados.';
+    else if(e.currentKind==='canned')$('#nextCannedInfo').textContent=`Enlatado al aire: ${cs.current||e.currentTitle||''} · el buffer sigue procesándose.`;
+    else if(cs.interval>0)$('#nextCannedInfo').textContent=`Próximo enlatado programado: en ${cs.nextIn} noticia${cs.nextIn===1?'':'s'} · emitidos ${cs.played||0} enlatados.`;
+    else $('#nextCannedInfo').textContent=`Enlatado programado desactivado${cs.emergency?' · respaldo de emergencia activo.':'.'}`;
+  }
   renderQueue(s.queue||[]);
 }
 function renderQueue(q){
@@ -103,10 +134,7 @@ function renderQueue(q){
     const used=x.provider?`${providerName(x.provider)}${x.model?` · ${x.model}`:''}`:'';
     const failedProviders=[...new Set(failures.map(a=>providerName(a.provider)))];
     const usedFallback=used&&failedProviders.length?`Fallback usado tras fallo de ${failedProviders.join(', ')}`:'';
-    const failureDetail=failures.map(a=>{
-      const msg=String(a.message||'Error').replace(/\s+/g,' ').slice(0,240);
-      return `${providerName(a.provider)}${a.code?` [${a.code}]`:''}: ${msg}`;
-    }).join(' | ');
+    const failureDetail=failures.map(a=>{const msg=String(a.message||'Error').replace(/\s+/g,' ').slice(0,240);return `${providerName(a.provider)}${a.code?` [${a.code}]`:''}: ${msg}`;}).join(' | ');
     const m=x.metrics||{};
     const timing=m.elapsedMs?`IA ${(m.elapsedMs/1000).toFixed(1)} s`:'';
     const tokens=m.inputTokens?`Tokens ${Number(m.inputTokens).toLocaleString()} → ${Number(m.outputTokens||0).toLocaleString()}`:'';
