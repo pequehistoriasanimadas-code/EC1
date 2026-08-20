@@ -139,7 +139,7 @@ function renderQueue(q){
     const timing=m.elapsedMs?`IA ${(m.elapsedMs/1000).toFixed(1)} s`:'';
     const tokens=m.inputTokens?`Tokens ${Number(m.inputTokens).toLocaleString()} → ${Number(m.outputTokens||0).toLocaleString()}`:'';
     const inputSize=m.inputChars?`Fuente IA ${Number(m.inputChars).toLocaleString()} caracteres`:'';
-    const pron=m.pronunciationElapsedMs?`Pron. ${(m.pronunciationElapsedMs/1000).toFixed(1)} s${m.pronunciationSmart?' inteligente':''}`:'';
+    const pron=m.pronunciationElapsedMs?`Pron. ${(m.pronunciationElapsedMs/1000).toFixed(1)} s${m.pronunciationSmartFailed?' · básico (inteligente no respondió)':m.pronunciationSmart?' inteligente':''}`:'';
     const audioLen=m.audioDurationSec?`Audio ${Number(m.audioDurationSec).toFixed(1)} s`:'';
     const rtf=m.ttsRealtimeFactor?`RTF ${Number(m.ttsRealtimeFactor).toFixed(2)}×`:'';
     const profile=m.ttsProfile?String(m.ttsProfile):'';
