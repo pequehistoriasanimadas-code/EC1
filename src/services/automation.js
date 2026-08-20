@@ -32,6 +32,7 @@ class AutomationEngine extends EventEmitter {
     this.inFlight=new Set();
     this.localHeavyTail=Promise.resolve();
     this.newsSinceCanned=0;
+    this.newsEmitted=0;
     this.cannedPlayed=0;
     this.cannedRequested=false;
     this.cannedUnavailableUntil=0;
@@ -56,6 +57,7 @@ class AutomationEngine extends EventEmitter {
       processing:{running:this.processingRunning,paused:this.processingPaused,pipelineWorkers:this.inFlight.size},
       emission:{running:this.emissionRunning,paused:this.emissionPaused,currentTitle:this.currentItem?.story?.title||this.currentCanned?.name||'',currentKind:this.currentKind},
       counts,
+      session:{newsEmitted:this.newsEmitted,cannedEmitted:this.cannedPlayed},
       buffer:{target,ready:counts.ready,autonomyMin:Number((counts.ready*avgSec/60).toFixed(1))},
       canned:{
         enabled:cannedEnabled,
@@ -82,6 +84,11 @@ class AutomationEngine extends EventEmitter {
   }
   state(extra={}) { this.emit('state',this.snapshot(extra)); }
   getState(){ return this.snapshot(); }
+  resetSessionCounters(){
+    this.newsEmitted=0;this.cannedPlayed=0;
+    this.state({notice:'Contadores de la sesión reiniciados'});
+    return this.snapshot();
+  }
 
   startProcessing(){
     if(this.processingRunning){
@@ -248,11 +255,15 @@ class AutomationEngine extends EventEmitter {
     const local=await this.runLocalHeavy(async()=>{
       holder.stage='pronunciation';this.state();
       const spoken=locutionSource(ai.result.title||story.title,ai.result.script);
-      let locution={text:spoken,elapsedMs:0,smartUsed:false};
+      let locution={text:spoken,elapsedMs:0,smartUsed:false,smartFailed:false};
       if(this.pronunciation){
         locution=await this.pronunciation.normalize(spoken,{smart:s.tts?.pronunciationSmart!==false});
       }
-      holder.metrics={...(holder.metrics||{}),pronunciationElapsedMs:locution.elapsedMs||0,pronunciationSmart:!!locution.smartUsed};
+      holder.metrics={
+        ...(holder.metrics||{}),pronunciationElapsedMs:locution.elapsedMs||0,
+        pronunciationSmart:!!locution.smartUsed,pronunciationSmartFailed:!!locution.smartFailed,
+        pronunciationSmartError:locution.smartFailed?String(locution.smartError||'').slice(0,180):''
+      };
       await wait(300);
 
       holder.stage='tts';this.state();
@@ -358,7 +369,7 @@ class AutomationEngine extends EventEmitter {
       this.playbackResolve=null;
 
       if(result==='ended'){
-        this.history.add(item.story);item.status='EMITIDA';this.newsSinceCanned++;this.state();
+        this.history.add(item.story);item.status='EMITIDA';this.newsSinceCanned++;this.newsEmitted++;this.state();
         await wait((this.getSettings().visual.pauseSeconds||2.5)*1000);
         this.queue=this.queue.filter(x=>x!==item);this.queuedUrls.delete(item.story.link);
       }else{
