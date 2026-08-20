@@ -140,7 +140,10 @@ function renderQueue(q){
     const tokens=m.inputTokens?`Tokens ${Number(m.inputTokens).toLocaleString()} → ${Number(m.outputTokens||0).toLocaleString()}`:'';
     const inputSize=m.inputChars?`Fuente IA ${Number(m.inputChars).toLocaleString()} caracteres`:'';
     const pron=m.pronunciationElapsedMs?`Pron. ${(m.pronunciationElapsedMs/1000).toFixed(1)} s${m.pronunciationSmart?' inteligente':''}`:'';
-    const tts=m.ttsElapsedMs?`TTS ${(m.ttsElapsedMs/1000).toFixed(1)} s · ${m.ttsThreads||4} hilos`:'';
+    const audioLen=m.audioDurationSec?`Audio ${Number(m.audioDurationSec).toFixed(1)} s`:'';
+    const rtf=m.ttsRealtimeFactor?`RTF ${Number(m.ttsRealtimeFactor).toFixed(2)}×`:'';
+    const profile=m.ttsProfile?String(m.ttsProfile):'';
+    const tts=m.ttsElapsedMs?`TTS ${(m.ttsElapsedMs/1000).toFixed(1)} s · ${audioLen||'Audio n/d'} · ONNX ${m.ttsThreads||4} hilos${profile?` · ${profile}`:''}${rtf?` · ${rtf}`:''}`:'';
     const stage=x.stage&&x.status==='PROCESANDO'?`Etapa: ${x.stage}`:'';
     const generic=x.error&&!failureDetail?x.error:'';
     const meta=[used,timing,tokens,inputSize,pron,tts,usedFallback,failureDetail,stage,generic].filter(Boolean).join(' · ');
