@@ -47,6 +47,7 @@ class SettingsStore {
         output: {
           format: '16:9',
           fontFamily: 'Arial',
+          dateFontFamily: 'Arial',
           titleColor: '#FFFFFF',
           summaryColor: '#F3F3F3',
           categoryBgColor: '#F7C600',
