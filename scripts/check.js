@@ -43,20 +43,31 @@ try {
   const normalized=pron.basic('Apple TV informó un avance de 25% en YouTube.');
   if(!/ápol te uve/i.test(normalized)||!/25 por ciento/i.test(normalized)||!/yutub/i.test(normalized))throw new Error('Pronunciation rules smoke test failed');
 
+  const {locutionSource}=require('../src/services/automation');
+  const spoken=locutionSource('Titular de prueba','Este es el guion de la noticia.');
+  if(!spoken.startsWith('Titular de prueba. '))throw new Error('Headline-first locution smoke test failed');
+
   const outputHtml=fs.readFileSync(path.join('src','output.html'),'utf8');
-  for(const id of ['cannedVideo','cannedBg','music','audio','stage'])if(!outputHtml.includes(`id="${id}"`))throw new Error(`Output missing ${id}`);
+  for(const id of ['cannedVideo','cannedBg','music','audio','stage','pubDate','metaRow'])if(!outputHtml.includes(`id="${id}"`))throw new Error(`Output missing ${id}`);
+  const outputJs=fs.readFileSync(path.join('src','output.js'),'utf8');
+  for(const token of ['makeStorySnapshot','crossfadeLayers','formatDate','dateFontFamily','loopFadeBusy'])if(!outputJs.includes(token))throw new Error(`Output 0.3.6 feature missing ${token}`);
+  if(outputJs.includes("stage.style.opacity='0'"))throw new Error('Old fade-to-black transition is still present');
   const controlHtml=fs.readFileSync(path.join('src','control.html'),'utf8');
   for(const id of ['tab-canned','cannedEnabled','pickCannedFolder','musicEnabled','transitionEnabled','pickVerticalVideoBackground','testPronunciation'])if(!controlHtml.includes(`id="${id}"`))throw new Error(`Control UI missing ${id}`);
+  const renderer=fs.readFileSync(path.join('src','renderer.js'),'utf8');
+  for(const token of ['dateFontFamily','Tipografía de fecha','previewDate'])if(!renderer.includes(token))throw new Error(`Date typography UI missing ${token}`);
 
   const ttsPy=fs.readFileSync(path.join('scripts','tts.py'),'utf8');
-  for(const token of ['SessionOptions','intra_op_num_threads','inter_op_num_threads','ORT_SEQUENTIAL','--onnx-intra','--onnx-inter'])if(!ttsPy.includes(token))throw new Error(`Kokoro ONNX limiter missing ${token}`);
+  for(const token of ['SessionOptions','intra_op_num_threads','inter_op_num_threads','ORT_SEQUENTIAL','--onnx-intra','--onnx-inter','normalize_currency','de soles','de dólares'])if(!ttsPy.includes(token))throw new Error(`Kokoro/TTS smoke test missing ${token}`);
+  const py=spawnSync('python',['-m','py_compile',path.join('scripts','tts.py')],{encoding:'utf8'});
+  if(py.error==null&&py.status!==0)throw new Error(`Python syntax error in tts.py: ${py.stderr}`);
   const kokoroJs=fs.readFileSync(path.join('src','services','kokoro.js'),'utf8');
   for(const token of ['safe_streaming','balanced','performance','intra:2','intra:3','intra:6','realtimeFactor'])if(!kokoroJs.includes(token))throw new Error(`Kokoro profile smoke test missing ${token}`);
   const preload=fs.readFileSync(path.join('src','preload.js'),'utf8');
   for(const token of ['ttsPerformanceProfile','Seguro para streaming','Generando voz con Kokoro','Cargando Qwen 8B'])if(!preload.includes(token))throw new Error(`TTS profile UI smoke test missing ${token}`);
 
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('JavaScript syntax OK · RSS OK · Enlatados OK · Pronunciación OK · UI multimedia OK · Kokoro ONNX limiter OK');
+  console.log('JavaScript syntax OK · Python TTS syntax OK · RSS OK · Enlatados OK · Pronunciación OK · titular+guion OK · fecha OK · crossfade OK · Kokoro ONNX limiter OK');
 } catch(e) {
   console.error(e.stack||e);process.exit(1);
 }
