@@ -73,6 +73,8 @@ class SettingsStore {
       canned: {
         enabled: false,
         folder: '',
+        adsFolder: '',
+        insertAdAfterContent: true,
         emergency: true,
         interval: 10
       },
