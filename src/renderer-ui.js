@@ -26,7 +26,27 @@ async function refreshRuntimeStatus(){
     $('#startLocal').disabled=!s.model||s.running;
     $('#stopLocal').disabled=!s.running;
   }catch(e){$('#localInfo').textContent='IA local no disponible';$('#startLocal').disabled=true;$('#stopLocal').disabled=true;}
-  try{const t=await window.ECAPI.ttsStatus();$('#ttsInfo').textContent=t.ready?'Kokoro integrado y listo · prioridad reducida para proteger la transmisión':'Kokoro no disponible en esta build';const v=$('#voice');v.innerHTML='';(t.voices||[]).filter(x=>/^e[fm]_/.test(x)).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;v.appendChild(o)});if(!v.options.length)(t.voices||[]).slice(0,50).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;v.appendChild(o)});if([...v.options].some(o=>o.value===settings.tts.voice))v.value=settings.tts.voice;}catch{$('#ttsInfo').textContent='Error al cargar Kokoro';}
+  try{
+    const t=await window.ECAPI.ttsStatus();
+    $('#ttsInfo').textContent=t.ready?`Kokoro integrado · modo seguro · máximo ${t.threads||4} hilos · una voz a la vez`:'Kokoro no disponible en esta build';
+    const v=$('#voice');v.innerHTML='';
+    (t.voices||[]).filter(x=>/^e[fm]_/.test(x)).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;v.appendChild(o)});
+    if(!v.options.length)(t.voices||[]).slice(0,50).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;v.appendChild(o)});
+    if([...v.options].some(o=>o.value===settings.tts.voice))v.value=settings.tts.voice;
+  }catch{$('#ttsInfo').textContent='Error al cargar Kokoro';}
+}
+async function refreshPronunciationStatus(){
+  try{
+    const p=await window.ECAPI.pronunciationStatus();
+    const el=$('#pronunciationInfo');
+    if(!el)return;
+    el.textContent=p.model
+      ?`Normalizador inteligente listo ✓ · Qwen 0.6B local · ${p.cacheEntries||0} pronunciaciones aprendidas${p.running?' · activo':' · bajo demanda'}`
+      :'Reglas básicas activas ✓ · modelo inteligente opcional no descargado';
+    $('#downloadPronunciationModel').disabled=!!p.model;
+  }catch(e){
+    if($('#pronunciationInfo'))$('#pronunciationInfo').textContent='Normalizador básico disponible; estado del modelo inteligente no disponible';
+  }
 }
 
 async function loadNews(){
@@ -53,8 +73,11 @@ async function saveSettings(options={}){
   normalizeProviders(true);updateDesignFromControls(false);
   settings.ai.claudeModel=$('#claudeModel').value.trim();settings.ai.geminiModel=$('#geminiModel').value.trim();settings.ai.claudeKey=$('#claudeKey').value.trim();settings.ai.geminiKey=$('#geminiKey').value.trim();
   settings.ai.localBackupMode=$('#localBackupMode').value||'on_demand';settings.ai.localIdleMinutes=Math.max(1,Math.min(60,Number($('#localIdleMinutes').value)||5));
-  settings.tts.voice=$('#voice').value||settings.tts.voice;settings.tts.speed=Number($('#voiceSpeed').value||1);settings.automation.bufferReady=Number($('#bufferReady').value||5);settings.automation.maxAgeHours=Number($('#maxAge').value||6);settings.automation.avoidRepeats=$('#avoidRepeats').checked;settings.visual.pauseSeconds=Number($('#pauseSeconds').value||2.5);
-  const r=await window.ECAPI.saveSettings(settings);settings.ai.hasClaudeKey=!!r.hasClaudeKey;settings.ai.hasGeminiKey=!!r.hasGeminiKey;settings.ai.claudeKey='';settings.ai.geminiKey='';$('#claudeKey').value='';$('#geminiKey').value='';refreshProviderUi();await refreshRuntimeStatus();if(!options.quiet)status('Ajustes guardados');return r;
+  settings.tts.voice=$('#voice').value||settings.tts.voice;settings.tts.speed=Number($('#voiceSpeed').value||1);settings.tts.pronunciationSmart=true;
+  settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15));
+  settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);
+  settings.automation.maxAgeHours=Number($('#maxAge').value||6);settings.automation.avoidRepeats=$('#avoidRepeats').checked;settings.visual.pauseSeconds=Number($('#pauseSeconds').value||2.5);
+  const r=await window.ECAPI.saveSettings(settings);settings.ai.hasClaudeKey=!!r.hasClaudeKey;settings.ai.hasGeminiKey=!!r.hasGeminiKey;settings.ai.claudeKey='';settings.ai.geminiKey='';$('#claudeKey').value='';$('#geminiKey').value='';refreshProviderUi();await refreshRuntimeStatus();await refreshPronunciationStatus();if(!options.quiet)status('Ajustes guardados');return r;
 }
 
 function stateText(group,type){
@@ -69,7 +92,8 @@ function refreshAutomation(s){
   pe.className=`status-pill ${!p.running?'neutral':p.paused?'pause':'ok'}`;ee.className=`status-pill ${!e.running?'neutral':e.paused?'pause':'live'}`;
   $('#processStart').disabled=!!p.running&&!p.paused;$('#processPause').disabled=!p.running||p.paused;$('#processResume').disabled=!p.running||!p.paused;$('#processStop').disabled=!p.running;
   $('#emissionStart').disabled=!!e.running&&!e.paused;$('#emissionPause').disabled=!e.running||e.paused;$('#emissionResume').disabled=!e.running||!e.paused;$('#emissionStop').disabled=!e.running;
-  const c=s.counts||{};$('#queueSummary').innerHTML=`<div class="queue-stat"><b>${c.ready||0}</b><span>LISTAS</span></div><div class="queue-stat"><b>${c.processing||0}</b><span>PROCESANDO</span></div><div class="queue-stat"><b>${c.onAir||0}</b><span>AL AIRE</span></div><div class="queue-stat"><b>${c.error||0}</b><span>ERRORES</span></div>`;
+  const c=s.counts||{},b=s.buffer||{};
+  $('#queueSummary').innerHTML=`<div class="queue-stat"><b>${c.ready||0}</b><span>LISTAS</span></div><div class="queue-stat"><b>~${b.autonomyMin??0}</b><span>MIN AUTONOMÍA</span></div><div class="queue-stat"><b>${c.processing||0}</b><span>PROCESANDO</span></div><div class="queue-stat"><b>${b.target||15}</b><span>OBJETIVO</span></div><div class="queue-stat"><b>${c.error||0}</b><span>ERRORES</span></div>`;
   renderQueue(s.queue||[]);
 }
 function renderQueue(q){
@@ -87,9 +111,11 @@ function renderQueue(q){
     const timing=m.elapsedMs?`IA ${(m.elapsedMs/1000).toFixed(1)} s`:'';
     const tokens=m.inputTokens?`Tokens ${Number(m.inputTokens).toLocaleString()} → ${Number(m.outputTokens||0).toLocaleString()}`:'';
     const inputSize=m.inputChars?`Fuente IA ${Number(m.inputChars).toLocaleString()} caracteres`:'';
+    const pron=m.pronunciationElapsedMs?`Pron. ${(m.pronunciationElapsedMs/1000).toFixed(1)} s${m.pronunciationSmart?' inteligente':''}`:'';
+    const tts=m.ttsElapsedMs?`TTS ${(m.ttsElapsedMs/1000).toFixed(1)} s · ${m.ttsThreads||4} hilos`:'';
     const stage=x.stage&&x.status==='PROCESANDO'?`Etapa: ${x.stage}`:'';
     const generic=x.error&&!failureDetail?x.error:'';
-    const meta=[used,timing,tokens,inputSize,usedFallback,failureDetail,stage,generic].filter(Boolean).join(' · ');
+    const meta=[used,timing,tokens,inputSize,pron,tts,usedFallback,failureDetail,stage,generic].filter(Boolean).join(' · ');
     const cls=x.status==='LISTA'?'ready':x.status==='PROCESANDO'?'processing':x.status==='AL AIRE'?'air':x.status==='ERROR'?'error':'';
     return `<div class="queue-item"><div class="queue-main"><span class="queue-index">${i+1}.</span><div class="queue-text"><div class="queue-title">${escapeHtml(x.title)}</div>${meta?`<div class="queue-meta">${escapeHtml(meta)}</div>`:''}</div><span class="queue-badge ${cls}">${escapeHtml(x.status)}</span></div></div>`;
   }).join('');
