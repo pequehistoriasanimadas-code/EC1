@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('ECAPI',{
   downloadLocalModel:()=>ipcRenderer.invoke('local:downloadModel'),
   startLocal:()=>ipcRenderer.invoke('local:start'),
   stopLocal:()=>ipcRenderer.invoke('local:stop'),
+  pronunciationStatus:()=>ipcRenderer.invoke('pronunciation:status'),
+  downloadPronunciationModel:()=>ipcRenderer.invoke('pronunciation:downloadModel'),
+  stopPronunciation:()=>ipcRenderer.invoke('pronunciation:stop'),
   ttsStatus:()=>ipcRenderer.invoke('tts:status'),
   generateTts:text=>ipcRenderer.invoke('tts:generate',text),
   pickFallback:()=>ipcRenderer.invoke('fallback:pick'),
@@ -33,7 +36,7 @@ contextBridge.exposeInMainWorld('ECAPI',{
   resetHistory:()=>ipcRenderer.invoke('history:reset'),
   notify:p=>ipcRenderer.send('notify',p),
   on:(channel,cb)=>{
-    const allowed=['automation:state','automation:itemError','automation:engineError','local:event','output:story','output:control','output:design','output:state'];
+    const allowed=['automation:state','automation:itemError','automation:engineError','local:event','pronunciation:event','output:story','output:control','output:design','output:state'];
     if(allowed.includes(channel))ipcRenderer.on(channel,(_,p)=>cb(p));
   }
 });
