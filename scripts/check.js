@@ -60,6 +60,10 @@ try {
   if(!wrapper038.includes('const remainder = total % every'))throw new Error('Scheduled Enlatados are not tied to exact total-note multiples');
   if(!wrapper038.includes('Every completed content Enlatado'))throw new Error('Ad-after-content chaining missing');
 
+  const wrapper0310=fs.readFileSync(path.join('src','main-v0310.js'),'utf8');
+  for(const token of ['availableSlots','PROCESSING_CANCELLED','Sin noticias nuevas elegibles','outputRetries','First pending item wins','Reintentando una vez','Buffer target now means READY items'])if(!wrapper0310.includes(token))throw new Error(`0.3.10 automatic reliability feature missing ${token}`);
+  if(!wrapper0310.includes("require('./main-v038.js')"))throw new Error('0.3.10 does not preserve the 0.3.9 Content/Ads layer');
+
   const settingsJs=fs.readFileSync(path.join('src','services','settings.js'),'utf8');
   for(const token of ["adsFolder: ''","insertAdAfterContent: true"])if(!settingsJs.includes(token))throw new Error(`Ads settings default missing ${token}`);
 
@@ -76,7 +80,7 @@ try {
   if(!rendererUi.includes('básico (inteligente no respondió)'))throw new Error('Soft pronunciation fallback is not visible in queue');
 
   const preload038=fs.readFileSync(path.join('src','preload-v038.js'),'utf8');
-  for(const token of ['Programación de contenidos','Carpeta de contenidos','Carpeta de anuncios','Insertar un anuncio después de cada contenido enlatado','CONTENIDOS EMITIDOS','ANUNCIOS EMITIDOS'])if(!preload038.includes(token))throw new Error(`Contents/ads UI missing ${token}`);
+  for(const token of ['Programación de contenidos','Carpeta de contenidos','Carpeta de anuncios','Insertar un anuncio después de cada contenido enlatado','CONTENIDOS EMITIDOS','ANUNCIOS EMITIDOS','processingDetail','bindDateFontLive0310'])if(!preload038.includes(token))throw new Error(`Contents/ads or 0.3.10 UI missing ${token}`);
 
   const mainJs=fs.readFileSync(path.join('src','main.js'),'utf8');
   if(!mainJs.includes('const enriched={...payload,source};'))throw new Error('Output payload is not decoupled from global design');
@@ -93,10 +97,11 @@ try {
   for(const token of ['ttsPerformanceProfile','Seguro para streaming','Generando voz con Kokoro','Cargando Qwen 8B','sessionNewsEmitted','sessionCannedEmitted','resetSessionCounters','persistSoundControls'])if(!preload.includes(token))throw new Error(`Preload/UI smoke test missing ${token}`);
 
   const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
-  if(pkg.version!=='0.3.9')throw new Error(`Unexpected package version ${pkg.version}`);
+  if(pkg.version!=='0.3.10')throw new Error(`Unexpected package version ${pkg.version}`);
+  if(pkg.main!=='src/main-v0310.js')throw new Error(`Unexpected main entry ${pkg.main}`);
 
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('JavaScript syntax OK · RSS OK · Contenidos/Anuncios separados OK · intervalos 10/20/30 exactos OK · anuncio después de cada contenido OK · pronunciación robusta OK · música persistente OK · contadores OK · crossfade OK · Kokoro ONNX limiter OK');
+  console.log('JavaScript syntax OK · RSS OK · Contenidos/Anuncios separados OK · intervalos exactos OK · emisión automática robusta OK · buffer LISTAS OK · retry de audio OK · orden estable OK · diagnóstico de espera OK · fecha live OK · pronunciación robusta OK · música persistente OK · contadores OK · crossfade OK · Kokoro ONNX limiter OK');
 } catch(e) {
   console.error(e.stack||e);process.exit(1);
 }
