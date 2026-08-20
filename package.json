@@ -1,9 +1,9 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "EC Automatic News",
-  "main": "src/main.js",
+  "main": "src/main-v038.js",
   "private": true,
   "scripts": {
     "start": "electron .",
