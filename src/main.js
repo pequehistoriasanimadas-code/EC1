@@ -12,6 +12,7 @@ const { PronunciationNormalizer } = require('./services/pronunciation');
 const { KokoroTTS } = require('./services/kokoro');
 const { Providers } = require('./services/providers');
 const { HistoryStore } = require('./services/history');
+const { CannedManager } = require('./services/canned');
 const { AutomationEngine } = require('./services/automation');
 
 let controlWindow;
@@ -22,11 +23,12 @@ let pronunciation;
 let kokoro;
 let providers;
 let history;
+let canned;
 let automation;
 let dataDir;
 let resourcesDir;
 let startupLogFile = '';
-let outputState={open:false,source:'none',title:'',format:'16:9',resolution:'1920×1080'};
+let outputState={open:false,source:'none',kind:'none',title:'',format:'16:9',resolution:'1920×1080'};
 
 function portableDataDir() {
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
@@ -57,11 +59,22 @@ function sendControl(channel, payload) {
   if (controlWindow && !controlWindow.isDestroyed()) controlWindow.webContents.send(channel, payload);
 }
 function notify(title, body) { if (Notification.isSupported()) new Notification({title,body}).show(); }
+function fileUrl(p){
+  const value=String(p||'').trim();
+  return value&&fs.existsSync(value)?pathToFileURL(value).href:'';
+}
 function fallbackUrl() {
   const s=settingsStore.load();
-  return s.visual.fallbackImage && fs.existsSync(s.visual.fallbackImage) ? pathToFileURL(s.visual.fallbackImage).href : '';
+  return fileUrl(s.visual.fallbackImage);
 }
-function currentDesign(){return settingsStore?.load()?.visual?.output||{};}
+function enrichDesign(raw={}){
+  return {
+    ...raw,
+    verticalVideoBackgroundUrl:fileUrl(raw.verticalVideoBackground),
+    musicUrl:fileUrl(raw.musicFile)
+  };
+}
+function currentDesign(){return enrichDesign(settingsStore?.load()?.visual?.output||{});}
 function broadcastOutputState(){sendControl('output:state',{...outputState});}
 function setOutputState(patch){outputState={...outputState,...patch};broadcastOutputState();}
 function nativeOutputSize(format,win=null){
@@ -73,6 +86,7 @@ function nativeOutputSize(format,win=null){
   }catch{}
   return {...px,dipWidth:Math.max(1,Math.round(px.width/scaleFactor)),dipHeight:Math.max(1,Math.round(px.height/scaleFactor)),scaleFactor};
 }
+function sendDesignLive(){if(outputWindow&&!outputWindow.isDestroyed())outputWindow.webContents.send('output:design',currentDesign());}
 
 async function syncLocalPolicy(settings=settingsStore?.load()){
   if(!settings||!localRuntime)return;
@@ -129,20 +143,22 @@ function createOutputWindow() {
       backgroundThrottling:false
     }
   });
+  setOutputState({open:true,source:'none',kind:'none',title:'',format:design.format||'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});
   try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
   outputWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('OUTPUT_LOAD_FAIL',`${code} ${desc} ${url}`));
   outputWindow.webContents.on('render-process-gone',(_,details)=>logEvent('OUTPUT_RENDER_GONE',JSON.stringify(details)));
   outputWindow.loadFile(path.join(__dirname,'output.html')).catch(e=>fatalError('No se pudo cargar Output',e));
   outputWindow.webContents.once('did-finish-load',()=>{
     try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
-    outputWindow.webContents.send('output:design',design);
-    const actual=nativeOutputSize(design.format,outputWindow);setOutputState({open:true,source:outputState.source||'none',title:outputState.title||'',format:design.format||'16:9',resolution:actual.resolution,scaleFactor:actual.scaleFactor});
+    outputWindow.webContents.send('output:design',currentDesign());
+    const actual=nativeOutputSize(design.format,outputWindow);
+    setOutputState({open:true,format:design.format||'16:9',resolution:actual.resolution,scaleFactor:actual.scaleFactor});
   });
   outputWindow.on('move',()=>{try{applyOutputWindowFormat(currentDesign().format||'16:9',true);}catch{}});
   outputWindow.on('closed',()=>{
     outputWindow=null;
     automation?.outputClosed();
-    setOutputState({open:false,source:'none',title:''});
+    setOutputState({open:false,source:'none',kind:'none',title:''});
   });
   applyOutputWindowFormat(design.format||'16:9',false);
   return outputWindow;
@@ -155,7 +171,7 @@ function deliverToOutput(payload,source,autoOpen=false){
   const enriched={...payload,source,design:currentDesign()};
   const deliver=()=>{if(win&&!win.isDestroyed())win.webContents.send('output:story',enriched);};
   if(win.webContents.isLoading()) win.webContents.once('did-finish-load',deliver); else deliver();
-  setOutputState({open:true,source,title:payload.title||''});
+  setOutputState({open:true,source,kind:payload.kind||'news',title:payload.title||''});
   return true;
 }
 function sendAutomaticOutput(payload){return deliverToOutput(payload,'automatic',false);}
@@ -172,8 +188,9 @@ function initServices() {
   pronunciation = new PronunciationNormalizer({resourcesDir,dataDir,onEvent:e=>sendControl('pronunciation:event',e)});
   kokoro = new KokoroTTS({resourcesDir,dataDir});
   providers = new Providers({settingsStore,localRuntime});
+  canned = new CannedManager();
   automation = new AutomationEngine({
-    rss,fetchArticle,providers,kokoro,pronunciation,history,
+    rss,fetchArticle,providers,kokoro,pronunciation,canned,history,
     getSettings:()=>settingsStore.load(),
     getFallbackUrl:fallbackUrl,
     sendAutomaticOutput,
@@ -182,7 +199,7 @@ function initServices() {
   });
   automation.on('state',s=>{
     sendControl('automation:state',s);
-    if(outputState.source==='automatic'&&!s.emission.running)setOutputState({source:'none',title:''});
+    if(outputState.source==='automatic'&&!s.emission.running)setOutputState({source:'none',kind:'none',title:''});
   });
   automation.on('error-item',e=>sendControl('automation:itemError',e));
   automation.on('engine-error',e=>sendControl('automation:engineError',{message:e.message}));
@@ -195,11 +212,19 @@ async function runSelfTest() {
   const local = await localRuntime.status();
   if (!local.runtime) throw new Error('llama.cpp runtime no encontrado');
   if (!kokoro.ready()) throw new Error('Kokoro runtime incompleto');
+  const normalized=await pronunciation.normalize('Apple TV informó un avance de 25%.',{smart:false});
+  if(!/ápol te uve/i.test(normalized.text)||!/25 por ciento/i.test(normalized.text))throw new Error('Normalizador básico falló');
+  const testDir=path.join(dataDir,'self-test-canned');fs.mkdirSync(testDir,{recursive:true});
+  const dummy=path.join(testDir,'test.mp4');fs.writeFileSync(dummy,'x');
+  const scan=canned.list(testDir);if(scan.count!==1)throw new Error('Escaneo de enlatados falló');
+  try{fs.unlinkSync(dummy);fs.rmdirSync(testDir);}catch{}
   const voices = await kokoro.listVoices();
   if (!voices.length) throw new Error('Kokoro no pudo listar voces');
   const sample = await kokoro.generate('Prueba de voz.', { voice: voices.includes('ef_dora') ? 'ef_dora' : voices[0], speed: 1.0 });
   if (!sample.path || !fs.existsSync(sample.path) || fs.statSync(sample.path).size < 1000) throw new Error('Kokoro no generó audio válido');
   try { fs.unlinkSync(sample.path); } catch {}
+  const html=fs.readFileSync(path.join(__dirname,'output.html'),'utf8');
+  if(!html.includes('cannedVideo')||!html.includes('music'))throw new Error('Output multimedia incompleto');
   logEvent('SELF_TEST',`OK voices=${voices.length}`);
 }
 process.on('uncaughtException',e=>fatalError('Error no controlado',e));
@@ -222,7 +247,11 @@ app.on('before-quit',()=>{localRuntime?.stop('app-quit');pronunciation?.stop('ap
 ipcMain.handle('settings:get',()=>{
   const s=settingsStore.load();
   const { claudeKeyEnc, geminiKeyEnc, ...publicAi } = s.ai;
-  return {...s,visual:{...s.visual,fallbackImageUrl:fallbackUrl()},ai:{...publicAi,claudeKey:'',geminiKey:'',hasClaudeKey:!!claudeKeyEnc,hasGeminiKey:!!geminiKeyEnc}};
+  return {
+    ...s,
+    visual:{...s.visual,fallbackImageUrl:fallbackUrl(),output:enrichDesign(s.visual.output||{})},
+    ai:{...publicAi,claudeKey:'',geminiKey:'',hasClaudeKey:!!claudeKeyEnc,hasGeminiKey:!!geminiKeyEnc}
+  };
 });
 ipcMain.handle('settings:save',async(_,incoming)=>{
   const current=settingsStore.load();
@@ -230,19 +259,23 @@ ipcMain.handle('settings:save',async(_,incoming)=>{
   const claudePlain=String(incomingAi.claudeKey||'').trim();
   const geminiPlain=String(incomingAi.geminiKey||'').trim();
   delete incomingAi.claudeKey;delete incomingAi.geminiKey;delete incomingAi.claudeKeyEnc;delete incomingAi.geminiKeyEnc;delete incomingAi.hasClaudeKey;delete incomingAi.hasGeminiKey;
+  const incomingOutput={...(incoming.visual?.output||{})};
+  delete incomingOutput.verticalVideoBackgroundUrl;delete incomingOutput.musicUrl;
   const next={
     ...current,...incoming,
     ai:{...current.ai,...incomingAi},
     tts:{...current.tts,...(incoming.tts||{})},
-    visual:{...current.visual,...(incoming.visual||{}),output:{...current.visual.output,...(incoming.visual?.output||{})}},
+    visual:{...current.visual,...(incoming.visual||{}),output:{...current.visual.output,...incomingOutput}},
+    canned:{...current.canned,...(incoming.canned||{})},
     automation:{...current.automation,...(incoming.automation||{})}
   };
   if(claudePlain) next.ai.claudeKeyEnc=settingsStore.encryptSecret(claudePlain); else next.ai.claudeKeyEnc=current.ai.claudeKeyEnc||'';
   if(geminiPlain) next.ai.geminiKeyEnc=settingsStore.encryptSecret(geminiPlain); else next.ai.geminiKeyEnc=current.ai.geminiKeyEnc||'';
+  if(String(current.canned?.folder||'')!==String(next.canned?.folder||''))canned.reset();
   settingsStore.save(next);
   syncLocalPolicy(next);
   if(outputReady()){
-    outputWindow.webContents.send('output:design',next.visual.output);
+    sendDesignLive();
     if(next.visual.output.format!==outputState.format)applyOutputWindowFormat(next.visual.output.format,true);
   }
   return {ok:true,hasClaudeKey:!!next.ai.claudeKeyEnc,hasGeminiKey:!!next.ai.geminiKeyEnc};
@@ -260,6 +293,13 @@ ipcMain.handle('local:stop',async()=>{localRuntime.stop('manual');return localRu
 ipcMain.handle('pronunciation:status',()=>pronunciation.status());
 ipcMain.handle('pronunciation:downloadModel',()=>pronunciation.downloadModel());
 ipcMain.handle('pronunciation:stop',()=>{pronunciation.stop('manual');return pronunciation.status();});
+ipcMain.handle('pronunciation:test',async()=>{
+  const s=settingsStore.load();
+  const source='Apple TV informó novedades en YouTube y un avance de 25%.';
+  const loc=await pronunciation.normalize(source,{smart:s.tts?.pronunciationSmart!==false});
+  const audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});
+  return{source,text:loc.text,audioUrl:audio.url,durationSec:audio.durationSec,smartUsed:loc.smartUsed,modelReady:loc.modelReady};
+});
 ipcMain.handle('tts:status',async()=>({ready:kokoro.ready(),voices:kokoro.ready()?await kokoro.listVoices():[],threads:4}));
 ipcMain.handle('tts:generate',async(_,text)=>{
   const s=settingsStore.load();
@@ -276,7 +316,52 @@ ipcMain.handle('fallback:pick',async()=>{
   return{ok:true,path:dest,url:pathToFileURL(dest).href};
 });
 
+async function pickOutputAsset(kind){
+  const isMusic=kind==='music';
+  const r=await dialog.showOpenDialog({properties:['openFile'],filters:isMusic?[{name:'Música MP3',extensions:['mp3']}]:[{name:'Imagen vertical',extensions:['png','jpg','jpeg','webp']}]});
+  if(r.canceled||!r.filePaths[0])return{ok:false};
+  const src=r.filePaths[0],ext=path.extname(src)||(isMusic?'.mp3':'.png');
+  const dir=path.join(dataDir,'assets');fs.mkdirSync(dir,{recursive:true});
+  const dest=path.join(dir,isMusic?`background-music${ext}`:`vertical-video-background${ext}`);
+  fs.copyFileSync(src,dest);
+  const s=settingsStore.load();
+  if(isMusic)s.visual.output.musicFile=dest;else s.visual.output.verticalVideoBackground=dest;
+  settingsStore.save(s);sendDesignLive();
+  return{ok:true,path:dest,url:pathToFileURL(dest).href,design:currentDesign()};
+}
+function clearOutputAsset(kind){
+  const s=settingsStore.load();const isMusic=kind==='music';
+  const old=isMusic?s.visual.output.musicFile:s.visual.output.verticalVideoBackground;
+  if(isMusic)s.visual.output.musicFile='';else s.visual.output.verticalVideoBackground='';
+  settingsStore.save(s);
+  try{if(old&&old.startsWith(path.join(dataDir,'assets'))&&fs.existsSync(old))fs.unlinkSync(old);}catch{}
+  sendDesignLive();return{ok:true,design:currentDesign()};
+}
+ipcMain.handle('output:pickVerticalBackground',()=>pickOutputAsset('background'));
+ipcMain.handle('output:clearVerticalBackground',()=>clearOutputAsset('background'));
+ipcMain.handle('output:pickMusic',()=>pickOutputAsset('music'));
+ipcMain.handle('output:clearMusic',()=>clearOutputAsset('music'));
+
+ipcMain.handle('canned:pickFolder',async()=>{
+  const r=await dialog.showOpenDialog({properties:['openDirectory']});
+  if(r.canceled||!r.filePaths[0])return{ok:false};
+  const s=settingsStore.load();s.canned.folder=r.filePaths[0];settingsStore.save(s);canned.reset();
+  return{ok:true,...canned.list(s.canned.folder)};
+});
+ipcMain.handle('canned:list',()=>canned.list(settingsStore.load().canned?.folder||''));
+ipcMain.handle('canned:launchNow',()=>automation.requestCannedNow());
+
 ipcMain.handle('output:open',()=>{createOutputWindow();return{ok:true,state:{...outputState}};});
+ipcMain.handle('output:close',async()=>{
+  if(!outputReady())return{ok:true,alreadyClosed:true,state:{...outputState}};
+  const a=automation.getState();
+  if(a.emission.running){
+    const r=await dialog.showMessageBox(controlWindow,{type:'warning',buttons:['Cancelar','Cerrar Output'],defaultId:0,cancelId:0,title:'Cerrar Output',message:'La emisión automática está activa.',detail:'Cerrar Output pausará la emisión, pero el procesamiento y el buffer seguirán funcionando.'});
+    if(r.response!==1)return{ok:false,cancelled:true,state:{...outputState}};
+  }
+  outputWindow.close();
+  return{ok:true,state:{...outputState}};
+});
 ipcMain.handle('output:status',()=>({...outputState}));
 ipcMain.handle('output:manualSend',async(_,p)=>{
   const a=automation.getState();
@@ -285,14 +370,15 @@ ipcMain.handle('output:manualSend',async(_,p)=>{
     if(r.response!==1)return{ok:false,cancelled:true};
     automation.interruptForManual();
   }
-  const ok=deliverToOutput(p,'editor',true);
+  const ok=deliverToOutput({...p,kind:'news'},'editor',true);
   return{ok,source:'editor'};
 });
 ipcMain.on('output:control',(_,action)=>controlOutput(action));
 ipcMain.on('output:playback',(_,event)=>{automation.outputPlayback(event);if(event?.source==='editor'&&event?.type==='ended')setOutputState({source:'editor'});});
 ipcMain.on('output:designPreview',(_,design)=>{
   if(!outputReady())return;
-  outputWindow.webContents.send('output:design',design);
+  const merged=enrichDesign({...settingsStore.load().visual.output,...design});
+  outputWindow.webContents.send('output:design',merged);
   if(design?.format&&design.format!==outputState.format)applyOutputWindowFormat(design.format,true);
 });
 
