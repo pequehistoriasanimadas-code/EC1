@@ -7,6 +7,7 @@ const summary=document.getElementById('summary');
 const audio=document.getElementById('audio');
 let fallback='';
 let source='none';
+let preloaded=null;
 let design={format:'16:9',fontFamily:'Arial',titleColor:'#FFFFFF',summaryColor:'#F3F3F3',categoryBgColor:'#F7C600',categoryTextColor:'#000000',lowerBgColor:'#000000',lowerOpacity:.88,animation:'auto',motionSpeed:'normal',tiktokSafe:true};
 
 function hexRgba(hex,opacity){
@@ -19,6 +20,10 @@ function fitStage(){
   stage.style.width=`${w}px`;stage.style.height=`${h}px`;stage.dataset.format=vertical?'9:16':'16:9';
   const scale=Math.min(window.innerWidth/w,window.innerHeight/h);
   stage.style.transform=`scale(${Math.max(.01,scale)})`;
+}
+function restartMotion(){
+  applyMotion();
+  img.style.animationPlayState='running';
 }
 function applyMotion(){
   img.className='';
@@ -43,19 +48,31 @@ function applyDesign(next={}){
   stage.dataset.safe=design.format==='9:16'&&design.tiktokSafe?'tiktok':'none';
   fitStage();applyMotion();
 }
+function preload(url){
+  if(!url)return;
+  const next=new Image();
+  next.decoding='async';
+  next.src=url;
+  preloaded=next;
+}
 function playback(type,message=''){window.ECAPI.outputPlayback({type,source,message});}
-img.addEventListener('load',applyMotion);
+img.addEventListener('load',restartMotion);
 img.addEventListener('error',()=>{if(fallback&&img.src!==fallback)img.src=fallback;});
 audio.addEventListener('ended',()=>playback('ended'));
 audio.addEventListener('error',()=>{if(audio.src)playback('error','No se pudo cargar el audio');});
 window.addEventListener('resize',fitStage);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)restartMotion();});
 
 window.ECAPI.on('output:design',d=>applyDesign(d||{}));
 window.ECAPI.on('output:story',p=>{
   source=p.source||'none';
   if(p.design)applyDesign(p.design);
   cat.textContent=(p.category||'ACTUALIDAD').toUpperCase();title.textContent=p.title||'';summary.textContent=p.summary||'';
-  fallback=p.fallbackImage||'';img.src=p.image||fallback||'';
+  fallback=p.fallbackImage||'';
+  const nextSrc=p.image||fallback||'';
+  if(nextSrc&&preloaded&&preloaded.complete&&preloaded.src===nextSrc)img.src=preloaded.src;
+  else img.src=nextSrc;
+  preload(p.preloadImage||'');
   if(p.audioUrl){
     audio.src=p.audioUrl;audio.currentTime=0;
     audio.play().catch(e=>playback('error',e.message||'Autoplay bloqueado'));
