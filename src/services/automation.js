@@ -3,9 +3,9 @@ const {EventEmitter}=require('events');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 
 class AutomationEngine extends EventEmitter {
-  constructor({rss,fetchArticle,providers,kokoro,pronunciation,history,getSettings,getFallbackUrl,sendAutomaticOutput,isOutputReady,controlOutput}) {
+  constructor({rss,fetchArticle,providers,kokoro,pronunciation,canned,history,getSettings,getFallbackUrl,sendAutomaticOutput,isOutputReady,controlOutput}) {
     super();
-    Object.assign(this,{rss,fetchArticle,providers,kokoro,pronunciation,history,getSettings,getFallbackUrl,sendAutomaticOutput,isOutputReady,controlOutput});
+    Object.assign(this,{rss,fetchArticle,providers,kokoro,pronunciation,canned,history,getSettings,getFallbackUrl,sendAutomaticOutput,isOutputReady,controlOutput});
     this.processingRunning=false;
     this.processingPaused=false;
     this.emissionRunning=false;
@@ -14,12 +14,18 @@ class AutomationEngine extends EventEmitter {
     this.queuedUrls=new Set();
     this.playbackResolve=null;
     this.currentItem=null;
+    this.currentKind='none';
+    this.currentCanned=null;
     this.cachedItems=[];
     this.lastFeedFetchAt=0;
     this.processingEpoch=0;
     this.emissionEpoch=0;
     this.inFlight=new Set();
     this.localHeavyTail=Promise.resolve();
+    this.newsSinceCanned=0;
+    this.cannedPlayed=0;
+    this.cannedRequested=false;
+    this.cannedUnavailableUntil=0;
   }
 
   snapshot(extra={}) {
@@ -33,12 +39,25 @@ class AutomationEngine extends EventEmitter {
     }
     const ready=this.queue.filter(x=>x.status==='LISTA');
     const avgSec=ready.length?ready.reduce((a,x)=>a+Math.max(10,Number(x.audio?.durationSec)||60),0)/ready.length:60;
-    const target=Math.max(1,Math.min(30,Number(this.getSettings()?.automation?.bufferReady)||15));
+    const settings=this.getSettings()||{};
+    const target=Math.max(1,Math.min(30,Number(settings.automation?.bufferReady)||15));
+    const interval=Math.max(0,Math.min(999,Number(settings.canned?.interval)||0));
+    const cannedEnabled=!!settings.canned?.enabled;
     return {
       processing:{running:this.processingRunning,paused:this.processingPaused,pipelineWorkers:this.inFlight.size},
-      emission:{running:this.emissionRunning,paused:this.emissionPaused,currentTitle:this.currentItem?.story?.title||''},
+      emission:{running:this.emissionRunning,paused:this.emissionPaused,currentTitle:this.currentItem?.story?.title||this.currentCanned?.name||'',currentKind:this.currentKind},
       counts,
       buffer:{target,ready:counts.ready,autonomyMin:Number((counts.ready*avgSec/60).toFixed(1))},
+      canned:{
+        enabled:cannedEnabled,
+        emergency:settings.canned?.emergency!==false,
+        interval,
+        newsSince:this.newsSinceCanned,
+        nextIn:cannedEnabled&&interval>0?Math.max(0,interval-this.newsSinceCanned):null,
+        requested:this.cannedRequested,
+        played:this.cannedPlayed,
+        current:this.currentCanned?.name||''
+      },
       queue:this.queue.map(x=>({
         title:x.story.title,
         status:x.status,
@@ -95,19 +114,20 @@ class AutomationEngine extends EventEmitter {
   }
   stopEmission(){
     this.emissionRunning=false;this.emissionPaused=false;this.emissionEpoch++;
-    if(this.currentItem){try{this.controlOutput('stop');}catch{}this.finishPlayback('stopped');}
+    if(this.currentKind!=='none'){try{this.controlOutput('stop');}catch{}this.finishPlayback('stopped');}
+    this.cannedRequested=false;
     this.state();return this.snapshot();
   }
   interruptForManual(){
     if(!this.emissionRunning) return;
     this.emissionPaused=true;
-    if(this.currentItem){try{this.controlOutput('stop');}catch{}this.finishPlayback('interrupted');}
+    if(this.currentKind!=='none'){try{this.controlOutput('stop');}catch{}this.finishPlayback('interrupted');}
     this.state({notice:'Emisión automática pausada por contenido manual'});
   }
   outputClosed(){
     if(this.emissionRunning){
       this.emissionPaused=true;
-      if(this.currentItem)this.finishPlayback('closed');
+      if(this.currentKind!=='none')this.finishPlayback('closed');
       this.state({notice:'Output cerrado; emisión automática pausada'});
     }
   }
@@ -118,9 +138,18 @@ class AutomationEngine extends EventEmitter {
   }
   finishPlayback(reason){if(this.playbackResolve){const r=this.playbackResolve;this.playbackResolve=null;r(reason);}}
   clearQueue(){
-    if(this.currentItem)throw new Error('No se puede vaciar la cola mientras hay una noticia al aire');
+    if(this.currentKind!=='none')throw new Error('No se puede vaciar la cola mientras hay contenido al aire');
     if(this.inFlight.size)throw new Error('Espera a que terminen las noticias que están procesándose');
     this.queue=[];this.queuedUrls.clear();this.state();return this.snapshot();
+  }
+  requestCannedNow(){
+    const s=this.getSettings();
+    if(!s.canned?.enabled)throw new Error('ENLATADOS_DISABLED');
+    if(!String(s.canned?.folder||'').trim())throw new Error('CANNED_FOLDER_MISSING');
+    if(!this.emissionRunning)throw new Error('EMISSION_NOT_RUNNING');
+    this.cannedRequested=true;
+    this.state({notice:this.currentKind==='none'?'Enlatado solicitado':'Enlatado programado para salir al terminar el contenido actual'});
+    return this.snapshot();
   }
 
   candidateFrom(items,s){
@@ -230,17 +259,72 @@ class AutomationEngine extends EventEmitter {
     };
   }
 
+  cannedReason(s,hasReadyNews){
+    const c=s.canned||{};
+    if(!c.enabled||Date.now()<this.cannedUnavailableUntil)return'';
+    if(this.cannedRequested)return'manual';
+    const interval=Math.max(0,Math.min(999,Number(c.interval)||0));
+    if(interval>0&&this.newsSinceCanned>=interval)return'scheduled';
+    if(!hasReadyNews&&c.emergency!==false)return'emergency';
+    return'';
+  }
+
+  async playCanned(s,reason){
+    let media;
+    try{media=this.canned?.pick(s.canned?.folder||'');}
+    catch(e){
+      this.cannedUnavailableUntil=Date.now()+30000;
+      if(reason==='manual')this.cannedRequested=false;
+      this.emit('error-item',{title:'Enlatados',error:e.message||'No hay videos disponibles',stage:'canned'});
+      this.state({notice:'No se pudo reproducir un enlatado'});
+      return false;
+    }
+    if(!media)return false;
+
+    this.currentKind='canned';this.currentCanned=media;this.currentItem=null;
+    this.cannedRequested=false;
+    this.state({notice:`Enlatado al aire: ${media.name}`});
+    const sent=this.sendAutomaticOutput({
+      source:'automatic',kind:'canned',title:media.name,videoUrl:media.url,cannedReason:reason
+    });
+    if(!sent){
+      this.currentKind='none';this.currentCanned=null;this.emissionPaused=true;this.state({notice:'Output no disponible'});return false;
+    }
+
+    const result=await Promise.race([
+      new Promise(resolve=>this.playbackResolve=resolve),
+      wait(6*60*60*1000).then(()=> 'timeout')
+    ]);
+    this.playbackResolve=null;
+
+    if(result==='ended'){
+      this.newsSinceCanned=0;this.cannedPlayed++;
+    }else if(result==='error'||result==='timeout'){
+      this.emissionPaused=true;
+      this.emit('error-item',{title:media.name,error:result==='timeout'?'Enlatado: tiempo máximo excedido':'Enlatado: no se pudo reproducir el video',stage:'canned'});
+    }else if(result==='closed'||result==='interrupted')this.emissionPaused=true;
+    this.currentKind='none';this.currentCanned=null;this.state();
+    return true;
+  }
+
   async consumer(epoch){
     while(this.emissionRunning&&epoch===this.emissionEpoch){
       if(this.emissionPaused){await wait(300);continue;}
       if(!this.isOutputReady()){this.emissionPaused=true;this.state({notice:'Abre Output para continuar la emisión'});continue;}
+
+      const s=this.getSettings();
       const item=this.queue.find(x=>x.status==='LISTA');
+      const reason=this.cannedReason(s,!!item);
+      if(reason){
+        const played=await this.playCanned(s,reason);
+        if(played)continue;
+      }
       if(!item){await wait(300);continue;}
 
-      this.currentItem=item;item.status='AL AIRE';item.error='';this.state();
+      this.currentItem=item;this.currentKind='news';this.currentCanned=null;item.status='AL AIRE';item.error='';this.state();
       const next=this.queue.find(x=>x!==item&&x.status==='LISTA');
       const p={
-        source:'automatic',
+        source:'automatic',kind:'news',
         title:item.result.title||item.story.title,
         category:item.result.category||item.story.category||'ACTUALIDAD',
         summary:item.result.summary||'',
@@ -252,24 +336,24 @@ class AutomationEngine extends EventEmitter {
         audioDurationSec:item.audio.durationSec||item.result.durationSec||60
       };
       const sent=this.sendAutomaticOutput(p);
-      if(!sent){item.status='LISTA';this.currentItem=null;this.emissionPaused=true;this.state({notice:'Output no disponible'});continue;}
+      if(!sent){item.status='LISTA';this.currentItem=null;this.currentKind='none';this.emissionPaused=true;this.state({notice:'Output no disponible'});continue;}
 
       const expected=Math.max(10,Number(p.audioDurationSec)||60)*1000+15000;
-      const reason=await Promise.race([new Promise(resolve=>this.playbackResolve=resolve),wait(expected).then(()=> 'timeout')]);
+      const result=await Promise.race([new Promise(resolve=>this.playbackResolve=resolve),wait(expected).then(()=> 'timeout')]);
       this.playbackResolve=null;
 
-      if(reason==='ended'){
-        this.history.add(item.story);item.status='EMITIDA';this.state();
+      if(result==='ended'){
+        this.history.add(item.story);item.status='EMITIDA';this.newsSinceCanned++;this.state();
         await wait((this.getSettings().visual.pauseSeconds||2.5)*1000);
         this.queue=this.queue.filter(x=>x!==item);this.queuedUrls.delete(item.story.link);
       }else{
         item.status='LISTA';
-        if(reason==='error'||reason==='timeout'){
-          item.error=reason==='timeout'?'Output: el audio excedió el tiempo esperado':'Output: no se pudo reproducir el audio';
+        if(result==='error'||result==='timeout'){
+          item.error=result==='timeout'?'Output: el audio excedió el tiempo esperado':'Output: no se pudo reproducir el audio';
           this.emissionPaused=true;this.emit('error-item',{title:item.story.title,error:item.error,stage:'output'});
-        }else if(reason==='closed'||reason==='interrupted')this.emissionPaused=true;
+        }else if(result==='closed'||result==='interrupted')this.emissionPaused=true;
       }
-      this.currentItem=null;this.state();
+      this.currentItem=null;this.currentKind='none';this.state();
     }
   }
 }
