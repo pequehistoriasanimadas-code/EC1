@@ -27,12 +27,12 @@ $('#downloadPronunciationModel').onclick=async()=>{
 };
 $('#testPronunciation').onclick=async()=>{
   status('Probando normalizador y Kokoro...');$('#pronunciationTestResult').textContent='Procesando: Apple TV, YouTube y 25%...';
-  try{const r=await window.ECAPI.testPronunciation();$('#pronunciationTestResult').textContent=`Texto para locución: ${r.text}${r.smartUsed?' · normalizador inteligente utilizado':' · reglas locales'}`;$('#pronunciationTestAudio').src=r.audioUrl||'';status('Prueba de pronunciación lista.');}
+  try{const r=await window.ECAPI.testPronunciation();const mode=r.smartFailed?' · reglas básicas (inteligente no respondió)':r.smartUsed?' · normalizador inteligente utilizado':' · reglas locales';$('#pronunciationTestResult').textContent=`Texto para locución: ${r.text}${mode}`;$('#pronunciationTestAudio').src=r.audioUrl||'';status('Prueba de pronunciación lista.');}
   catch(e){$('#pronunciationTestResult').textContent=`Error: ${e.message||e}`;status(`Prueba de pronunciación: ${e.message||e}`);}
 };
 
 $('#genScript').onclick=async()=>{if(!currentStory)return;await saveSettings({quiet:true});status('Generando guion...');try{const r=await window.ECAPI.generate(currentStory,currentArticle||{});currentGenerated=r;$('#title').value=r.result.title||currentStory.title;$('#category').value=r.result.category||'ACTUALIDAD';$('#summary').value=r.result.summary||'';$('#script').value=r.result.script||'';refreshPreview();const fallbacks=(r.attempts||[]).filter(a=>!a.ok).map(a=>providerName(a.provider));status(`Guion generado con ${providerName(r.provider)}${fallbacks.length?` · fallback tras ${[...new Set(fallbacks)].join(', ')}`:''}`);}catch(e){status(`IA error: ${e.message||e}`);}};
-$('#genVoice').onclick=async()=>{const script=$('#script').value.trim();if(!script)return status('Primero genera o escribe el guion');await saveSettings({quiet:true});status('Normalizando pronunciación y generando voz con Kokoro...');try{const head=$('#title').value.trim();const clean=x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();const spoken=head&&!clean(script.slice(0,Math.max(220,head.length*2))).startsWith(clean(head))?`${head}. ${script}`:script;currentAudio=await window.ECAPI.generateTts(spoken);$('#previewAudio').src=currentAudio.url;const p=currentAudio.pronunciation||{};status(`Voz lista · ${Math.round(currentAudio.durationSec||0)} s · TTS ${((currentAudio.elapsedMs||0)/1000).toFixed(1)} s${p.smartUsed?' · pronunciación inteligente':''}`);}catch(e){status(`Kokoro error: ${e.message||e}`);}};
+$('#genVoice').onclick=async()=>{const script=$('#script').value.trim();if(!script)return status('Primero genera o escribe el guion');await saveSettings({quiet:true});status('Normalizando pronunciación y generando voz con Kokoro...');try{const head=$('#title').value.trim();const clean=x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();const spoken=head&&!clean(script.slice(0,Math.max(220,head.length*2))).startsWith(clean(head))?`${head}. ${script}`:script;currentAudio=await window.ECAPI.generateTts(spoken);$('#previewAudio').src=currentAudio.url;const p=currentAudio.pronunciation||{};status(`Voz lista · ${Math.round(currentAudio.durationSec||0)} s · TTS ${((currentAudio.elapsedMs||0)/1000).toFixed(1)} s${p.smartFailed?' · pronunciación básica (fallback)':p.smartUsed?' · pronunciación inteligente':''}`);}catch(e){status(`Kokoro error: ${e.message||e}`);}};
 $('#sendOutput').onclick=async()=>{const image=effectiveImage();try{const r=await window.ECAPI.sendManualOutput({title:$('#title').value,category:$('#category').value,pubDate:currentStory?.pubDate||currentArticle?.pubDate||'',summary:$('#summary').value,image,fallbackImage:settings.visual.fallbackImageUrl||'',audioUrl:currentAudio?.url||'',audioDurationSec:currentAudio?.durationSec||0});if(r.cancelled)return status('Emisión manual cancelada');status('Noticia del Editor enviada a Output');}catch(e){status(`Output: ${e.message||e}`);}};
 $('#title').oninput=refreshPreview;$('#category').oninput=refreshPreview;$('#summary').oninput=refreshPreview;
 
@@ -85,7 +85,9 @@ window.ECAPI.on('local:event',e=>{
 window.ECAPI.on('pronunciation:event',e=>{
   if(e.type==='pronunciation-download'){$('#pronunciationProgress div').style.width=`${e.percent||0}%`;status(e.percent?`Descargando normalizador: ${e.percent}%`:'Descargando normalizador...');}
   if(e.type==='pronunciation-downloaded'){status('Normalizador inteligente listo.');refreshPronunciationStatus();}
-  if(e.type==='pronunciation-error')status(`Pronunciación: se usaron reglas básicas porque el modelo inteligente falló: ${e.message||''}`);
+  if(e.type==='pronunciation-warning'||e.type==='pronunciation-error'){
+    const el=$('#pronunciationInfo');if(el)el.textContent='Normalizador inteligente: esta nota usó reglas básicas porque la respuesta local no fue válida. El procesamiento continúa normalmente.';
+  }
   if(['pronunciation-started','pronunciation-stopped','pronunciation-exit'].includes(e.type))refreshPronunciationStatus();
 });
 
