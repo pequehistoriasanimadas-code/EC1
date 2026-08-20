@@ -168,7 +168,9 @@ function deliverToOutput(payload,source,autoOpen=false){
   let win=outputWindow;
   if((!win||win.isDestroyed())&&autoOpen) win=createOutputWindow();
   if(!win||win.isDestroyed()) return false;
-  const enriched={...payload,source,design:currentDesign()};
+  // El diseño (incluido el canal de música) es estado global persistente del Output.
+  // No se reenvía con cada noticia para evitar reinicializar/pausar la música entre notas.
+  const enriched={...payload,source};
   const deliver=()=>{if(win&&!win.isDestroyed())win.webContents.send('output:story',enriched);};
   if(win.webContents.isLoading()) win.webContents.once('did-finish-load',deliver); else deliver();
   setOutputState({open:true,source,kind:payload.kind||'news',title:payload.title||''});
@@ -298,7 +300,7 @@ ipcMain.handle('pronunciation:test',async()=>{
   const source='Apple TV informó novedades en YouTube y un avance de 25%.';
   const loc=await pronunciation.normalize(source,{smart:s.tts?.pronunciationSmart!==false});
   const audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});
-  return{source,text:loc.text,audioUrl:audio.url,durationSec:audio.durationSec,smartUsed:loc.smartUsed,modelReady:loc.modelReady};
+  return{source,text:loc.text,audioUrl:audio.url,durationSec:audio.durationSec,smartUsed:loc.smartUsed,smartFailed:loc.smartFailed,smartError:loc.smartError,modelReady:loc.modelReady};
 });
 ipcMain.handle('tts:status',async()=>({ready:kokoro.ready(),voices:kokoro.ready()?await kokoro.listVoices():[],threads:4}));
 ipcMain.handle('tts:generate',async(_,text)=>{
@@ -392,5 +394,6 @@ ipcMain.handle('automation:emissionPause',()=>automation.pauseEmission());
 ipcMain.handle('automation:emissionResume',()=>automation.resumeEmission());
 ipcMain.handle('automation:emissionStop',()=>automation.stopEmission());
 ipcMain.handle('automation:clearQueue',()=>automation.clearQueue());
+ipcMain.handle('automation:resetCounters',()=>automation.resetSessionCounters());
 ipcMain.handle('history:reset',()=>{history.reset();return{ok:true};});
 ipcMain.on('notify',(_,p)=>notify(p.title||'EC Automatic News',p.body||''));
