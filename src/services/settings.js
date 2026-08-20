@@ -35,7 +35,9 @@ class SettingsStore {
       },
       tts: {
         voice: 'ef_dora',
-        speed: 1.0
+        speed: 1.0,
+        resourceMode: 'safe_streaming',
+        pronunciationSmart: true
       },
       visual: {
         fallbackImage: '',
@@ -60,8 +62,8 @@ class SettingsStore {
       automation: {
         updateMinutes: 2,
         maxAgeHours: 6,
-        bufferReady: 5,
-        queueMax: 12,
+        bufferReady: 15,
+        queueMax: 30,
         avoidRepeats: true,
         onlyMainImage: true,
         activeFeedIds: []
@@ -79,13 +81,17 @@ class SettingsStore {
       }
     } catch {}
 
-    // Migración 0.3.2: el automático usa Haiku 4.5 por defecto para reducir latencia/costo.
     if (!String(data.ai?.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
 
-    // Migración 0.3.2: los equipos que venían del perfil anterior pasan al modo seguro para streaming.
     if (raw?.ai && raw.ai.localResourceMode === undefined) {
       data.ai.localResourceMode = 'safe_streaming';
       if (Number(raw.ai.localIdleMinutes) === 10) data.ai.localIdleMinutes = 5;
+    }
+
+    // Migración 0.3.3: amplía el buffer recomendado sin sobrescribir una elección explícita reciente.
+    if (raw?.automation && Number(raw.automation.bufferReady) === 5 && Number(raw.automation.queueMax) === 12) {
+      data.automation.bufferReady = 15;
+      data.automation.queueMax = 30;
     }
     return data;
   }
