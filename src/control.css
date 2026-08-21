@@ -19,5 +19,7 @@ label{display:block;color:var(--muted);margin:11px 0 5px}input,textarea,select{w
 #generateAllDocs,#resetDocumentProcessed{font-size:0}
 #generateAllDocs::after{content:"Procesar notas pendientes ahora";font-size:14px}
 #resetDocumentProcessed::after{content:"Volver a procesar notas ya utilizadas";font-size:12px}
+.switch-row:has(#documentWatch) b{font-size:0}
+.switch-row:has(#documentWatch) b::after{content:"Procesar automáticamente notas nuevas";font-size:14px}
 .switch-row:has(#documentWatch) small{font-size:0}
 .switch-row:has(#documentWatch) small::after{content:"Cuando aparezca un documento nuevo en esta carpeta, EC lo añadirá automáticamente a la cola de preparación.";font-size:11px}
