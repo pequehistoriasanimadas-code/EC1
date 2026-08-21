@@ -9,6 +9,7 @@ const parser = new XMLParser({
 });
 
 const EC_LATEST_WEB = 'https://elcomercio.pe/feed/';
+const MAX_FEED_BYTES = 8 * 1024 * 1024;
 
 function arrayify(v) { return v == null ? [] : (Array.isArray(v) ? v : [v]); }
 function text(v) {
@@ -74,7 +75,7 @@ function discoverEntries(doc) {
   const found = [];
   const seen = new Set();
   function walk(node, depth=0) {
-    if (!node || depth > 9) return;
+    if (!node || depth > 9 || found.length >= 300) return;
     if (Array.isArray(node)) { node.forEach(x=>walk(x,depth+1)); return; }
     if (typeof node !== 'object' || seen.has(node)) return;
     seen.add(node);
@@ -89,15 +90,18 @@ function discoverEntries(doc) {
   walk(doc);
   return found;
 }
-function parseFeed(xml, feed) {
-  const doc = parser.parse(xml);
-  const items = discoverEntries(doc);
+function parseFeed(xml, feed={}) {
+  const raw=String(xml||'');
+  if(Buffer.byteLength(raw,'utf8')>MAX_FEED_BYTES)throw new Error('RSS excede el tamaño máximo permitido');
+  const doc = parser.parse(raw);
+  const items = discoverEntries(doc).slice(0,300);
+  const feedId=String(feed.id||'rss');const feedName=String(feed.name||'RSS');
   return items.map((item, index) => {
     const link = extractLink(item);
     return {
-      id: `${feed.id}:${index}:${text(item.guid || link)}`,
-      feedId: feed.id,
-      feedName: feed.name,
+      id: `${feedId}:${index}:${text(item.guid || link)}`,
+      feedId,
+      feedName,
       title: cleanHtml(text(item.title)),
       link,
       description: cleanHtml(text(item.description || item.summary || item.subtitle || item['media:description'])),
@@ -108,8 +112,10 @@ function parseFeed(xml, feed) {
     };
   }).filter(x => x.title && /^https?:\/\//i.test(x.link));
 }
-function parseHtmlLatest(html, feed, baseUrl=EC_LATEST_WEB) {
-  const $ = cheerio.load(html);
+function parseHtmlLatest(html, feed={}, baseUrl=EC_LATEST_WEB) {
+  const raw=String(html||'');
+  if(Buffer.byteLength(raw,'utf8')>MAX_FEED_BYTES)throw new Error('Fuente web excede el tamaño máximo permitido');
+  const $ = cheerio.load(raw);
   const out = [];
   const seen = new Set();
   $('h1 a[href],h2 a[href],h3 a[href],article a[href]').each((_,a)=>{
@@ -125,8 +131,8 @@ function parseHtmlLatest(html, feed, baseUrl=EC_LATEST_WEB) {
     const description = article.find('p').first().text().replace(/\s+/g,' ').trim();
     const image = article.find('img').first().attr('src') || article.find('img').first().attr('data-src') || '';
     out.push({
-      id:`${feed.id}:web:${out.length}:${link}`,
-      feedId:feed.id, feedName:feed.name, title, link,
+      id:`${feed.id||'rss'}:web:${out.length}:${link}`,
+      feedId:feed.id||'rss', feedName:feed.name||'RSS', title, link,
       description, category:'', pubDate:'', author:'', image
     });
   });
@@ -148,27 +154,44 @@ function parseAlternateSource(source, feed, baseUrl=EC_LATEST_WEB) {
 function isEcLatestArc(url='') {
   return /elcomercio\.pe\/arc\/outboundfeeds\/rss\/category\/ultimas-noticias/i.test(url);
 }
+async function readBodyLimited(res,maxBytes=MAX_FEED_BYTES){
+  const declared=Number(res.headers.get('content-length')||0);
+  if(declared>maxBytes)throw new Error(`Respuesta demasiado grande (${Math.ceil(declared/1048576)} MB)`);
+  if(!res.body)return'';
+  const reader=res.body.getReader();const decoder=new TextDecoder('utf-8');let total=0,out='';
+  try{
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      total+=value.byteLength;if(total>maxBytes){try{await reader.cancel();}catch{}throw new Error(`Respuesta excede ${Math.round(maxBytes/1048576)} MB`);}
+      out+=decoder.decode(value,{stream:true});
+    }
+    out+=decoder.decode();return out;
+  }finally{try{reader.releaseLock();}catch{}}
+}
 async function requestText(url) {
-  const res = await fetch(url, {
+  const value=String(url||'').trim();
+  if(!/^https?:\/\//i.test(value))throw new Error('La URL RSS debe usar HTTP o HTTPS');
+  const res = await fetch(value, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 EC-Automatic-News/0.3',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 EC-Automatic-News/0.3.11',
       'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, */*'
     },
     redirect:'follow',
     signal:AbortSignal.timeout(20000)
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return {body:await res.text(), contentType:res.headers.get('content-type')||'', finalUrl:res.url||url};
+  return {body:await readBodyLimited(res), contentType:res.headers.get('content-type')||'', finalUrl:res.url||value};
 }
-async function fetchFeedDetailed(feed) {
+async function fetchFeedDetailed(feed={}) {
+  if(!feed.url)throw new Error(`RSS ${feed.name||'sin nombre'}: falta URL`);
   let primary;
   try {
     primary = await requestText(feed.url);
   } catch (e) {
-    if (!isEcLatestArc(feed.url)) throw new Error(`RSS ${feed.name}: ${e.message}`);
+    if (!isEcLatestArc(feed.url)) throw new Error(`RSS ${feed.name||'sin nombre'}: ${e.message}`);
     const alt = await requestText(EC_LATEST_WEB);
     const fallback=parseAlternateSource(alt,feed,EC_LATEST_WEB);
-    if (!fallback.items.length) throw new Error(`RSS ${feed.name}: ${e.message}; fuente alternativa sin resultados`);
+    if (!fallback.items.length) throw new Error(`RSS ${feed.name||'sin nombre'}: ${e.message}; fuente alternativa sin resultados`);
     return fallback;
   }
 
@@ -190,9 +213,7 @@ async function fetchFeedDetailed(feed) {
       const alt = await requestText(EC_LATEST_WEB);
       const fallback=parseAlternateSource(alt,feed,EC_LATEST_WEB);
       if (fallback.items.length) return fallback;
-    } catch (e) {
-      parseError = parseError || e.message;
-    }
+    } catch (e) { parseError = parseError || e.message; }
   }
   return {items:[], mode:'UNRECOGNIZED', detail:parseError ? `Formato no reconocido: ${parseError}` : 'Fuente accesible, pero no se encontraron noticias reconocibles'};
 }
@@ -201,8 +222,16 @@ async function testFeed(feed) {
   const r=await fetchFeedDetailed(feed);
   return {ok:r.items.length>0,count:r.items.length,mode:r.mode,detail:r.detail};
 }
+function canonicalLink(value){
+  try{
+    const u=new URL(String(value||''));u.hash='';
+    for(const k of [...u.searchParams.keys()])if(/^utm_|^(fbclid|gclid|mc_cid|mc_eid)$/i.test(k))u.searchParams.delete(k);
+    return u.href;
+  }catch{return String(value||'').trim();}
+}
 async function loadAll(feeds) {
-  const active = feeds.filter(f => f.enabled && f.url);
+  const list=Array.isArray(feeds)?feeds:[];
+  const active = list.filter(f => f&&f.enabled&&f.url);
   const settled = await Promise.allSettled(active.map(fetchFeedDetailed));
   const items = [], errors = [], feedStatus=[];
   settled.forEach((r, i) => {
@@ -218,9 +247,9 @@ async function loadAll(feeds) {
   });
   const seen = new Set();
   const dedup = items.filter(x => {
-    const key = x.link.trim();
+    const key = canonicalLink(x.link);
     if (!key || seen.has(key)) return false;
-    seen.add(key); return true;
+    seen.add(key);x.link=key;return true;
   });
   dedup.sort((a,b) => {
     const da=Date.parse(a.pubDate||'')||0, db=Date.parse(b.pubDate||'')||0;
@@ -229,4 +258,4 @@ async function loadAll(feeds) {
   return { items: dedup, errors, feedStatus };
 }
 
-module.exports = { parseFeed, parseHtmlLatest, fetchFeed, fetchFeedDetailed, testFeed, loadAll };
+module.exports = { parseFeed, parseHtmlLatest, fetchFeed, fetchFeedDetailed, testFeed, loadAll, canonicalLink, readBodyLimited, MAX_FEED_BYTES };
