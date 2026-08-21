@@ -1,5 +1,5 @@
 'use strict';
-let feedHealth={};
+let feedHealth={},editingFeedId='';
 
 function humanFeedStatus(r){
   if(!r)return{label:'Sin comprobar',cls:'',dot:''};
@@ -15,20 +15,22 @@ async function testFeedAt(i,silent=false){
 }
 async function checkAllFeeds(){for(let i=0;i<settings.rssFeeds.length;i++){if(settings.rssFeeds[i].enabled)await testFeedAt(i,true);}}
 function renderFeeds(){
-  const box=$('#feeds');if(!box||!settings)return;box.innerHTML='';
+  const box=$('#feeds');if(!box||!settings)return;
+  const openRow=box.querySelector('.feedrow.editing');if(openRow){const openFeed=settings.rssFeeds[Number(openRow.dataset.feedIndex)];if(openFeed)editingFeedId=openFeed.id;}
+  box.innerHTML='';
   settings.rssFeeds.forEach((f,i)=>{
-    const health=f.enabled?feedHealth[f.id]:{paused:true},hs=humanFeedStatus(health),d=document.createElement('div');d.className=`feedrow${f.enabled?'':' paused'}`;d.dataset.feedIndex=String(i);
+    const health=f.enabled?feedHealth[f.id]:{paused:true},hs=humanFeedStatus(health),d=document.createElement('div');d.className=`feedrow${f.enabled?'':' paused'}${editingFeedId===f.id?' editing':''}`;d.dataset.feedIndex=String(i);
     const checking=health?.checking?'Comprobando…':hs.label;
     d.innerHTML=`<div class="feed-head"><div class="feed-summary"><span class="feed-dot ${health?.checking?'':hs.dot}"></span><div><div class="feed-title">${escapeHtml(f.name||'Fuente')}</div><div class="feed-state">${escapeHtml(checking)}</div></div></div><div class="feed-actions"><button class="f-edit dark compact" data-i="${i}">Editar</button><button class="f-pause dark compact" data-i="${i}">${f.enabled?'Pausar':'Reactivar'}</button><button class="f-del danger compact" data-i="${i}">Eliminar</button></div></div><div class="feed-edit"><label>Nombre<input class="f-name" data-i="${i}" value="${escapeHtml(f.name)}"></label><label>URL<input class="f-url" data-i="${i}" value="${escapeHtml(f.url)}"></label><div class="buttons"><button class="f-test" data-i="${i}">Comprobar nuevamente</button></div><div class="feed-status ${hs.cls}" data-status-i="${i}">${escapeHtml(checking)}</div></div>`;
     box.appendChild(d);
   });
   if($('#feedCount'))$('#feedCount').textContent=`${settings.rssFeeds.length} fuente${settings.rssFeeds.length===1?'':'s'}`;
-  $$('.f-edit').forEach(x=>x.onclick=e=>e.target.closest('.feedrow').classList.toggle('editing'));
+  $$('.f-edit').forEach(x=>x.onclick=e=>{const row=e.target.closest('.feedrow'),i=+e.target.dataset.i,id=settings.rssFeeds[i]?.id||'',opening=!row.classList.contains('editing');editingFeedId=opening?id:'';row.classList.toggle('editing',opening);});
   $$('.f-pause').forEach(x=>x.onclick=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];f.enabled=!f.enabled;if(!f.enabled)feedHealth[f.id]={paused:true};else delete feedHealth[f.id];renderFeeds();if(f.enabled)testFeedAt(i,true);});
-  $$('.f-name').forEach(x=>x.onchange=e=>{const i=+e.target.dataset.i;settings.rssFeeds[i].name=e.target.value.trim()||'Fuente';delete feedHealth[settings.rssFeeds[i].id];renderFeeds();testFeedAt(i,true);});
-  $$('.f-url').forEach(x=>x.onchange=e=>{const i=+e.target.dataset.i;settings.rssFeeds[i].url=e.target.value.trim();delete feedHealth[settings.rssFeeds[i].id];renderFeeds();testFeedAt(i,true);});
+  $$('.f-name').forEach(x=>{x.oninput=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(!f)return;f.name=e.target.value;const row=e.target.closest('.feedrow');const title=row?.querySelector('.feed-title');if(title)title.textContent=e.target.value.trim()||'Fuente';};x.onchange=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(!f)return;f.name=e.target.value.trim()||'Fuente';e.target.value=f.name;};});
+  $$('.f-url').forEach(x=>{x.oninput=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(f)f.url=e.target.value;};x.onchange=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(!f)return;f.url=e.target.value.trim();e.target.value=f.url;delete feedHealth[f.id];if(f.url)testFeedAt(i,true);};});
   $$('.f-test').forEach(x=>x.onclick=e=>testFeedAt(+e.target.dataset.i,false));
-  $$('.f-del').forEach(x=>x.onclick=e=>{const i=+e.target.dataset.i;delete feedHealth[settings.rssFeeds[i]?.id];settings.rssFeeds.splice(i,1);renderFeeds();});
+  $$('.f-del').forEach(x=>x.onclick=e=>{const i=+e.target.dataset.i,id=settings.rssFeeds[i]?.id;if(editingFeedId===id)editingFeedId='';delete feedHealth[id];settings.rssFeeds.splice(i,1);renderFeeds();});
   const filter=$('#feedFilter');if(filter)filter.innerHTML='<option value="">Todas las fuentes</option>'+settings.rssFeeds.filter(f=>f.enabled).map(f=>`<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('');
 }
 
