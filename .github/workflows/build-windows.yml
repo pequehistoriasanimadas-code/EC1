@@ -3,7 +3,7 @@ name: Build Windows Portable
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, ec-0.3.11-audit-fix ]
 
 permissions:
   contents: read
@@ -33,7 +33,7 @@ jobs:
         shell: powershell
         run: ./scripts/prepare-windows-runtime.ps1
 
-      - name: Static checks
+      - name: Static and regression checks
         run: npm run check
 
       - name: Build portable EXE
@@ -41,7 +41,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows self-test
+      - name: Windows UI and bridge self-test
         shell: powershell
         run: |
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
