@@ -3,11 +3,19 @@ const path=require('path');
 const {safeStorage}=require('electron');
 
 const DEFAULT_CLAUDE_MODEL='claude-haiku-4-5-20251001';
+function sourceWebFromUrl(value){
+  try{return new URL(String(value||'').trim()).hostname.toLowerCase().replace(/^(?:www|m|amp)\./,'').trim();}catch{return'';}
+}
+function publisherNameFromWeb(web){
+  const base=String(web||'').split('.')[0].toLowerCase(),known={elcomercio:'El Comercio',gestion:'Gestión',rpp:'RPP',larepublica:'La República',peru21:'Perú 21',andina:'Andina'};
+  if(known[base])return known[base];return base.replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
 
 class SettingsStore{
   constructor(baseDir){this.baseDir=baseDir;this.file=path.join(baseDir,'settings.json');this.backupFile=path.join(baseDir,'settings.json.bak');fs.mkdirSync(baseDir,{recursive:true});}
   defaults(){return{
-    rssFeeds:[{id:'ec-ultimas',name:'Últimas Noticias',url:'https://elcomercio.pe/arc/outboundfeeds/rss/category/ultimas-noticias/?outputType=xml',enabled:true,priority:100,publisherName:'El Comercio',publisherWeb:'elcomercio.pe',partialCtaEnabled:true,partialCtaTemplate:'Para más información, visita {web}.'}],
+    rssFeeds:[{id:'ec-ultimas',name:'Últimas Noticias',url:'https://elcomercio.pe/arc/outboundfeeds/rss/category/ultimas-noticias/?outputType=xml',enabled:true,priority:100}],
+    rssPartialClose:{enabled:true,template:'Para más información, visita {web}.'},
     ai:{primary:'local',backup1:'claude',backup2:'gemini',claudeKeyEnc:'',claudeModel:DEFAULT_CLAUDE_MODEL,geminiKeyEnc:'',geminiModel:'',targetSeconds:60,localBackupMode:'on_demand',localIdleMinutes:5,localResourceMode:'safe_streaming',editorialPrompt:'',lastValidEditorialPrompt:'',editorialInstructions:''},
     tts:{voice:'ef_dora',speed:1.0,resourceMode:'safe_streaming',pronunciationSmart:true,pronunciationClaudeVerify:true,pronunciationMaxSeconds:15,persistent:true,persistentIdleMinutes:5,autoTune:true,autoTuned:false},
     visual:{fallbackImage:'',pauseSeconds:2.5,showSummary:true,theme:{yellow:'#F7C600',black:'#000000',white:'#FFFFFF'},queueColors:{rss:'#2E7D32',generated:'#2563EB',content:'#D97706',ad:'#7C3AED',error:'#B91C1C'},output:{format:'16:9',fontFamily:'Arial',dateFontFamily:'Arial',titleColor:'#FFFFFF',summaryColor:'#F3F3F3',dateColor:'#F3F3F3',categoryBgColor:'#F7C600',categoryTextColor:'#000000',lowerBgColor:'#000000',lowerOpacity:.88,animation:'auto',motionSpeed:'normal',tiktokSafe:true,showSafeGuides:true,verticalVideoBackground:'',musicFile:'',musicEnabled:false,musicLoop:true,musicVolume:20,voiceVolume:100,cannedVolume:100,transitionEnabled:true,transitionType:'fade',transitionDuration:.7}},
@@ -18,7 +26,8 @@ class SettingsStore{
   readRawFile(file){try{if(!fs.existsSync(file))return null;const parsed=JSON.parse(fs.readFileSync(file,'utf8'));return parsed&&typeof parsed==='object'?parsed:null;}catch{return null;}}
   load(){
     let data=this.defaults(),raw=this.readRawFile(this.file);if(!raw)raw=this.readRawFile(this.backupFile);if(raw)data=this.merge(data,raw);data.ai=data.ai||{};data.tts=data.tts||{};data.visual=data.visual||{};data.visual.output=data.visual.output||{};data.visual.queueColors=data.visual.queueColors||{};data.canned=data.canned||{};data.documents=data.documents||{};data.documents.processed=data.documents.processed&&typeof data.documents.processed==='object'?data.documents.processed:{};data.automation=data.automation||{};
-    data.rssFeeds=(Array.isArray(data.rssFeeds)?data.rssFeeds:[]).map((f,i)=>{const id=String(f?.id||`rss-${i}`),url=String(f?.url||'').trim(),isEc=id==='ec-ultimas'||/elcomercio\.pe/i.test(url),publisherName=f?.publisherName!==undefined?String(f.publisherName||''):(isEc?'El Comercio':''),publisherWeb=String(f?.publisherWeb!==undefined?f.publisherWeb:(isEc?'elcomercio.pe':'')).replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/$/,'').trim(),partialCtaEnabled=f?.partialCtaEnabled===undefined?isEc:f.partialCtaEnabled===true;return{...f,id,name:String(f?.name||'Fuente'),url,enabled:f?.enabled!==false,priority:Number(f?.priority)||50,publisherName,publisherWeb,partialCtaEnabled,partialCtaTemplate:String(f?.partialCtaTemplate||'Para más información, visita {web}.').trim()};});
+    data.rssPartialClose={enabled:data.rssPartialClose?.enabled!==false,template:String(data.rssPartialClose?.template||'Para más información, visita {web}.').trim()||'Para más información, visita {web}.'};
+    data.rssFeeds=(Array.isArray(data.rssFeeds)?data.rssFeeds:[]).map((f,i)=>{const id=String(f?.id||`rss-${i}`),url=String(f?.url||'').trim(),publisherWeb=sourceWebFromUrl(url),publisherName=String(f?.publisherName||publisherNameFromWeb(publisherWeb)||f?.name||'').trim();return{...f,id,name:String(f?.name||'Fuente'),url,enabled:f?.enabled!==false,priority:Number(f?.priority)||50,publisherName,publisherWeb,partialCtaEnabled:data.rssPartialClose.enabled,partialCtaTemplate:data.rssPartialClose.template};});
     if(!String(data.ai.claudeModel||'').trim())data.ai.claudeModel=DEFAULT_CLAUDE_MODEL;data.ai.editorialPrompt=String(data.ai.editorialPrompt||'');data.ai.lastValidEditorialPrompt=String(data.ai.lastValidEditorialPrompt||'');data.ai.editorialInstructions=String(data.ai.editorialInstructions||'');data.tts.pronunciationMaxSeconds=Math.max(5,Math.min(30,Number(data.tts.pronunciationMaxSeconds)||15));data.tts.persistentIdleMinutes=Math.max(1,Math.min(30,Number(data.tts.persistentIdleMinutes)||5));if(!data.visual.output.dateColor)data.visual.output.dateColor=data.visual.output.summaryColor||'#F3F3F3';data.documents.targetSeconds=Math.max(30,Math.min(180,Number(data.documents.targetSeconds)||60));data.automation.recoveryAutonomyMin=Math.max(2,Math.min(30,Number(data.automation.recoveryAutonomyMin)||8));data.automation.criticalAutonomyMin=Math.max(1,Math.min(data.automation.recoveryAutonomyMin,Number(data.automation.criticalAutonomyMin)||3));
     if(raw?.ai&&raw.ai.localResourceMode===undefined){data.ai.localResourceMode='safe_streaming';if(Number(raw.ai.localIdleMinutes)===10)data.ai.localIdleMinutes=5;}if(raw?.automation&&Number(raw.automation.bufferReady)===5&&Number(raw.automation.queueMax)===12){data.automation.bufferReady=15;data.automation.queueMax=30;}return data;
   }
@@ -27,4 +36,4 @@ class SettingsStore{
   encryptSecret(value){if(!value)return'';if(safeStorage.isEncryptionAvailable())return safeStorage.encryptString(value).toString('base64');return Buffer.from(value,'utf8').toString('base64');}
   decryptSecret(value){if(!value)return'';try{const buf=Buffer.from(value,'base64');if(safeStorage.isEncryptionAvailable())return safeStorage.decryptString(buf);return buf.toString('utf8');}catch{return'';}}
 }
-module.exports={SettingsStore,DEFAULT_CLAUDE_MODEL};
+module.exports={SettingsStore,DEFAULT_CLAUDE_MODEL,sourceWebFromUrl,publisherNameFromWeb};
