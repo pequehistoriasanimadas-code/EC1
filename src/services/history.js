@@ -1,10 +1,31 @@
-const fs=require('fs'); const path=require('path');
+const fs=require('fs');
+const path=require('path');
+
 class HistoryStore{
-  constructor(baseDir){this.file=path.join(baseDir,'history.json');}
-  load(){try{return JSON.parse(fs.readFileSync(this.file,'utf8'));}catch{return{emitted:[]};}}
-  save(x){fs.writeFileSync(this.file,JSON.stringify(x,null,2),'utf8');}
-  has(url){return this.load().emitted.some(x=>x.url===url);}
-  add(story){const h=this.load(); h.emitted.unshift({url:story.link,title:story.title,at:new Date().toISOString()}); h.emitted=h.emitted.slice(0,5000); this.save(h);}
-  reset(){this.save({emitted:[]});}
+  constructor(baseDir){
+    this.file=path.join(baseDir,'history.json');
+    this.data=this.read();
+    this.urls=new Set((this.data.emitted||[]).map(x=>x?.url).filter(Boolean));
+  }
+  read(){
+    try{
+      const x=JSON.parse(fs.readFileSync(this.file,'utf8'));
+      return{x:Array.isArray(x?.emitted)?x.emitted:[]}.x?{emitted:Array.isArray(x?.emitted)?x.emitted:[]}:{emitted:[]};
+    }catch{return{emitted:[]};}
+  }
+  load(){return{emitted:[...(this.data.emitted||[])]};}
+  save(){
+    const dir=path.dirname(this.file);fs.mkdirSync(dir,{recursive:true});
+    const tmp=`${this.file}.tmp`;fs.writeFileSync(tmp,JSON.stringify(this.data,null,2),'utf8');
+    try{fs.renameSync(tmp,this.file);}catch{fs.copyFileSync(tmp,this.file);try{fs.rmSync(tmp,{force:true});}catch{}}
+  }
+  has(url){return!!url&&this.urls.has(url);}
+  add(story){
+    const url=String(story?.link||'').trim();if(!url||this.urls.has(url))return;
+    this.data.emitted.unshift({url,title:String(story?.title||''),at:new Date().toISOString()});
+    if(this.data.emitted.length>5000){const removed=this.data.emitted.splice(5000);for(const x of removed)this.urls.delete(x.url);}
+    this.urls.add(url);this.save();
+  }
+  reset(){this.data={emitted:[]};this.urls.clear();this.save();}
 }
 module.exports={HistoryStore};
