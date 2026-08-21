@@ -4,157 +4,24 @@ const os=require('os');
 const {spawn}=require('child_process');
 const {pathToFileURL}=require('url');
 
-const TTS_PROFILES={
-  safe_streaming:{label:'Seguro para transmisión',intra:2,inter:1,priority:'below'},
-  balanced:{label:'Equilibrado',intra:3,inter:1,priority:'below'},
-  performance:{label:'Rápido',intra:6,inter:1,priority:'normal'}
-};
-
-class KokoroTTS {
-  constructor({resourcesDir,dataDir}){
-    this.resourcesDir=resourcesDir;this.dataDir=dataDir;
-    this.python=path.join(resourcesDir,'runtime','python','python.exe');
-    this.script=path.join(resourcesDir,'runtime','kokoro','tts.py');
-    this.model=path.join(resourcesDir,'runtime','kokoro','kokoro-v1.0.int8.onnx');
-    this.voices=path.join(resourcesDir,'runtime','kokoro','voices-v1.0.bin');
-    this.settingsFile=path.join(dataDir,'settings.json');
-    this.audioDir=path.join(dataDir,'audio');fs.mkdirSync(this.audioDir,{recursive:true});
-    this.generationTail=Promise.resolve();
-    this.worker=null;this.workerProfile='';this.workerReady=false;this.workerStarting=null;this.workerStartedAt=0;
-    this.workerPending=new Map();this.workerSeq=0;this.workerBuffer='';this.workerIdleTimer=null;this.workerLastUsedAt=0;
-    this.cleanupOldAudio();
-  }
-  ready(){return [this.python,this.script,this.model,this.voices].every(fs.existsSync);}
-  settings(){try{return JSON.parse(fs.readFileSync(this.settingsFile,'utf8'));}catch{return{};}}
-  persistentEnabled(){return this.settings()?.tts?.persistent!==false;}
-  idleMinutes(){return Math.max(1,Math.min(30,Number(this.settings()?.tts?.persistentIdleMinutes)||5));}
-  profileName(){const mode=String(this.settings()?.tts?.resourceMode||'safe_streaming');return TTS_PROFILES[mode]?mode:'safe_streaming';}
-  profile(){const name=this.profileName();return{name,...TTS_PROFILES[name]};}
-  envFor(profile){
-    const threads=String(Math.max(1,profile.intra||2));
-    return{...process.env,OMP_NUM_THREADS:threads,OMP_THREAD_LIMIT:threads,OMP_DYNAMIC:'FALSE',OMP_WAIT_POLICY:'PASSIVE',OPENBLAS_NUM_THREADS:threads,MKL_NUM_THREADS:threads,NUMEXPR_NUM_THREADS:threads};
-  }
-  setProcessPriority(p,profile){
-    try{const priority=profile.priority==='normal'?os.constants.priority.PRIORITY_NORMAL:os.constants.priority.PRIORITY_BELOW_NORMAL;os.setPriority(p.pid,priority);}catch{}
-  }
-  run(args,profile=this.profile(),timeoutMs=120000){
-    return new Promise((resolve,reject)=>{
-      if(!this.ready())return reject(new Error('El motor de voz no está disponible en esta instalación'));
-      const p=spawn(this.python,[this.script,...args],{windowsHide:true,env:this.envFor(profile)});let out='',err='',settled=false;
-      const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);fn(value);};
-      const timer=setTimeout(()=>{try{p.kill();}catch{}finish(reject,new Error(`La generación de voz excedió ${Math.round(timeoutMs/1000)} s`));},Math.max(5000,timeoutMs));
-      this.setProcessPriority(p,profile);
-      p.stdout.on('data',d=>out+=d);p.stderr.on('data',d=>err+=d);
-      p.on('error',e=>finish(reject,e));
-      p.on('exit',code=>code===0?finish(resolve,out.trim()):finish(reject,new Error(`El motor de voz se cerró inesperadamente (${code}): ${err.slice(-800)}`)));
-    });
-  }
-  async listVoices(){
-    const out=await this.run(['--list-voices','--voices',this.voices],{name:'safe_streaming',...TTS_PROFILES.safe_streaming},20000);
-    try{const voices=JSON.parse(out).voices||[];return voices.filter(Boolean);}catch{return[];}
-  }
-  handleWorkerLine(line){
-    const s=String(line||'').trim();if(!s.startsWith('ECJSON '))return;
-    let data;try{data=JSON.parse(s.slice(7));}catch{return;}
-    if(data.type==='ready'){
-      if(data.ok){this.workerReady=true;this.workerStartedAt=Date.now();this.workerStarting?.resolve?.(true);}
-      else this.workerStarting?.reject?.(new Error(data.error||'No se pudo iniciar el motor de voz'));
-      return;
-    }
-    const id=String(data.id||'');const pending=this.workerPending.get(id);if(!pending)return;
-    this.workerPending.delete(id);clearTimeout(pending.timer);
-    if(data.ok===false)pending.reject(new Error(data.error||'No se pudo generar la voz'));else pending.resolve(data);
-  }
-  attachWorker(p){
-    p.stdout.on('data',chunk=>{
-      this.workerBuffer+=chunk.toString();let idx;
-      while((idx=this.workerBuffer.indexOf('\n'))>=0){const line=this.workerBuffer.slice(0,idx);this.workerBuffer=this.workerBuffer.slice(idx+1);this.handleWorkerLine(line);}
-    });
-    let stderr='';p.stderr.on('data',d=>{stderr=(stderr+d.toString()).slice(-1600);});
-    const gone=(err)=>{
-      const message=err?.message||`El motor de voz se cerró${stderr?`: ${stderr}`:''}`;
-      if(this.workerStarting&&!this.workerReady)this.workerStarting.reject?.(new Error(message));
-      this.workerStarting=null;this.workerReady=false;this.worker=null;this.workerProfile='';
-      for(const pending of this.workerPending.values()){clearTimeout(pending.timer);pending.reject(new Error(message));}this.workerPending.clear();
-    };
-    p.on('error',gone);p.on('exit',()=>gone());
-  }
-  async ensureWorker(profile=this.profile()){
-    if(!this.persistentEnabled())return null;
-    if(this.worker&&this.workerReady&&this.workerProfile===profile.name)return this.worker;
-    if(this.workerStarting&&this.workerProfile===profile.name)return this.workerStarting.promise;
-    this.stop('profile-change');
-    if(!this.ready())throw new Error('El motor de voz no está disponible en esta instalación');
-    const p=spawn(this.python,[this.script,'--worker','--model',this.model,'--voices',this.voices,'--onnx-intra',String(profile.intra),'--onnx-inter',String(profile.inter)],{windowsHide:true,env:this.envFor(profile)});
-    this.worker=p;this.workerProfile=profile.name;this.workerReady=false;this.workerBuffer='';this.setProcessPriority(p,profile);this.attachWorker(p);
-    let resolveStart,rejectStart;
-    const promise=new Promise((resolve,reject)=>{resolveStart=resolve;rejectStart=reject;});
-    const timer=setTimeout(()=>rejectStart(new Error('El motor de voz tardó demasiado en iniciar')),90000);
-    this.workerStarting={promise,resolve:v=>{clearTimeout(timer);resolveStart(v);},reject:e=>{clearTimeout(timer);rejectStart(e);}};
-    try{await promise;return this.worker;}finally{this.workerStarting=null;}
-  }
-  workerCommand(command,timeoutMs=180000){
-    if(!this.worker||!this.workerReady)throw new Error('El motor de voz todavía no está listo');
-    const id=`k${++this.workerSeq}`;const payload={id,...command};
-    return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{this.workerPending.delete(id);reject(new Error(`La generación de voz excedió ${Math.round(timeoutMs/1000)} s`));this.stop('timeout');},timeoutMs);
-      this.workerPending.set(id,{resolve,reject,timer});
-      try{this.worker.stdin.write(JSON.stringify(payload)+'\n');}catch(e){clearTimeout(timer);this.workerPending.delete(id);reject(e);}
-    });
-  }
-  scheduleIdleStop(){
-    clearTimeout(this.workerIdleTimer);this.workerIdleTimer=null;if(!this.worker)return;
-    this.workerIdleTimer=setTimeout(()=>this.stop('idle'),this.idleMinutes()*60000);
-  }
-  stop(reason='manual'){
-    clearTimeout(this.workerIdleTimer);this.workerIdleTimer=null;
-    const p=this.worker;this.worker=null;this.workerReady=false;this.workerProfile='';
-    if(!p)return false;
-    try{p.stdin.write(JSON.stringify({id:`stop-${Date.now()}`,cmd:'stop'})+'\n');}catch{}
-    setTimeout(()=>{try{if(!p.killed)p.kill();}catch{}},700);return true;
-  }
-  cleanupAudio(file){
-    try{const resolved=path.resolve(String(file||''));const root=path.resolve(this.audioDir)+path.sep;if(resolved.startsWith(root)&&fs.existsSync(resolved))fs.rmSync(resolved,{force:true});}catch{}
-  }
-  cleanupOldAudio(maxAgeMs=24*60*60*1000){
-    try{const now=Date.now();for(const name of fs.readdirSync(this.audioDir)){if(!/^news-.*\.(wav|txt)$/i.test(name))continue;const full=path.join(this.audioDir,name);const st=fs.statSync(full);if(now-st.mtimeMs>maxAgeMs)fs.rmSync(full,{force:true});}}catch{}
-  }
-  generate(text,{voice='ef_dora',speed=1.0}={}){
-    const task=async()=>{
-      const profile=this.profile(),started=Date.now(),id=`news-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      const txt=path.join(this.audioDir,`${id}.txt`),wav=path.join(this.audioDir,`${id}.wav`);fs.writeFileSync(txt,text,'utf8');
-      try{
-        let meta={},persistent=false,workerStartupMs=0;
-        if(this.persistentEnabled()){
-          const before=Date.now();await this.ensureWorker(profile);workerStartupMs=Date.now()-before;persistent=true;
-          meta=await this.workerCommand({cmd:'generate',text_file:txt,output:wav,voice,speed:Number(speed)},180000);
-          this.workerLastUsedAt=Date.now();this.scheduleIdleStop();
-        }else{
-          const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices,'--onnx-intra',String(profile.intra),'--onnx-inter',String(profile.inter)],profile,180000);
-          try{meta=JSON.parse(out);}catch{}
-        }
-        if(!fs.existsSync(wav)||fs.statSync(wav).size<1000)throw new Error('El motor de voz no produjo un audio válido');
-        const elapsedMs=Date.now()-started,durationSec=Number(meta.duration_sec||0),intra=Number(meta.onnx_intra_threads||profile.intra),inter=Number(meta.onnx_inter_threads||profile.inter);
-        return{path:wav,url:pathToFileURL(wav).href,durationSec,voice:meta.voice||voice,elapsedMs,workerStartupMs,persistent,phonemeMs:Number(meta.phoneme_ms||0),inferenceMs:Number(meta.inference_ms||0),threads:intra,onnxIntraThreads:intra,onnxInterThreads:inter,executionMode:meta.execution_mode||'sequential',performanceProfile:profile.name,performanceLabel:profile.label,realtimeFactor:durationSec>0?Number(((elapsedMs/1000)/durationSec).toFixed(3)):0};
-      }catch(e){this.cleanupAudio(wav);throw e;}finally{try{fs.rmSync(txt,{force:true});}catch{}}
-    };
-    const queued=this.generationTail.then(task,task);this.generationTail=queued.catch(()=>{});return queued;
-  }
-  async benchmark({voice='ef_dora',speed=1}={}){
-    const phrase='Esta es una prueba breve para optimizar la velocidad de generación de voz de EC Automatic News.';const results=[];
-    this.stop('benchmark');
-    for(const name of ['safe_streaming','balanced','performance']){
-      const profile={name,...TTS_PROFILES[name]},id=`bench-${name}-${Date.now()}`,txt=path.join(this.audioDir,`${id}.txt`),wav=path.join(this.audioDir,`${id}.wav`);fs.writeFileSync(txt,phrase,'utf8');const started=Date.now();
-      try{
-        const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices,'--onnx-intra',String(profile.intra),'--onnx-inter',String(profile.inter)],profile,180000);
-        let meta={};try{meta=JSON.parse(out);}catch{}const elapsedMs=Date.now()-started,durationSec=Number(meta.duration_sec||0),rtf=durationSec?elapsedMs/1000/durationSec:99;
-        results.push({profile:name,label:profile.label,elapsedMs,durationSec,realtimeFactor:Number(rtf.toFixed(3)),threads:profile.intra});
-      }catch(e){results.push({profile:name,label:profile.label,error:e.message||String(e),realtimeFactor:999});}
-      finally{try{fs.rmSync(txt,{force:true});fs.rmSync(wav,{force:true});}catch{}}
-    }
-    const valid=results.filter(x=>!x.error).sort((a,b)=>a.realtimeFactor-b.realtimeFactor);const recommended=valid[0]?.profile||'safe_streaming';
-    return{ok:valid.length>0,recommended,results};
-  }
+const TTS_PROFILES={safe_streaming:{label:'Seguro para transmisión',intra:2,inter:1,priority:'below'},balanced:{label:'Equilibrado',intra:3,inter:1,priority:'below'},performance:{label:'Rápido',intra:6,inter:1,priority:'normal'}};
+class KokoroTTS{
+  constructor({resourcesDir,dataDir}){this.resourcesDir=resourcesDir;this.dataDir=dataDir;this.python=path.join(resourcesDir,'runtime','python','python.exe');this.script=path.join(resourcesDir,'runtime','kokoro','tts.py');this.model=path.join(resourcesDir,'runtime','kokoro','kokoro-v1.0.int8.onnx');this.voices=path.join(resourcesDir,'runtime','kokoro','voices-v1.0.bin');this.settingsFile=path.join(dataDir,'settings.json');this.audioDir=path.join(dataDir,'audio');fs.mkdirSync(this.audioDir,{recursive:true});this.generationTail=Promise.resolve();this.worker=null;this.workerProfile='';this.workerReady=false;this.workerStarting=null;this.workerStartedAt=0;this.workerPending=new Map();this.workerSeq=0;this.workerBuffer='';this.workerIdleTimer=null;this.workerLastUsedAt=0;this.cleanupOldAudio();}
+  ready(){return[this.python,this.script,this.model,this.voices].every(fs.existsSync);}settings(){try{return JSON.parse(fs.readFileSync(this.settingsFile,'utf8'));}catch{return{};}}persistentEnabled(){return this.settings()?.tts?.persistent!==false;}idleMinutes(){return Math.max(1,Math.min(30,Number(this.settings()?.tts?.persistentIdleMinutes)||5));}profileName(){const mode=String(this.settings()?.tts?.resourceMode||'safe_streaming');return TTS_PROFILES[mode]?mode:'safe_streaming';}profile(){const name=this.profileName();return{name,...TTS_PROFILES[name]};}
+  envFor(profile){const threads=String(Math.max(1,profile.intra||2));return{...process.env,OMP_NUM_THREADS:threads,OMP_THREAD_LIMIT:threads,OMP_DYNAMIC:'FALSE',OMP_WAIT_POLICY:'PASSIVE',OPENBLAS_NUM_THREADS:threads,MKL_NUM_THREADS:threads,NUMEXPR_NUM_THREADS:threads};}
+  setProcessPriority(p,profile){try{const priority=profile.priority==='normal'?os.constants.priority.PRIORITY_NORMAL:os.constants.priority.PRIORITY_BELOW_NORMAL;os.setPriority(p.pid,priority);}catch{}}
+  run(args,profile=this.profile(),timeoutMs=120000){return new Promise((resolve,reject)=>{if(!this.ready())return reject(new Error('El motor de voz no está disponible en esta instalación'));const p=spawn(this.python,[this.script,...args],{windowsHide:true,env:this.envFor(profile)});let out='',err='',settled=false;const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);fn(value);};const timer=setTimeout(()=>{try{p.kill();}catch{}finish(reject,new Error(`La generación de voz excedió ${Math.round(timeoutMs/1000)} s`));},Math.max(5000,timeoutMs));this.setProcessPriority(p,profile);p.stdout.on('data',d=>out+=d);p.stderr.on('data',d=>err+=d);p.on('error',e=>finish(reject,e));p.on('exit',code=>code===0?finish(resolve,out.trim()):finish(reject,new Error(`El motor de voz se cerró inesperadamente (${code}): ${err.slice(-800)}`)));});}
+  async listVoices(){const out=await this.run(['--list-voices','--voices',this.voices],{name:'safe_streaming',...TTS_PROFILES.safe_streaming},20000);try{return JSON.parse(out).voices||[];}catch{return[];}}
+  handleWorkerLine(line){const s=String(line||'').trim();if(!s.startsWith('ECJSON '))return;let data;try{data=JSON.parse(s.slice(7));}catch{return;}if(data.type==='ready'){if(data.ok){this.workerReady=true;this.workerStartedAt=Date.now();this.workerStarting?.resolve?.(true);}else this.workerStarting?.reject?.(new Error(data.error||'No se pudo iniciar el motor de voz'));return;}const id=String(data.id||''),pending=this.workerPending.get(id);if(!pending)return;this.workerPending.delete(id);clearTimeout(pending.timer);if(data.ok===false)pending.reject(new Error(data.error||'No se pudo generar la voz'));else pending.resolve(data);}
+  attachWorker(p){p.stdout.on('data',chunk=>{this.workerBuffer+=chunk.toString();let idx;while((idx=this.workerBuffer.indexOf('\n'))>=0){const line=this.workerBuffer.slice(0,idx);this.workerBuffer=this.workerBuffer.slice(idx+1);this.handleWorkerLine(line);}});let stderr='';p.stderr.on('data',d=>{stderr=(stderr+d.toString()).slice(-1600);});const gone=(err)=>{if(this.worker!==p)return;const message=err?.message||`El motor de voz se cerró${stderr?`: ${stderr}`:''}`;if(this.workerStarting&&!this.workerReady)this.workerStarting.reject?.(new Error(message));this.workerStarting=null;this.workerReady=false;this.worker=null;this.workerProfile='';for(const pending of this.workerPending.values()){clearTimeout(pending.timer);pending.reject(new Error(message));}this.workerPending.clear();};p.on('error',gone);p.on('exit',()=>gone());}
+  async ensureWorker(profile=this.profile()){if(!this.persistentEnabled())return null;if(this.worker&&this.workerReady&&this.workerProfile===profile.name)return this.worker;if(this.workerStarting&&this.workerProfile===profile.name)return this.workerStarting.promise;this.stop('profile-change');if(!this.ready())throw new Error('El motor de voz no está disponible en esta instalación');const p=spawn(this.python,[this.script,'--worker','--model',this.model,'--voices',this.voices,'--onnx-intra',String(profile.intra),'--onnx-inter',String(profile.inter)],{windowsHide:true,env:this.envFor(profile)});this.worker=p;this.workerProfile=profile.name;this.workerReady=false;this.workerBuffer='';this.setProcessPriority(p,profile);this.attachWorker(p);let resolveStart,rejectStart;const promise=new Promise((resolve,reject)=>{resolveStart=resolve;rejectStart=reject;}),timer=setTimeout(()=>rejectStart(new Error('El motor de voz tardó demasiado en iniciar')),90000);this.workerStarting={promise,resolve:v=>{clearTimeout(timer);resolveStart(v);},reject:e=>{clearTimeout(timer);rejectStart(e);}};try{await promise;return this.worker;}finally{this.workerStarting=null;}}
+  workerCommand(command,timeoutMs=180000){if(!this.worker||!this.workerReady)throw new Error('El motor de voz todavía no está listo');const id=`k${++this.workerSeq}`,payload={id,...command};return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.workerPending.delete(id);reject(new Error(`La generación de voz excedió ${Math.round(timeoutMs/1000)} s`));this.stop('timeout');},timeoutMs);this.workerPending.set(id,{resolve,reject,timer});try{this.worker.stdin.write(JSON.stringify(payload)+'\n');}catch(e){clearTimeout(timer);this.workerPending.delete(id);reject(e);}});}
+  scheduleIdleStop(){clearTimeout(this.workerIdleTimer);this.workerIdleTimer=null;if(!this.worker)return;this.workerIdleTimer=setTimeout(()=>this.stop('idle'),this.idleMinutes()*60000);}
+  stop(reason='manual'){clearTimeout(this.workerIdleTimer);this.workerIdleTimer=null;const p=this.worker;this.worker=null;this.workerReady=false;this.workerProfile='';if(!p)return false;try{p.stdin.write(JSON.stringify({id:`stop-${Date.now()}`,cmd:'stop'})+'\n');}catch{}setTimeout(()=>{try{if(!p.killed)p.kill();}catch{}},700);return true;}
+  cleanupAudio(file){try{const resolved=path.resolve(String(file||'')),root=path.resolve(this.audioDir)+path.sep;if(resolved.startsWith(root)&&fs.existsSync(resolved))fs.rmSync(resolved,{force:true});}catch{}}
+  cleanupOldAudio(maxAgeMs=24*60*60*1000){try{const now=Date.now();for(const name of fs.readdirSync(this.audioDir)){if(!/^news-.*\.(wav|txt)$/i.test(name))continue;const full=path.join(this.audioDir,name),st=fs.statSync(full);if(now-st.mtimeMs>maxAgeMs)fs.rmSync(full,{force:true});}}catch{}}
+  generate(text,{voice='ef_dora',speed=1.0}={}){const task=async()=>{const profile=this.profile(),started=Date.now(),id=`news-${Date.now()}-${Math.random().toString(16).slice(2)}`,txt=path.join(this.audioDir,`${id}.txt`),wav=path.join(this.audioDir,`${id}.wav`);fs.writeFileSync(txt,text,'utf8');try{let meta={},persistent=false,workerStartupMs=0;if(this.persistentEnabled()){const before=Date.now();await this.ensureWorker(profile);workerStartupMs=Date.now()-before;persistent=true;meta=await this.workerCommand({cmd:'generate',text_file:txt,output:wav,voice,speed:Number(speed)},180000);this.workerLastUsedAt=Date.now();this.scheduleIdleStop();}else{const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices,'--onnx-intra',String(profile.intra),'--onnx-inter',String(profile.inter)],profile,180000);try{meta=JSON.parse(out);}catch{}}if(!fs.existsSync(wav)||fs.statSync(wav).size<1000)throw new Error('El motor de voz no produjo un audio válido');const elapsedMs=Date.now()-started,durationSec=Number(meta.duration_sec||0),intra=Number(meta.onnx_intra_threads||profile.intra),inter=Number(meta.onnx_inter_threads||profile.inter);return{path:wav,url:pathToFileURL(wav).href,durationSec,voice:meta.voice||voice,elapsedMs,workerStartupMs,persistent,phonemeMs:Number(meta.phoneme_ms||0),inferenceMs:Number(meta.inference_ms||0),threads:intra,onnxIntraThreads:intra,onnxInterThreads:inter,executionMode:meta.execution_mode||'sequential',performanceProfile:profile.name,performanceLabel:profile.label,realtimeFactor:durationSec>0?Number(((elapsedMs/1000)/durationSec).toFixed(3)):0};}catch(e){this.cleanupAudio(wav);throw e;}finally{try{fs.rmSync(txt,{force:true});}catch{}}};const queued=this.generationTail.then(task,task);this.generationTail=queued.catch(()=>{});return queued;}
+  async benchmark({voice='ef_dora',speed=1}={}){const phrase='Esta es una prueba breve para optimizar la velocidad de generación de voz de EC Automatic News.',results=[];this.stop('benchmark');for(const name of ['safe_streaming','balanced','performance']){const profile={name,...TTS_PROFILES[name]},id=`bench-${name}-${Date.now()}`,txt=path.join(this.audioDir,`${id}.txt`),wav=path.join(this.audioDir,`${id}.wav`);fs.writeFileSync(txt,phrase,'utf8');const started=Date.now();try{const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices,'--onnx-intra',String(profile.intra),'--onnx-inter',String(profile.inter)],profile,180000);let meta={};try{meta=JSON.parse(out);}catch{}const elapsedMs=Date.now()-started,durationSec=Number(meta.duration_sec||0),rtf=durationSec?elapsedMs/1000/durationSec:99;results.push({profile:name,label:profile.label,elapsedMs,durationSec,realtimeFactor:Number(rtf.toFixed(3)),threads:profile.intra});}catch(e){results.push({profile:name,label:profile.label,error:e.message||String(e),realtimeFactor:999});}finally{try{fs.rmSync(txt,{force:true});fs.rmSync(wav,{force:true});}catch{}}}const valid=results.filter(x=>!x.error).sort((a,b)=>a.realtimeFactor-b.realtimeFactor),recommended=valid[0]?.profile||'safe_streaming';return{ok:valid.length>0,recommended,results};}
   status(){return{ready:this.ready(),persistent:this.persistentEnabled(),workerRunning:!!this.worker&&this.workerReady,workerProfile:this.workerProfile||'',idleMinutes:this.idleMinutes(),workerIdleForSec:this.workerLastUsedAt?Math.max(0,Math.round((Date.now()-this.workerLastUsedAt)/1000)):0};}
 }
 module.exports={KokoroTTS,TTS_PROFILES};
