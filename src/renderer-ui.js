@@ -100,7 +100,7 @@ async function saveSettings(options={}){
   const voice=$('#voice').value;if(voice)settings.tts.voice=voice;settings.tts.speed=Number($('#voiceSpeed').value||1);settings.tts.resourceMode=$('#ttsPerformanceProfile').value||'safe_streaming';
   settings.tts.pronunciationSmart=true;settings.tts.pronunciationClaudeVerify=$('#pronunciationClaudeVerify').checked;settings.tts.pronunciationMaxSeconds=Math.max(5,Math.min(30,Number($('#pronunciationMaxSeconds').value)||15));
   settings.canned.enabled=$('#cannedEnabled').checked;settings.canned.emergency=$('#cannedEmergency').checked;settings.canned.interval=readCannedInterval();settings.canned.insertAdAfterContent=$('#adsAfterCanned').checked;
-  settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15);settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);
+  settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15));settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);
   settings.automation.maxAgeHours=Math.max(1,Math.min(48,Number($('#maxAge').value)||6));settings.automation.avoidRepeats=$('#avoidRepeats').checked;settings.visual.pauseSeconds=Math.max(0,Math.min(10,Number($('#pauseSeconds').value)||2.5));
   const r=await window.ECAPI.saveSettings(settings);settings.ai.hasClaudeKey=!!r.hasClaudeKey;settings.ai.hasGeminiKey=!!r.hasGeminiKey;settings.ai.claudeModel=r.claudeModel||'claude-haiku-4-5-20251001';settings.ai.claudeKey='';settings.ai.geminiKey='';$('#claudeKey').value='';$('#geminiKey').value='';
   refreshProviderUi();$('#ttsPerformanceHint').textContent=ttsProfileHint(settings.tts.resourceMode);
