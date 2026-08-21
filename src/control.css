@@ -13,3 +13,11 @@ label{display:block;color:var(--muted);margin:11px 0 5px}input,textarea,select{w
 @media(max-width:1180px){.auto-cols,.cols,.generator-cols,.review-cols{grid-template-columns:1fr}.layout{grid-template-columns:190px 1fr}.color-grid,.color-grid.six{grid-template-columns:repeat(3,1fr)}.ads-card{grid-column:auto}}
 @media(max-width:850px){.layout{grid-template-columns:160px 1fr}main{padding:14px}.form-grid.three,.form-grid.two{grid-template-columns:1fr}.color-grid,.color-grid.six{grid-template-columns:1fr 1fr}.queue-summary,.session-counters{grid-template-columns:1fr 1fr}.newsItem{grid-template-columns:100px 1fr}.thumb{width:100px;height:70px}.newsItem .edit{grid-column:2}.settings-save{align-items:stretch;flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.preview-canvas>img{animation:none!important}}
+
+/* Generador de Notas: la carpeta completa es la unidad de trabajo. */
+.document-check,#generateSelectedDocs{display:none!important}
+#generateAllDocs,#resetDocumentProcessed{font-size:0}
+#generateAllDocs::after{content:"Procesar notas pendientes ahora";font-size:14px}
+#resetDocumentProcessed::after{content:"Volver a procesar notas ya utilizadas";font-size:12px}
+.switch-row:has(#documentWatch) small{font-size:0}
+.switch-row:has(#documentWatch) small::after{content:"Cuando aparezca un documento nuevo en esta carpeta, EC lo añadirá automáticamente a la cola de preparación.";font-size:11px}
