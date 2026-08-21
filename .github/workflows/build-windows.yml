@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, ec-0.3.11-audit-fix ]
+  pull_request:
+    branches: [ main ]
 
 permissions:
   contents: read
