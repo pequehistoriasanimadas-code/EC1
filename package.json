@@ -1,32 +1,47 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.10",
-  "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
-  "author": "EC Automatic News",
-  "main": "src/main-v0310.js",
+  "version": "0.3.11",
+  "description": "EC Automatic News - automatización de noticias para emisión continua",
+  "main": "src/main.js",
+  "author": "Carls Mayo",
+  "license": "UNLICENSED",
   "private": true,
   "scripts": {
     "start": "electron .",
     "check": "node scripts/check.js",
-    "dist:portable": "electron-builder --win portable --x64 --publish never"
+    "dist:portable": "electron-builder --win portable dir"
   },
   "dependencies": {
-    "cheerio": "^1.1.2",
-    "fast-xml-parser": "^5.2.5"
+    "@mozilla/readability": "^0.6.0",
+    "electron": "^37.2.6",
+    "jsdom": "^26.1.0"
   },
   "devDependencies": {
-    "electron": "^37.2.6",
-    "electron-builder": "26.15.7"
+    "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "pe.ec.automaticnews",
+    "appId": "com.carls.ecautomaticnews",
     "productName": "EC Automatic News",
-    "artifactName": "EC-Automatic-News-Portable-${version}.${ext}",
-    "directories": { "output": "dist" },
-    "files": ["src/**/*", "package.json"],
-    "extraResources": [{"from":"runtime","to":"runtime","filter":["**/*"]}],
-    "extraFiles": [{"from":"DIAGNOSTICO.cmd","to":"DIAGNOSTICO.cmd"}],
-    "win": { "target": ["portable"] },
-    "portable": { "requestExecutionLevel": "user" }
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "dir"
+      ],
+      "artifactName": "EC-Automatic-News-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "EC-Automatic-News-${version}-Portable.${ext}"
+    }
   }
 }
