@@ -1,4 +1,4 @@
-import argparse, json, re, sys
+import argparse, json, re, sys, time
 import numpy as np
 import soundfile as sf
 
@@ -12,16 +12,14 @@ p.add_argument('--voices')
 p.add_argument('--onnx-intra',type=int,default=2)
 p.add_argument('--onnx-inter',type=int,default=1)
 p.add_argument('--list-voices',action='store_true')
+p.add_argument('--worker',action='store_true')
 a=p.parse_args()
 
 if a.list_voices:
     data=np.load(a.voices)
-    print(json.dumps({'voices':sorted(list(data.keys()))},ensure_ascii=False))
+    print(json.dumps({'voices':sorted(list(data.keys()))},ensure_ascii=False),flush=True)
     sys.exit(0)
 
-# Kokoro usa ONNX Runtime internamente. Las variables OMP/BLAS no bastan para
-# limitar el pool propio de ONNX, por eso interceptamos la creación de la sesión
-# antes de importar kokoro_onnx y aplicamos SessionOptions explícitas.
 import onnxruntime as ort
 _original_inference_session=ort.InferenceSession
 
@@ -54,39 +52,76 @@ def _currency_phrase(amount, scale, currency):
     return f'{amount} {scale}{" de" if needs_de else ""} {currency}'
 
 def normalize_currency(text):
-    # Formas editoriales originales: S/900 millones, US$25 millones, USD 3 mil, $40.
     def soles(m): return _currency_phrase(m.group(1),m.group(2),'soles')
     def dollars(m): return _currency_phrase(m.group(1),m.group(2),'dólares')
     scale=r'(millones?|billones?|miles?|mil)?'
     text=re.sub(r'S/\s*(\d+(?:[.,]\d+)?)\s*'+scale,soles,text,flags=re.I)
     text=re.sub(r'(?:US\$|USD|\$)\s*(\d+(?:[.,]\d+)?)\s*'+scale,dollars,text,flags=re.I)
-    # Corrige la forma que podía producir el normalizador anterior: "900 soles millones".
     text=re.sub(r'(\d+(?:[.,]\d+)?)\s+soles\s+(millones?|billones?)',lambda m:f'{m.group(1)} {m.group(2)} de soles',text,flags=re.I)
     text=re.sub(r'(\d+(?:[.,]\d+)?)\s+dólares\s+(millones?|billones?)',lambda m:f'{m.group(1)} {m.group(2)} de dólares',text,flags=re.I)
     text=re.sub(r'(\d+(?:[.,]\d+)?)\s+soles\s+(mil|miles)',lambda m:f'{m.group(1)} {m.group(2)} soles',text,flags=re.I)
     text=re.sub(r'(\d+(?:[.,]\d+)?)\s+dólares\s+(mil|miles)',lambda m:f'{m.group(1)} {m.group(2)} dólares',text,flags=re.I)
     return text
 
-with open(a.text_file,'r',encoding='utf-8') as f:
-    text=f.read().strip()
-if not text:
-    raise SystemExit('Texto vacío')
-text=normalize_currency(text)
+def load_engine():
+    styles=np.load(a.voices)
+    voices=list(styles.files)
+    g2p=EspeakG2P(language='es')
+    kokoro=Kokoro(a.model,a.voices)
+    return styles,voices,g2p,kokoro
 
-styles=np.load(a.voices)
-voice=a.voice if a.voice in styles.files else next((v for v in styles.files if v.startswith('e')), styles.files[0])
-g2p=EspeakG2P(language='es')
-phonemes,_=g2p(text)
-kokoro=Kokoro(a.model,a.voices)
-samples,sr=kokoro.create(phonemes,voice=voice,speed=a.speed,is_phonemes=True)
-sf.write(a.output,samples,sr)
-duration=float(len(samples))/float(sr)
-print(json.dumps({
-    'ok':True,
-    'voice':voice,
-    'sample_rate':sr,
-    'duration_sec':duration,
-    'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),
-    'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),
-    'execution_mode':'sequential'
-},ensure_ascii=False))
+def synthesize(text_file,output,voice,speed,engine):
+    styles,voices,g2p,kokoro=engine
+    with open(text_file,'r',encoding='utf-8') as f:
+        text=f.read().strip()
+    if not text:
+        raise ValueError('Texto vacío')
+    text=normalize_currency(text)
+    selected=voice if voice in styles.files else next((v for v in voices if v.startswith('e')),voices[0])
+    started=time.perf_counter()
+    phonemes,_=g2p(text)
+    phoneme_ms=(time.perf_counter()-started)*1000.0
+    infer_started=time.perf_counter()
+    samples,sr=kokoro.create(phonemes,voice=selected,speed=float(speed),is_phonemes=True)
+    inference_ms=(time.perf_counter()-infer_started)*1000.0
+    sf.write(output,samples,sr)
+    duration=float(len(samples))/float(sr)
+    return {
+        'ok':True,'voice':selected,'sample_rate':sr,'duration_sec':duration,
+        'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),
+        'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),
+        'execution_mode':'sequential','phoneme_ms':round(phoneme_ms,2),'inference_ms':round(inference_ms,2)
+    }
+
+def emit_worker(payload):
+    print('ECJSON '+json.dumps(payload,ensure_ascii=False),flush=True)
+
+if a.worker:
+    try:
+        engine=load_engine()
+        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1))})
+    except Exception as e:
+        emit_worker({'type':'ready','ok':False,'error':str(e)})
+        sys.exit(2)
+    for raw in sys.stdin:
+        raw=raw.strip()
+        if not raw:
+            continue
+        req_id=''
+        try:
+            req=json.loads(raw);req_id=str(req.get('id',''));cmd=req.get('cmd','')
+            if cmd=='stop':
+                emit_worker({'id':req_id,'ok':True,'stopped':True});break
+            if cmd=='ping':
+                emit_worker({'id':req_id,'ok':True,'pong':True});continue
+            if cmd!='generate':
+                raise ValueError('Comando no reconocido')
+            result=synthesize(req.get('text_file',''),req.get('output',''),req.get('voice','ef_dora'),req.get('speed',1.0),engine)
+            result['id']=req_id;emit_worker(result)
+        except Exception as e:
+            emit_worker({'id':req_id,'ok':False,'error':str(e)})
+    sys.exit(0)
+
+engine=load_engine()
+result=synthesize(a.text_file,a.output,a.voice,a.speed,engine)
+print(json.dumps(result,ensure_ascii=False),flush=True)
