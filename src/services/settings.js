@@ -8,6 +8,7 @@ class SettingsStore {
   constructor(baseDir) {
     this.baseDir = baseDir;
     this.file = path.join(baseDir, 'settings.json');
+    this.backupFile = path.join(baseDir, 'settings.json.bak');
     fs.mkdirSync(baseDir, { recursive: true });
   }
 
@@ -37,7 +38,9 @@ class SettingsStore {
         voice: 'ef_dora',
         speed: 1.0,
         resourceMode: 'safe_streaming',
-        pronunciationSmart: true
+        pronunciationSmart: true,
+        pronunciationClaudeVerify: true,
+        pronunciationMaxSeconds: 15
       },
       visual: {
         fallbackImage: '',
@@ -90,17 +93,26 @@ class SettingsStore {
     };
   }
 
+  readRawFile(file) {
+    try {
+      if (!fs.existsSync(file)) return null;
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch { return null; }
+  }
+
   load() {
     let data = this.defaults();
-    let raw = null;
-    try {
-      if (fs.existsSync(this.file)) {
-        raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-        data = this.merge(data, raw);
-      }
-    } catch {}
+    let raw = this.readRawFile(this.file);
+    if (!raw) raw = this.readRawFile(this.backupFile);
+    if (raw) data = this.merge(data, raw);
 
-    if (!String(data.ai?.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+    data.ai = data.ai || {};
+    data.tts = data.tts || {};
+    data.canned = data.canned || {};
+    data.automation = data.automation || {};
+    if (!String(data.ai.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+    data.tts.pronunciationMaxSeconds = Math.max(5, Math.min(30, Number(data.tts.pronunciationMaxSeconds) || 15));
 
     if (raw?.ai && raw.ai.localResourceMode === undefined) {
       data.ai.localResourceMode = 'safe_streaming';
@@ -126,7 +138,18 @@ class SettingsStore {
   }
 
   save(settings) {
-    fs.writeFileSync(this.file, JSON.stringify(settings, null, 2), 'utf8');
+    fs.mkdirSync(this.baseDir, { recursive: true });
+    const tmp = `${this.file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
+    if (fs.existsSync(this.file)) {
+      try { fs.copyFileSync(this.file, this.backupFile); } catch {}
+    }
+    try {
+      fs.renameSync(tmp, this.file);
+    } catch {
+      fs.copyFileSync(tmp, this.file);
+      try { fs.rmSync(tmp, { force: true }); } catch {}
+    }
   }
 
   encryptSecret(value) {

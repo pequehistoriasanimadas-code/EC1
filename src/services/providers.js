@@ -93,7 +93,7 @@ async function claudeRequest(apiKey,body,timeout=90000){
     method:'POST',
     headers:{'content-type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
     body:JSON.stringify(body),
-    signal:AbortSignal.timeout(timeout)
+    signal:AbortSignal.timeout(Math.max(1000,timeout))
   });
   if (!r.ok) {
     const retry = Number(r.headers.get('retry-after') || 0);
@@ -117,19 +117,45 @@ async function listClaudeModels(apiKey) {
 
 async function claudeGenerate(apiKey, model, prompt) {
   if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
-  const m=String(model||'').trim()||DEFAULT_CLAUDE_MODEL;
+  const m=DEFAULT_CLAUDE_MODEL;
   const {json:j,elapsedMs}=await claudeRequest(apiKey,claudeBody(m,800,[{role:'user',content:prompt}]));
   const out = (j.content || []).filter(x=>x.type==='text').map(x=>x.text).join('\n');
   const usage=j.usage||{};
   return {model:m,result:extractJson(out),metrics:{elapsedMs,inputTokens:Number(usage.input_tokens||0),outputTokens:Number(usage.output_tokens||0)}};
 }
 
-async function claudeProbe(apiKey,model){
+async function claudeProbe(apiKey,model=DEFAULT_CLAUDE_MODEL){
   if (!apiKey) throw new ProviderError('claude','Falta Claude API Key','NO_KEY');
   const {json:j,elapsedMs}=await claudeRequest(apiKey,claudeBody(model,32,[{role:'user',content:'Responde únicamente con la palabra OK.'}]),30000);
   const out=(j.content||[]).filter(x=>x.type==='text').map(x=>x.text).join(' ').trim();
   if(!/^OK\b/i.test(out)) throw new ProviderError('claude',`La API respondió, pero la prueba de generación devolvió: ${out.slice(0,120)||'vacío'}`,'PROBE_FAILED');
   return {elapsedMs};
+}
+
+function pronunciationClaudePrompt(items,proposals={}){
+  const rows=(items||[]).slice(0,18).map(x=>({
+    term:String(x.term||''),
+    context:String(x.context||'').slice(0,320),
+    local_proposal:proposals?.[x.term]?.to||proposals?.[x.term]?.pronunciation||''
+  }));
+  return `Actúa como verificador de pronunciación para un TTS de noticias en español latinoamericano. Revisa cada término usando su contexto. No traduzcas nombres propios ni cambies palabras españolas que Kokoro pueda leer normalmente. Solo adapta términos extranjeros, siglas o marcas cuando ayude claramente al TTS. Usa ortografía española simple y legible; no uses IPA, explicaciones, paréntesis, barras, emojis ni instrucciones. Si no hace falta cambiar un término, marca needs_replacement=false y deja pronunciation vacío. Devuelve SOLO JSON válido con este esquema exacto: {"items":[{"term":"texto exacto","needs_replacement":true,"pronunciation":"aproximación simple","confidence":0.95}]}. Confidence debe estar entre 0 y 1.\n\nENTRADAS:\n${JSON.stringify(rows)}`;
+}
+function parsePronunciationClaude(raw,allowedTerms){
+  let text=String(raw||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  const a=text.indexOf('{'),b=text.lastIndexOf('}');if(a>=0&&b>a)text=text.slice(a,b+1);
+  let data;try{data=JSON.parse(text);}catch(e){throw new ProviderError('claude',`Pronunciación Claude: JSON inválido (${e.message})`,'BAD_JSON');}
+  const allowed=new Set((allowedTerms||[]).map(String));
+  const out=[];
+  for(const x of Array.isArray(data?.items)?data.items:[]){
+    const term=String(x?.term||'').trim();if(!allowed.has(term))continue;
+    out.push({
+      term,
+      needsReplacement:x?.needs_replacement===true,
+      pronunciation:String(x?.pronunciation||'').trim(),
+      confidence:Math.max(0,Math.min(1,Number(x?.confidence)||0))
+    });
+  }
+  return out;
 }
 
 async function listGeminiModels(apiKey) {
@@ -181,11 +207,9 @@ class Providers {
     if (provider==='claude') {
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
       const models=await this.getClaudeModels(key,true);
-      let model=String(settings.ai.claudeModel||'').trim()||DEFAULT_CLAUDE_MODEL;
-      if(!models.includes(model)) model=models.find(x=>/haiku-4-5/i.test(x))||models.find(x=>/haiku/i.test(x))||models.find(x=>/sonnet/i.test(x))||models[0]||'';
-      if(!model) throw new ProviderError('claude','No se encontró un modelo Claude disponible','NO_MODEL');
-      const probe=await claudeProbe(key,model);
-      return {ok:true,keyStored:!!settings.ai.claudeKeyEnc,models,model,generationOk:true,elapsedMs:probe.elapsedMs};
+      if(!models.includes(DEFAULT_CLAUDE_MODEL))throw new ProviderError('claude',`La API Key funciona, pero ${DEFAULT_CLAUDE_MODEL} no aparece disponible en esta cuenta.`,'NO_MODEL');
+      const probe=await claudeProbe(key,DEFAULT_CLAUDE_MODEL);
+      return {ok:true,keyStored:!!settings.ai.claudeKeyEnc,models,model:DEFAULT_CLAUDE_MODEL,generationOk:true,elapsedMs:probe.elapsedMs};
     }
     if (provider==='gemini') {
       const key=this.settingsStore.decryptSecret(settings.ai.geminiKeyEnc);
@@ -193,6 +217,18 @@ class Providers {
       return {ok:true,keyStored:!!settings.ai.geminiKeyEnc,models,model:settings.ai.geminiModel||models.find(x=>/flash/i.test(x) && !/image|tts|live/i.test(x))||models[0]||''};
     }
     return {ok:false};
+  }
+
+  async verifyPronunciations(items,proposals,settings,timeoutMs=6000){
+    if(settings?.tts?.pronunciationClaudeVerify===false)return{used:false,reason:'disabled',items:[]};
+    const key=this.settingsStore.decryptSecret(settings?.ai?.claudeKeyEnc||'');
+    if(!key)return{used:false,reason:'no-key',items:[]};
+    const terms=(items||[]).map(x=>String(x.term||'')).filter(Boolean);
+    if(!terms.length)return{used:false,reason:'empty',items:[]};
+    const prompt=pronunciationClaudePrompt(items,proposals);
+    const {json,elapsedMs}=await claudeRequest(key,claudeBody(DEFAULT_CLAUDE_MODEL,700,[{role:'user',content:prompt}]),Math.max(1500,timeoutMs));
+    const raw=(json.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('\n');
+    return{used:true,model:DEFAULT_CLAUDE_MODEL,elapsedMs,items:parsePronunciationClaude(raw,terms)};
   }
 
   localIsBackup(settings){
@@ -215,7 +251,7 @@ class Providers {
     }
     if(provider==='claude'){
       const key=this.settingsStore.decryptSecret(settings.ai.claudeKeyEnc);
-      return claudeGenerate(key,settings.ai.claudeModel||DEFAULT_CLAUDE_MODEL,prompt);
+      return claudeGenerate(key,DEFAULT_CLAUDE_MODEL,prompt);
     }
     if(provider==='gemini'){
       const key=this.settingsStore.decryptSecret(settings.ai.geminiKeyEnc);
@@ -261,4 +297,4 @@ class Providers {
   }
 }
 
-module.exports = { Providers, ProviderError, listClaudeModels, listGeminiModels, extractJson, compactBody, DEFAULT_CLAUDE_MODEL };
+module.exports = { Providers, ProviderError, listClaudeModels, listGeminiModels, extractJson, compactBody, DEFAULT_CLAUDE_MODEL, parsePronunciationClaude };

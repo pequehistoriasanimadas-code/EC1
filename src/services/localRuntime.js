@@ -5,6 +5,7 @@ const {Readable}=require('stream');
 
 const MODEL_URL='https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf?download=true';
 const MODEL_NAME='Qwen3-8B-Q4_K_M.gguf';
+const MIN_MODEL_BYTES=4_000_000_000;
 
 const RESOURCE_PROFILES={
   safe_streaming:{label:'Seguro para streaming',ctx:4096,gpuLayers:20,batch:256,ubatch:128,threads:6,parallel:1,prio:-1,poll:0,warmup:false},
@@ -28,12 +29,12 @@ class LocalRuntime{
     this.runtimeDir=path.join(resourcesDir,'runtime','llama');
     this.modelDir=path.join(dataDir,'models');
     this.modelPath=path.join(this.modelDir,MODEL_NAME);
-    this.server=null;this.port=8766;this.startingPromise=null;this.idleTimer=null;this.idleDeadline=0;
+    this.server=null;this.port=8766;this.startingPromise=null;this.downloadPromise=null;this.idleTimer=null;this.idleDeadline=0;
     this.resourceMode='safe_streaming';
     fs.mkdirSync(this.modelDir,{recursive:true});
   }
   serverExe(){return findRecursive(this.runtimeDir,'llama-server.exe');}
-  modelReady(){return fs.existsSync(this.modelPath)&&fs.statSync(this.modelPath).size>4_000_000_000;}
+  modelReady(){try{return fs.existsSync(this.modelPath)&&fs.statSync(this.modelPath).size>MIN_MODEL_BYTES;}catch{return false;}}
   profile(){return RESOURCE_PROFILES[this.resourceMode]||RESOURCE_PROFILES.safe_streaming;}
   configure(mode='safe_streaming'){
     const next=RESOURCE_PROFILES[mode]?mode:'safe_streaming';
@@ -46,7 +47,7 @@ class LocalRuntime{
   async status(){
     const p=this.profile();
     return{
-      ok:!!this.serverExe(),runtime:!!this.serverExe(),model:this.modelReady(),running:!!this.server,
+      ok:!!this.serverExe(),runtime:!!this.serverExe(),model:this.modelReady(),running:!!this.server,downloading:!!this.downloadPromise,
       resourceMode:this.resourceMode,profile:{label:p.label,ctx:p.ctx,gpuLayers:p.gpuLayers,threads:p.threads,batch:p.batch,ubatch:p.ubatch,parallel:p.parallel},
       idleStopScheduled:!!this.idleTimer,idleStopInSec:this.idleDeadline?Math.max(0,Math.ceil((this.idleDeadline-Date.now())/1000)):0
     };
@@ -69,17 +70,29 @@ class LocalRuntime{
 
   async downloadModel(){
     if(this.modelReady())return{ok:true,path:this.modelPath,already:true};
-    fs.mkdirSync(this.modelDir,{recursive:true});
-    const tmp=this.modelPath+'.part';
-    const res=await fetch(MODEL_URL,{redirect:'follow'});
-    if(!res.ok)throw new Error(`Descarga Qwen HTTP ${res.status}`);
-    const total=Number(res.headers.get('content-length')||0);let done=0;
-    const out=fs.createWriteStream(tmp);
-    const stream=Readable.fromWeb(res.body);
-    stream.on('data',chunk=>{done+=chunk.length;this.onEvent({type:'model-download',done,total,percent:total?Math.round(done*100/total):0});});
-    await new Promise((resolve,reject)=>{stream.pipe(out);out.on('finish',resolve);out.on('error',reject);stream.on('error',reject);});
-    fs.renameSync(tmp,this.modelPath);
-    return{ok:true,path:this.modelPath};
+    if(this.downloadPromise)return this.downloadPromise;
+    this.downloadPromise=(async()=>{
+      fs.mkdirSync(this.modelDir,{recursive:true});
+      const tmp=this.modelPath+'.part';
+      try{if(fs.existsSync(tmp))fs.rmSync(tmp,{force:true});}catch{}
+      try{
+        const res=await fetch(MODEL_URL,{redirect:'follow',headers:{'user-agent':'EC-Automatic-News/0.3.11'},signal:AbortSignal.timeout(2*60*60*1000)});
+        if(!res.ok)throw new Error(`Descarga Qwen HTTP ${res.status}`);
+        if(!res.body)throw new Error('El servidor no devolvió datos del modelo Qwen');
+        const total=Number(res.headers.get('content-length')||0);let done=0;
+        const out=fs.createWriteStream(tmp,{flags:'w'});
+        const stream=Readable.fromWeb(res.body);
+        stream.on('data',chunk=>{done+=chunk.length;this.onEvent({type:'model-download',done,total,percent:total?Math.round(done*100/total):0});});
+        await new Promise((resolve,reject)=>{stream.pipe(out);out.on('finish',resolve);out.on('error',reject);stream.on('error',reject);});
+        const size=fs.existsSync(tmp)?fs.statSync(tmp).size:0;
+        if(size<MIN_MODEL_BYTES)throw new Error(`Descarga Qwen incompleta (${Math.round(size/1048576)} MB)`);
+        if(fs.existsSync(this.modelPath))fs.rmSync(this.modelPath,{force:true});
+        fs.renameSync(tmp,this.modelPath);
+        this.onEvent({type:'model-downloaded',path:this.modelPath,size});
+        return{ok:true,path:this.modelPath,size};
+      }catch(e){try{if(fs.existsSync(tmp))fs.rmSync(tmp,{force:true});}catch{}this.onEvent({type:'model-download-error',message:e.message||String(e)});throw e;}
+    })();
+    try{return await this.downloadPromise;}finally{this.downloadPromise=null;}
   }
 
   async start(){
@@ -104,6 +117,7 @@ class LocalRuntime{
     if(!p.warmup)args.push('--no-warmup');
     this.onEvent({type:'local-ai-starting',mode:this.resourceMode,profile:p});
     this.server=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:true,stdio:['ignore','ignore','ignore']});
+    this.server.once('error',e=>{this.onEvent({type:'local-ai-error',message:e.message||String(e)});});
     this.server.on('exit',()=>{this.server=null;this.cancelIdleStop();this.onEvent({type:'local-ai-exit'});});
     const started=Date.now();
     while(Date.now()-started<120000){
@@ -115,7 +129,8 @@ class LocalRuntime{
   }
   stop(reason='manual'){
     this.cancelIdleStop();
-    if(this.server){try{this.server.kill();}catch{}this.server=null;}
+    const p=this.server;this.server=null;
+    if(p){try{p.kill();}catch{}}
     this.onEvent({type:'local-ai-stopped',reason});
   }
   async generate(prompt){
