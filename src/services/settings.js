@@ -37,7 +37,9 @@ class SettingsStore {
         voice: 'ef_dora',
         speed: 1.0,
         resourceMode: 'safe_streaming',
-        pronunciationSmart: true
+        pronunciationSmart: true,
+        pronunciationClaudeVerify: true,
+        pronunciationMaxSeconds: 15
       },
       visual: {
         fallbackImage: '',
@@ -100,7 +102,12 @@ class SettingsStore {
       }
     } catch {}
 
-    if (!String(data.ai?.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+    data.ai = data.ai || {};
+    data.tts = data.tts || {};
+    data.canned = data.canned || {};
+    data.automation = data.automation || {};
+    if (!String(data.ai.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+    data.tts.pronunciationMaxSeconds = Math.max(5, Math.min(30, Number(data.tts.pronunciationMaxSeconds) || 15));
 
     if (raw?.ai && raw.ai.localResourceMode === undefined) {
       data.ai.localResourceMode = 'safe_streaming';
@@ -126,7 +133,14 @@ class SettingsStore {
   }
 
   save(settings) {
-    fs.writeFileSync(this.file, JSON.stringify(settings, null, 2), 'utf8');
+    fs.mkdirSync(this.baseDir, { recursive: true });
+    const tmp = `${this.file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
+    if (fs.existsSync(this.file)) {
+      try { fs.rmSync(`${this.file}.bak`, { force: true }); } catch {}
+      try { fs.copyFileSync(this.file, `${this.file}.bak`); } catch {}
+    }
+    fs.renameSync(tmp, this.file);
   }
 
   encryptSecret(value) {
