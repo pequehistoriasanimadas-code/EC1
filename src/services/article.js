@@ -1,8 +1,19 @@
 const cheerio = require('cheerio');
 
 async function fetchArticle(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 EC-Automatic-News/1.0', 'Accept': 'text/html,*/*' } });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) EC-Automatic-News/0.3.11', 'Accept': 'text/html,*/*' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(25000)
+    });
+  } catch (e) {
+    throw new Error(`Artículo: ${e.name==='TimeoutError'?'tiempo de espera agotado':(e.message||e)}`);
+  }
   if (!res.ok) throw new Error(`Artículo: HTTP ${res.status}`);
+  const type=String(res.headers.get('content-type')||'');
+  if(type && !/html|text\//i.test(type)) throw new Error(`Artículo: contenido no HTML (${type})`);
   const html = await res.text();
   const $ = cheerio.load(html);
   $('script,style,noscript,svg,nav,footer,header,aside').remove();
@@ -22,7 +33,7 @@ async function fetchArticle(url) {
   const unique = [];
   const seen = new Set();
   for (const p of paragraphs) { if (!seen.has(p)) { seen.add(p); unique.push(p); } }
-  return { title, image, description, category, author, body: unique.join('\n\n').slice(0, 24000) };
+  return { title, image, description, category, author, body: unique.join('\n\n').slice(0, 24000), finalUrl: res.url || url };
 }
 
 module.exports = { fetchArticle };
