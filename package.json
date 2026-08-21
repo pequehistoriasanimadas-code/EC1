@@ -1,9 +1,9 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.10",
+  "version": "0.3.13",
   "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "EC Automatic News",
-  "main": "src/main-v0310.js",
+  "main": "src/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
@@ -11,11 +11,12 @@
     "dist:portable": "electron-builder --win portable --x64 --publish never"
   },
   "dependencies": {
-    "cheerio": "^1.1.2",
-    "fast-xml-parser": "^5.2.5"
+    "cheerio": "1.1.2",
+    "fast-xml-parser": "5.10.1",
+    "mammoth": "1.10.0"
   },
   "devDependencies": {
-    "electron": "^37.2.6",
+    "electron": "43.4.0",
     "electron-builder": "26.15.7"
   },
   "build": {

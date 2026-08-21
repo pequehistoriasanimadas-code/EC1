@@ -8,6 +8,7 @@ class SettingsStore {
   constructor(baseDir) {
     this.baseDir = baseDir;
     this.file = path.join(baseDir, 'settings.json');
+    this.backupFile = path.join(baseDir, 'settings.json.bak');
     fs.mkdirSync(baseDir, { recursive: true });
   }
 
@@ -37,19 +38,33 @@ class SettingsStore {
         voice: 'ef_dora',
         speed: 1.0,
         resourceMode: 'safe_streaming',
-        pronunciationSmart: true
+        pronunciationSmart: true,
+        pronunciationClaudeVerify: true,
+        pronunciationMaxSeconds: 15,
+        persistent: true,
+        persistentIdleMinutes: 5,
+        autoTune: true,
+        autoTuned: false
       },
       visual: {
         fallbackImage: '',
         pauseSeconds: 2.5,
         showSummary: true,
         theme: { yellow: '#F7C600', black: '#000000', white: '#FFFFFF' },
+        queueColors: {
+          rss: '#2E7D32',
+          generated: '#2563EB',
+          content: '#D97706',
+          ad: '#7C3AED',
+          error: '#B91C1C'
+        },
         output: {
           format: '16:9',
           fontFamily: 'Arial',
           dateFontFamily: 'Arial',
           titleColor: '#FFFFFF',
           summaryColor: '#F3F3F3',
+          dateColor: '#F3F3F3',
           categoryBgColor: '#F7C600',
           categoryTextColor: '#000000',
           lowerBgColor: '#000000',
@@ -78,6 +93,15 @@ class SettingsStore {
         emergency: true,
         interval: 10
       },
+      documents: {
+        folder: '',
+        watch: false,
+        targetSeconds: 60,
+        categoryMode: 'auto',
+        batchDate: '',
+        priority: 'normal',
+        processed: {}
+      },
       automation: {
         updateMinutes: 2,
         maxAgeHours: 6,
@@ -85,22 +109,43 @@ class SettingsStore {
         queueMax: 30,
         avoidRepeats: true,
         onlyMainImage: true,
-        activeFeedIds: []
+        activeFeedIds: [],
+        recoveryAutonomyMin: 8,
+        criticalAutonomyMin: 3
       }
     };
   }
 
+  readRawFile(file) {
+    try {
+      if (!fs.existsSync(file)) return null;
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch { return null; }
+  }
+
   load() {
     let data = this.defaults();
-    let raw = null;
-    try {
-      if (fs.existsSync(this.file)) {
-        raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-        data = this.merge(data, raw);
-      }
-    } catch {}
+    let raw = this.readRawFile(this.file);
+    if (!raw) raw = this.readRawFile(this.backupFile);
+    if (raw) data = this.merge(data, raw);
 
-    if (!String(data.ai?.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+    data.ai = data.ai || {};
+    data.tts = data.tts || {};
+    data.visual = data.visual || {};
+    data.visual.output = data.visual.output || {};
+    data.visual.queueColors = data.visual.queueColors || {};
+    data.canned = data.canned || {};
+    data.documents = data.documents || {};
+    data.documents.processed = data.documents.processed && typeof data.documents.processed === 'object' ? data.documents.processed : {};
+    data.automation = data.automation || {};
+    if (!String(data.ai.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
+    data.tts.pronunciationMaxSeconds = Math.max(5, Math.min(30, Number(data.tts.pronunciationMaxSeconds) || 15));
+    data.tts.persistentIdleMinutes = Math.max(1, Math.min(30, Number(data.tts.persistentIdleMinutes) || 5));
+    if (!data.visual.output.dateColor) data.visual.output.dateColor = data.visual.output.summaryColor || '#F3F3F3';
+    data.documents.targetSeconds = Math.max(30, Math.min(180, Number(data.documents.targetSeconds) || 60));
+    data.automation.recoveryAutonomyMin = Math.max(2, Math.min(30, Number(data.automation.recoveryAutonomyMin) || 8));
+    data.automation.criticalAutonomyMin = Math.max(1, Math.min(data.automation.recoveryAutonomyMin, Number(data.automation.criticalAutonomyMin) || 3));
 
     if (raw?.ai && raw.ai.localResourceMode === undefined) {
       data.ai.localResourceMode = 'safe_streaming';
@@ -126,7 +171,18 @@ class SettingsStore {
   }
 
   save(settings) {
-    fs.writeFileSync(this.file, JSON.stringify(settings, null, 2), 'utf8');
+    fs.mkdirSync(this.baseDir, { recursive: true });
+    const tmp = `${this.file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
+    if (fs.existsSync(this.file)) {
+      try { fs.copyFileSync(this.file, this.backupFile); } catch {}
+    }
+    try {
+      fs.renameSync(tmp, this.file);
+    } catch {
+      fs.copyFileSync(tmp, this.file);
+      try { fs.rmSync(tmp, { force: true }); } catch {}
+    }
   }
 
   encryptSecret(value) {

@@ -1,107 +1,53 @@
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawnSync } = require('child_process');
+const fs=require('fs');
+const path=require('path');
+const os=require('os');
+const {spawnSync}=require('child_process');
 
-const roots = ['src'];
-let failed = false;
-function walk(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(p);
-    else if (p.endsWith('.js')) {
-      const r = spawnSync(process.execPath, ['--check', p], { encoding: 'utf8' });
-      if (r.status !== 0) {
-        failed = true;
-        console.error(`Syntax error: ${p}`);
-        console.error(r.stderr);
-      }
-    }
-  }
-}
-roots.forEach(r => walk(r));
-if (failed) process.exit(1);
+let failed=false;
+function assert(ok,message){if(!ok)throw new Error(message);}
+function walk(dir){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,entry.name);if(entry.isDirectory())walk(p);else if(p.endsWith('.js')){const r=spawnSync(process.execPath,['--check',p],{encoding:'utf8'});if(r.status!==0){failed=true;console.error(`Syntax error: ${p}`);console.error(r.stderr);}}}}
+walk('src');walk('scripts');if(failed)process.exit(1);
 
-try {
-  const {parseFeed}=require('../src/services/rss');
+try{
+  const {parseFeed,parseHtmlLatest,mergeUniqueItems,EC_LATEST_MIN_ITEMS}=require('../src/services/rss');
   const sample=`<?xml version="1.0"?><rss><channel><item><title><![CDATA[Noticia de prueba]]></title><link>https://example.com/nota</link><description>Descripción</description><pubDate>Wed, 19 Aug 2026 10:00:00 GMT</pubDate></item></channel></rss>`;
-  const items=parseFeed(sample,{id:'test',name:'Test'});
-  if(items.length!==1||items[0].link!=='https://example.com/nota')throw new Error('RSS parser smoke test failed');
+  const items=parseFeed(sample,{id:'test',name:'Test'});assert(items.length===1&&items[0].link==='https://example.com/nota','RSS parser smoke test failed');
+  const webItems=parseHtmlLatest('<main><article><h2><a href="https://elcomercio.pe/politica/noticia-de-prueba-con-titular-largo-noticia/">Noticia de prueba con titular suficientemente largo</a></h2><p>Bajada</p><time datetime="2026-08-21T10:00:00-05:00"></time></article></main>',{id:'latest',name:'Últimas'});
+  assert(webItems.length===1&&webItems[0].category==='Politica','Latest-news HTML fallback failed');
+  const mergedLatest=mergeUniqueItems([{link:'https://elcomercio.pe/politica/a/?utm_source=test',title:'A'}],[{link:'https://elcomercio.pe/politica/a/',title:'A'},{link:'https://elcomercio.pe/economia/b/',title:'B'}]);
+  assert(mergedLatest.length===2,'Latest-news primary/fallback dedup failed');assert(EC_LATEST_MIN_ITEMS===10,'Latest-news sparse-feed threshold changed unexpectedly');
 
-  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'ec-news-check-'));
-  const videos=path.join(tmp,'videos');fs.mkdirSync(videos);
-  for(const name of ['a.mp4','b.mp4','c.webm'])fs.writeFileSync(path.join(videos,name),'x');
-  const {CannedManager}=require('../src/services/canned');
-  const canned=new CannedManager();
-  const listed=canned.list(videos);
-  if(!listed.ok||listed.count!==3)throw new Error('Canned folder scan smoke test failed');
-  const cycle=new Set([canned.pick(videos).name,canned.pick(videos).name,canned.pick(videos).name]);
-  if(cycle.size!==3)throw new Error('Canned random bag repeated before completing a cycle');
-  const ads=new CannedManager();
-  const adCycle=new Set([ads.pick(videos).name,ads.pick(videos).name,ads.pick(videos).name]);
-  if(adCycle.size!==3)throw new Error('Ads random bag repeated before completing a cycle');
+  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'ec-news-0313-check-'));
+  const videos=path.join(tmp,'videos');fs.mkdirSync(videos);for(const name of ['a.mp4','b.mp4','c.webm'])fs.writeFileSync(path.join(videos,name),'x');
+  const {CannedManager}=require('../src/services/canned');const contents=new CannedManager(),ads=new CannedManager();assert(contents.list(videos).count===3,'Contents folder scan failed');assert(ads.list(videos).count===3,'Ads folder scan failed');const preview=contents.peek(videos);assert(preview&&contents.pick(videos).name===preview.name,'Canned peek does not match next pick');assert(new Set([ads.pick(videos).name,ads.pick(videos).name,ads.pick(videos).name]).size===3,'Ads random bag repeated early');
 
-  const {PronunciationNormalizer}=require('../src/services/pronunciation');
-  const pron=new PronunciationNormalizer({resourcesDir:tmp,dataDir:tmp});
-  const normalized=pron.basic('Apple TV informó un avance de 25% en YouTube. S/900 millones y US$25 millones.');
-  if(!/ápol te uve/i.test(normalized)||!/25 por ciento/i.test(normalized)||!/yutub/i.test(normalized))throw new Error('Pronunciation rules smoke test failed');
-  if(!/900 millones de soles/i.test(normalized)||!/25 millones de dólares/i.test(normalized))throw new Error('Currency pronunciation smoke test failed');
-  const pronJs=fs.readFileSync(path.join('src','services','pronunciation.js'),'utf8');
-  for(const token of ['parseSmartResponse','requestSmartMap','attempt<=2','pronunciation-warning','smartFailed'])if(!pronJs.includes(token))throw new Error(`Smart pronunciation retry missing ${token}`);
+  const docsRoot=path.join(tmp,'docs'),politica=path.join(docsRoot,'POLITICA');fs.mkdirSync(politica,{recursive:true});fs.writeFileSync(path.join(politica,'POLITICA.jpg'),'x');fs.writeFileSync(path.join(politica,'reforma.txt'),'TÍTULO: Reforma electoral\nFECHA: 21/08/2026\nEl Congreso debatió una reforma electoral con información de prueba.','utf8');
+  const {DocumentLibrary,canonicalCategory}=require('../src/services/documents');const docLib=new DocumentLibrary(),scan=docLib.scan(docsRoot);assert(scan.count===1,'Document folder scan failed');assert(scan.files[0].categoryFromFolder==='POLÍTICA','Document category folder detection failed');assert(scan.files[0].imageSource==='category','Category fallback image was not detected');assert(canonicalCategory('economia')==='ECONOMÍA','Category canonicalization failed');
 
-  const {locutionSource}=require('../src/services/automation');
-  const spoken=locutionSource('Titular de prueba','Este es el guion de la noticia.');
-  if(!spoken.startsWith('Titular de prueba. '))throw new Error('Headline-first locution smoke test failed');
-  const automationJs=fs.readFileSync(path.join('src','services','automation.js'),'utf8');
-  for(const token of ['resetSessionCounters','newsEmitted++','session:{newsEmitted:this.newsEmitted,cannedEmitted:this.cannedPlayed}','pronunciationSmartFailed'])if(!automationJs.includes(token))throw new Error(`Session counter/fallback metric missing ${token}`);
+  const legacyDir=path.join(tmp,'pron');fs.mkdirSync(legacyDir);fs.writeFileSync(path.join(legacyDir,'pronunciation-cache.json'),JSON.stringify({Reuters:'róiters'}),'utf8');
+  const {PronunciationNormalizer,LEARNING_SCHEMA}=require('../src/services/pronunciation');const pron=new PronunciationNormalizer({resourcesDir:tmp,dataDir:legacyDir,getSettings:()=>({tts:{pronunciationMaxSeconds:15,pronunciationClaudeVerify:true}})});const normalized=pron.basic('Apple TV informó un avance de 25% en YouTube. S/900 millones, US$25 millones, 30 °C y 80 km/h.');assert(/ápol te uve/i.test(normalized)&&/25 por ciento/i.test(normalized)&&/yutub/i.test(normalized),'Basic pronunciation rules failed');assert(/900 millones de soles/i.test(normalized)&&/25 millones de dólares/i.test(normalized),'Currency pronunciation failed');const candidates=pron.candidates('Élysée recibió a Donald Trump y Emmanuel Macron.');assert(candidates.some(x=>x.term==='Élysée')&&candidates.some(x=>x.term==='Donald Trump'),'Unicode/multiword pronunciation candidates failed');assert(pron.exportLearning().schemaVersion===LEARNING_SCHEMA,'Learning schema export failed');
 
-  const wrapper038=fs.readFileSync(path.join('src','main-v038.js'),'utf8');
-  for(const token of ['scheduledProgress','lastScheduledCannedAt','progress.due','reason === \'scheduled\'','adsFolder','playAdAfterCanned','mediaRole: \'ad\'','insertAdAfterContent'])if(!wrapper038.includes(token))throw new Error(`0.3.9 Enlatados/Anuncios feature missing ${token}`);
-  if(!wrapper038.includes('const remainder = total % every'))throw new Error('Scheduled Enlatados are not tied to exact total-note multiples');
-  if(!wrapper038.includes('Every completed content Enlatado'))throw new Error('Ad-after-content chaining missing');
+  const {AutomationEngine}=require('../src/services/automation');
+  const dummySettings={automation:{bufferReady:15,queueMax:30,maxAgeHours:6,avoidRepeats:true,recoveryAutonomyMin:8,criticalAutonomyMin:3},documents:{targetSeconds:60},ai:{primary:'claude'},tts:{voice:'ef_dora',speed:1},visual:{pauseSeconds:0},canned:{enabled:true,interval:10,emergency:true,folder:videos,adsFolder:videos,insertAdAfterContent:true}};
+  const engine=new AutomationEngine({rss:{loadAll:async()=>({items:[],errors:[],feedStatus:[]})},fetchArticle:async()=>({}),providers:{generate:async()=>({result:{title:'x',script:'x'},attempts:[],metrics:{}}),generateDocument:async()=>({provider:'claude',model:'haiku',result:{title:'Doc',category:'POLÍTICA',summary:'',script:'Texto'},attempts:[],metrics:{elapsedMs:1}})},kokoro:{generate:async()=>({path:'',url:'',durationSec:60}),cleanupAudio:()=>{}},pronunciation:null,canned:contents,ads,history:{has:()=>false,add:()=>{}},getSettings:()=>dummySettings,getFallbackUrl:()=>'',sendAutomaticOutput:()=>true,isOutputReady:()=>true,controlOutput:()=>{}});
+  engine.scheduledNewsTotal=10;assert(engine.scheduledProgress(10).due,'Exact scheduled-content multiple not detected');engine.lastScheduledCannedAt=10;assert(!engine.scheduledProgress(10).due&&engine.scheduledProgress(10).nextIn===10,'Scheduled slot served state failed');engine.queue=[{sourceType:'rss',story:{title:'A'},status:'PROCESANDO',audio:{durationSec:60}},{sourceType:'rss',story:{title:'B'},status:'LISTA',audio:{durationSec:60}}];assert(engine.readyItems()[0].story.title==='B','Ready-item selection failed');assert(engine.bufferHealth(dummySettings).minutes===1,'Autonomy calculation failed');const display=engine.displayQueue(dummySettings);assert(display.some(x=>x.sourceType==='content'&&x.status==='PROGRAMADO'),'Planned content missing from unified queue');assert(display.some(x=>x.sourceType==='ad'),'Planned ad missing from unified queue');
 
-  const wrapper0310=fs.readFileSync(path.join('src','main-v0310.js'),'utf8');
-  for(const token of ['availableSlots','PROCESSING_CANCELLED','Sin noticias nuevas elegibles','outputRetries','First pending item wins','Reintentando una vez','Buffer target now means READY items'])if(!wrapper0310.includes(token))throw new Error(`0.3.10 automatic reliability feature missing ${token}`);
-  if(!wrapper0310.includes("require('./main-v038.js')"))throw new Error('0.3.10 does not preserve the 0.3.9 Content/Ads layer');
+  const preload=fs.readFileSync(path.join('src','preload.js'),'utf8');for(const token of ['contextBridge.exposeInMainWorld','documentPickFolder','documentEnqueue','benchmarkTts','cannedPickAdsFolder','exportPronunciationLearning','resetSessionCounters'])assert(preload.includes(token),`Preload bridge missing ${token}`);assert(!/document\.|window\.addEventListener|require\(['"]\.\//.test(preload),'Preload contains sandbox-incompatible wrapper code');
+  const main=fs.readFileSync(path.join('src','main.js'),'utf8');for(const token of ['sandbox:true',"preload:path.join(__dirname,'preload.js')",'DocumentLibrary','documents:enqueue','tts:benchmark','syncDocumentWatch','kokoro?.stop'])assert(main.includes(token),`Main integration missing ${token}`);assert(!main.includes("require('./main-v038.js')")&&!main.includes("require('./main-v0310.js')"),'Consolidated main still chains wrappers');
 
-  const settingsJs=fs.readFileSync(path.join('src','services','settings.js'),'utf8');
-  for(const token of ["adsFolder: ''","insertAdAfterContent: true"])if(!settingsJs.includes(token))throw new Error(`Ads settings default missing ${token}`);
+  const control=fs.readFileSync(path.join('src','control.html'),'utf8');for(const id of ['documentList','pickDocumentFolder','generateSelectedDocs','documentWatch','dateColor','queueColorRss','queueColorGenerated','queueColorContent','queueColorAd','queueColorError','feeds','save','processingDetail'])assert(control.includes(`id="${id}"`),`Control UI missing ${id}`);assert(control.includes('Generador de Notas')&&control.includes('Guardar todos los cambios')&&control.includes('Imagen de respaldo'),'Humanized UI labels missing');assert(!control.includes('data-tab="editor"'),'Legacy Editor navigation still visible');
+  const renderer=fs.readFileSync(path.join('src','renderer.js'),'utf8');for(const token of ['dateColor','QUEUE_COLOR_DEFAULT','documentDuration','ttsProfileHint'])assert(renderer.includes(token),`Renderer missing ${token}`);const rendererUi=fs.readFileSync(path.join('src','renderer-ui.js'),'utf8');for(const token of ['refreshDocuments','renderDocuments','sourceTypeName','Ver detalles técnicos','Mejorando pronunciación','Funcionando mediante fuente alternativa','editingFeedId','x.oninput'])assert(rendererUi.includes(token),`Renderer UI missing ${token}`);assert(!rendererUi.includes("$('.f-name').forEach(x=>x.onchange=e=>") ,'RSS name field still rebuilds the editor on blur');assert(!rendererUi.includes('Etapa: ${x.stage}'),'Technical raw stage leaked into queue');const rendererActions=fs.readFileSync(path.join('src','renderer-actions.js'),'utf8');for(const token of ['documentEnqueue','benchmarkTts','resetQueueColors','dateColor','checkAllFeeds'])assert(rendererActions.includes(token),`Renderer actions missing ${token}`);
+  const css=fs.readFileSync(path.join('src','control.css'),'utf8');for(const token of ['feed-list-scroll','document-list','queue-type','--date-color','settings-save'])assert(css.includes(token),`Control CSS missing ${token}`);
+  const outputJs=fs.readFileSync(path.join('src','output.js'),'utf8'),outputCss=fs.readFileSync(path.join('src','output.css'),'utf8');assert(outputJs.includes("setProperty('--date-color'")&&outputCss.includes('color:var(--date-color)'),'Independent date color not wired to Output');
 
-  const outputHtml=fs.readFileSync(path.join('src','output.html'),'utf8');
-  for(const id of ['cannedVideo','cannedBg','music','audio','stage','pubDate','metaRow'])if(!outputHtml.includes(`id="${id}"`))throw new Error(`Output missing ${id}`);
-  const outputJs=fs.readFileSync(path.join('src','output.js'),'utf8');
-  for(const token of ['makeStorySnapshot','crossfadeLayers','formatDate','dateFontFamily','loopFadeBusy'])if(!outputJs.includes(token))throw new Error(`Output feature missing ${token}`);
-  if(outputJs.includes("stage.style.opacity='0'"))throw new Error('Old fade-to-black transition is still present');
-  const controlHtml=fs.readFileSync(path.join('src','control.html'),'utf8');
-  for(const id of ['tab-canned','cannedEnabled','pickCannedFolder','musicEnabled','transitionEnabled','pickVerticalVideoBackground','testPronunciation'])if(!controlHtml.includes(`id="${id}"`))throw new Error(`Control UI missing ${id}`);
-  const renderer=fs.readFileSync(path.join('src','renderer.js'),'utf8');
-  for(const token of ['dateFontFamily','Tipografía de fecha','previewDate'])if(!renderer.includes(token))throw new Error(`Date typography UI missing ${token}`);
-  const rendererUi=fs.readFileSync(path.join('src','renderer-ui.js'),'utf8');
-  if(!rendererUi.includes('básico (inteligente no respondió)'))throw new Error('Soft pronunciation fallback is not visible in queue');
-
-  const preload038=fs.readFileSync(path.join('src','preload-v038.js'),'utf8');
-  for(const token of ['Programación de contenidos','Carpeta de contenidos','Carpeta de anuncios','Insertar un anuncio después de cada contenido enlatado','CONTENIDOS EMITIDOS','ANUNCIOS EMITIDOS','processingDetail','bindDateFontLive0310'])if(!preload038.includes(token))throw new Error(`Contents/ads or 0.3.10 UI missing ${token}`);
-
-  const mainJs=fs.readFileSync(path.join('src','main.js'),'utf8');
-  if(!mainJs.includes('const enriched={...payload,source};'))throw new Error('Output payload is not decoupled from global design');
-  if(mainJs.includes('const enriched={...payload,source,design:currentDesign()};'))throw new Error('Per-story design resend can restart background music');
-  if(!mainJs.includes("ipcMain.handle('automation:resetCounters'"))throw new Error('Counter reset IPC missing');
-
-  const ttsPy=fs.readFileSync(path.join('scripts','tts.py'),'utf8');
-  for(const token of ['SessionOptions','intra_op_num_threads','inter_op_num_threads','ORT_SEQUENTIAL','--onnx-intra','--onnx-inter','normalize_currency','de soles','de dólares'])if(!ttsPy.includes(token))throw new Error(`Kokoro/TTS smoke test missing ${token}`);
-  const py=spawnSync('python',['-m','py_compile',path.join('scripts','tts.py')],{encoding:'utf8'});
-  if(py.error==null&&py.status!==0)throw new Error(`Python syntax error in tts.py: ${py.stderr}`);
-  const kokoroJs=fs.readFileSync(path.join('src','services','kokoro.js'),'utf8');
-  for(const token of ['safe_streaming','balanced','performance','intra:2','intra:3','intra:6','realtimeFactor'])if(!kokoroJs.includes(token))throw new Error(`Kokoro profile smoke test missing ${token}`);
-  const preload=fs.readFileSync(path.join('src','preload.js'),'utf8');
-  for(const token of ['ttsPerformanceProfile','Seguro para streaming','Generando voz con Kokoro','Cargando Qwen 8B','sessionNewsEmitted','sessionCannedEmitted','resetSessionCounters','persistSoundControls'])if(!preload.includes(token))throw new Error(`Preload/UI smoke test missing ${token}`);
-
-  const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
-  if(pkg.version!=='0.3.10')throw new Error(`Unexpected package version ${pkg.version}`);
-  if(pkg.main!=='src/main-v0310.js')throw new Error(`Unexpected main entry ${pkg.main}`);
-
+  const settingsSrc=fs.readFileSync(path.join('src','services','settings.js'),'utf8');for(const token of ['queueColors','dateColor','documents:','persistentIdleMinutes','recoveryAutonomyMin'])assert(settingsSrc.includes(token),`Settings missing ${token}`);const providersSrc=fs.readFileSync(path.join('src','services','providers.js'),'utf8');for(const token of ['generateDocument','buildDocumentPrompt','DEFAULT_CLAUDE_MODEL','claude-haiku-4-5-20251001'])assert(providersSrc.includes(token),`Document/Claude integration missing ${token}`);assert(!providersSrc.includes("model=models.find(x=>/haiku")&&!providersSrc.includes("models.find(x=>/sonnet"),'Claude test silently switches model');
+  const automationSrc=fs.readFileSync(path.join('src','services','automation.js'),'utf8');for(const token of ['enqueueDocument','displayQueue','emissionHistory','bufferHealth','sourceType:\'generated\'','this.queue.find(x=>x.status===\'LISTA\')','localHeavyRunning'])assert(automationSrc.includes(token),`Automation feature missing ${token}`);
+  const kokoroSrc=fs.readFileSync(path.join('src','services','kokoro.js'),'utf8');for(const token of ['ensureWorker','workerCommand','scheduleIdleStop','benchmark','OMP_WAIT_POLICY'])assert(kokoroSrc.includes(token),`Persistent Kokoro feature missing ${token}`);const ttsPy=fs.readFileSync(path.join('scripts','tts.py'),'utf8');for(const token of ['--worker','ECJSON ','load_engine','cmd==\'stop\''])assert(ttsPy.includes(token),`Kokoro worker protocol missing ${token}`);
+  const localSrc=fs.readFileSync(path.join('src','services','localRuntime.js'),'utf8');for(const token of ['cpuBudget','threadShare','reservedCpus'])assert(localSrc.includes(token),`Local CPU budget hardening missing ${token}`);
+  const rssSrc=fs.readFileSync(path.join('src','services','rss.js'),'utf8');for(const token of ['COMBINED_FALLBACK','EC_LATEST_MIN_ITEMS','https://elcomercio.pe/ultimas-noticias/','EC-Automatic-News/0.3.13'])assert(rssSrc.includes(token),`Latest-news RSS fix missing ${token}`);
+  const runtimePs=fs.readFileSync(path.join('scripts','prepare-windows-runtime.ps1'),'utf8');assert(runtimePs.includes("$LlamaRelease = 'b10218'"),'llama.cpp runtime is not pinned');assert(!runtimePs.includes('releases/latest'),'Build downloads latest llama.cpp dynamically');
+  const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));assert(pkg.version==='0.3.13',`Unexpected package version ${pkg.version}`);assert(pkg.main==='src/main.js',`Unexpected package main ${pkg.main}`);assert(pkg.dependencies?.mammoth,'DOCX dependency missing');
+  const py=spawnSync('python',['-m','py_compile',path.join('scripts','tts.py')],{encoding:'utf8'});if(py.error==null)assert(py.status===0,`Python syntax error in tts.py: ${py.stderr}`);
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('JavaScript syntax OK · RSS OK · Contenidos/Anuncios separados OK · intervalos exactos OK · emisión automática robusta OK · buffer LISTAS OK · retry de audio OK · orden estable OK · diagnóstico de espera OK · fecha live OK · pronunciación robusta OK · música persistente OK · contadores OK · crossfade OK · Kokoro ONNX limiter OK');
-} catch(e) {
-  console.error(e.stack||e);process.exit(1);
-}
+  console.log('EC 0.3.13 CHECK OK · RSS Últimas Noticias combinado · editor RSS estable · CPU local limitado · Generador TXT/DOCX · Cola unificada · Kokoro persistente · Claude Haiku fijo');
+}catch(e){console.error(e.stack||e);process.exit(1);}
