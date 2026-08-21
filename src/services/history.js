@@ -10,7 +10,7 @@ class HistoryStore{
   read(){
     try{
       const x=JSON.parse(fs.readFileSync(this.file,'utf8'));
-      return{x:Array.isArray(x?.emitted)?x.emitted:[]}.x?{emitted:Array.isArray(x?.emitted)?x.emitted:[]}:{emitted:[]};
+      return{emitted:Array.isArray(x?.emitted)?x.emitted:[]};
     }catch{return{emitted:[]};}
   }
   load(){return{emitted:[...(this.data.emitted||[])]};}
