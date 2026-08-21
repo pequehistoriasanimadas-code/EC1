@@ -69,7 +69,7 @@ try{
   assert(!/document\.|window\.addEventListener|require\(['"]\.\//.test(preload),'Preload contains DOM/local-module wrapper code incompatible with sandbox');
 
   const main=fs.readFileSync(path.join('src','main.js'),'utf8');
-  for(const token of ['sandbox:true',"preload:path.join(__dirname,'preload.js')",'runUiBridgeSelfTest','canned:pickAdsFolder','pronunciation:exportLearning','mediaRole===\'ad\'','scheduledNewsTotal'])assert(main.includes(token),`Main integration missing ${token}`);
+  for(const token of ['sandbox:true',"preload:path.join(__dirname,'preload.js')",'runUiBridgeSelfTest','canned:pickAdsFolder','pronunciation:exportLearning','mediaRole===\'ad\''])assert(main.includes(token),`Main integration missing ${token}`);
   assert(!main.includes("require('./main-v038.js')")&&!main.includes("require('./main-v0310.js')"),'Consolidated main still chains wrappers');
 
   const control=fs.readFileSync(path.join('src','control.html'),'utf8');
@@ -87,7 +87,7 @@ try{
   const outputHtml=fs.readFileSync(path.join('src','output.html'),'utf8');for(const id of ['cannedVideo','cannedBg','music','audio','stage','pubDate','metaRow'])assert(outputHtml.includes(`id="${id}"`),`Output missing ${id}`);
   const outputJs=fs.readFileSync(path.join('src','output.js'),'utf8');for(const token of ['makeStorySnapshot','crossfadeLayers','formatDate','dateFontFamily','loopFadeBusy','motion-vertical','motion-horizontal'])assert(outputJs.includes(token),`Output feature missing ${token}`);
 
-  const settingsSrc=fs.readFileSync(path.join('src','services','settings.js'),'utf8');for(const token of ['pronunciationClaudeVerify','pronunciationMaxSeconds','adsFolder','insertAdAfterContent','settings.json}.tmp'])assert(settingsSrc.includes(token),`Settings hardening missing ${token}`);
+  const settingsSrc=fs.readFileSync(path.join('src','services','settings.js'),'utf8');for(const token of ['pronunciationClaudeVerify','pronunciationMaxSeconds','adsFolder','insertAdAfterContent','fs.writeFileSync(tmp','fs.renameSync(tmp'])assert(settingsSrc.includes(token),`Settings hardening missing ${token}`);
   const providersSrc=fs.readFileSync(path.join('src','services','providers.js'),'utf8');for(const token of ['verifyPronunciations','DEFAULT_CLAUDE_MODEL','claude-haiku-4-5-20251001'])assert(providersSrc.includes(token),`Claude pronunciation integration missing ${token}`);
   assert(!providersSrc.includes("model=models.find(x=>/haiku")&&!providersSrc.includes("models.find(x=>/sonnet"),'Claude test still silently switches models');
   const automationSrc=fs.readFileSync(path.join('src','services','automation.js'),'utf8');for(const token of ['scheduledNewsTotal','playAdAfterCanned','outputRetries','Sin noticias nuevas elegibles','PROCESSING_CANCELLED','mediaRole:\'ad\''])assert(automationSrc.includes(token),`Automation feature missing ${token}`);
