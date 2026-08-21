@@ -8,6 +8,7 @@ class SettingsStore {
   constructor(baseDir) {
     this.baseDir = baseDir;
     this.file = path.join(baseDir, 'settings.json');
+    this.backupFile = path.join(baseDir, 'settings.json.bak');
     fs.mkdirSync(baseDir, { recursive: true });
   }
 
@@ -92,15 +93,19 @@ class SettingsStore {
     };
   }
 
+  readRawFile(file) {
+    try {
+      if (!fs.existsSync(file)) return null;
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch { return null; }
+  }
+
   load() {
     let data = this.defaults();
-    let raw = null;
-    try {
-      if (fs.existsSync(this.file)) {
-        raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-        data = this.merge(data, raw);
-      }
-    } catch {}
+    let raw = this.readRawFile(this.file);
+    if (!raw) raw = this.readRawFile(this.backupFile);
+    if (raw) data = this.merge(data, raw);
 
     data.ai = data.ai || {};
     data.tts = data.tts || {};
@@ -137,10 +142,14 @@ class SettingsStore {
     const tmp = `${this.file}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
     if (fs.existsSync(this.file)) {
-      try { fs.rmSync(`${this.file}.bak`, { force: true }); } catch {}
-      try { fs.copyFileSync(this.file, `${this.file}.bak`); } catch {}
+      try { fs.copyFileSync(this.file, this.backupFile); } catch {}
     }
-    fs.renameSync(tmp, this.file);
+    try {
+      fs.renameSync(tmp, this.file);
+    } catch {
+      fs.copyFileSync(tmp, this.file);
+      try { fs.rmSync(tmp, { force: true }); } catch {}
+    }
   }
 
   encryptSecret(value) {
