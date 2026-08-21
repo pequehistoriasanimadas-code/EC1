@@ -1,204 +1,32 @@
-const fs = require('fs');
-const path = require('path');
-const { safeStorage } = require('electron');
+const fs=require('fs');
+const path=require('path');
+const {safeStorage}=require('electron');
 
-const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_CLAUDE_MODEL='claude-haiku-4-5-20251001';
 
-class SettingsStore {
-  constructor(baseDir) {
-    this.baseDir = baseDir;
-    this.file = path.join(baseDir, 'settings.json');
-    this.backupFile = path.join(baseDir, 'settings.json.bak');
-    fs.mkdirSync(baseDir, { recursive: true });
+class SettingsStore{
+  constructor(baseDir){this.baseDir=baseDir;this.file=path.join(baseDir,'settings.json');this.backupFile=path.join(baseDir,'settings.json.bak');fs.mkdirSync(baseDir,{recursive:true});}
+  defaults(){return{
+    rssFeeds:[{id:'ec-ultimas',name:'Últimas Noticias',url:'https://elcomercio.pe/arc/outboundfeeds/rss/category/ultimas-noticias/?outputType=xml',enabled:true,priority:100,publisherName:'El Comercio',publisherWeb:'elcomercio.pe',partialCtaEnabled:true,partialCtaTemplate:'Para más información, visita {web}.'}],
+    ai:{primary:'local',backup1:'claude',backup2:'gemini',claudeKeyEnc:'',claudeModel:DEFAULT_CLAUDE_MODEL,geminiKeyEnc:'',geminiModel:'',targetSeconds:60,localBackupMode:'on_demand',localIdleMinutes:5,localResourceMode:'safe_streaming',editorialPrompt:'',lastValidEditorialPrompt:'',editorialInstructions:''},
+    tts:{voice:'ef_dora',speed:1.0,resourceMode:'safe_streaming',pronunciationSmart:true,pronunciationClaudeVerify:true,pronunciationMaxSeconds:15,persistent:true,persistentIdleMinutes:5,autoTune:true,autoTuned:false},
+    visual:{fallbackImage:'',pauseSeconds:2.5,showSummary:true,theme:{yellow:'#F7C600',black:'#000000',white:'#FFFFFF'},queueColors:{rss:'#2E7D32',generated:'#2563EB',content:'#D97706',ad:'#7C3AED',error:'#B91C1C'},output:{format:'16:9',fontFamily:'Arial',dateFontFamily:'Arial',titleColor:'#FFFFFF',summaryColor:'#F3F3F3',dateColor:'#F3F3F3',categoryBgColor:'#F7C600',categoryTextColor:'#000000',lowerBgColor:'#000000',lowerOpacity:.88,animation:'auto',motionSpeed:'normal',tiktokSafe:true,showSafeGuides:true,verticalVideoBackground:'',musicFile:'',musicEnabled:false,musicLoop:true,musicVolume:20,voiceVolume:100,cannedVolume:100,transitionEnabled:true,transitionType:'fade',transitionDuration:.7}},
+    canned:{enabled:false,folder:'',adsFolder:'',insertAdAfterContent:true,emergency:true,interval:10},
+    documents:{folder:'',watch:false,targetSeconds:60,categoryMode:'auto',batchDate:'',priority:'normal',processed:{}},
+    automation:{updateMinutes:2,maxAgeHours:6,bufferReady:15,queueMax:30,avoidRepeats:true,onlyMainImage:true,activeFeedIds:[],recoveryAutonomyMin:8,criticalAutonomyMin:3}
+  };}
+  readRawFile(file){try{if(!fs.existsSync(file))return null;const parsed=JSON.parse(fs.readFileSync(file,'utf8'));return parsed&&typeof parsed==='object'?parsed:null;}catch{return null;}}
+  load(){
+    let data=this.defaults(),raw=this.readRawFile(this.file);if(!raw)raw=this.readRawFile(this.backupFile);if(raw)data=this.merge(data,raw);
+    data.ai=data.ai||{};data.tts=data.tts||{};data.visual=data.visual||{};data.visual.output=data.visual.output||{};data.visual.queueColors=data.visual.queueColors||{};data.canned=data.canned||{};data.documents=data.documents||{};data.documents.processed=data.documents.processed&&typeof data.documents.processed==='object'?data.documents.processed:{};data.automation=data.automation||{};
+    data.rssFeeds=(Array.isArray(data.rssFeeds)?data.rssFeeds:[]).map((f,i)=>({...f,id:String(f?.id||`rss-${i}`),name:String(f?.name||'Fuente'),url:String(f?.url||'').trim(),enabled:f?.enabled!==false,priority:Number(f?.priority)||50,publisherName:String(f?.publisherName||''),publisherWeb:String(f?.publisherWeb||'').replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/$/,'').trim(),partialCtaEnabled:f?.partialCtaEnabled===true,partialCtaTemplate:String(f?.partialCtaTemplate||'Para más información, visita {web}.').trim()}));
+    if(!String(data.ai.claudeModel||'').trim())data.ai.claudeModel=DEFAULT_CLAUDE_MODEL;data.ai.editorialPrompt=String(data.ai.editorialPrompt||'');data.ai.lastValidEditorialPrompt=String(data.ai.lastValidEditorialPrompt||'');data.ai.editorialInstructions=String(data.ai.editorialInstructions||'');
+    data.tts.pronunciationMaxSeconds=Math.max(5,Math.min(30,Number(data.tts.pronunciationMaxSeconds)||15));data.tts.persistentIdleMinutes=Math.max(1,Math.min(30,Number(data.tts.persistentIdleMinutes)||5));if(!data.visual.output.dateColor)data.visual.output.dateColor=data.visual.output.summaryColor||'#F3F3F3';data.documents.targetSeconds=Math.max(30,Math.min(180,Number(data.documents.targetSeconds)||60));data.automation.recoveryAutonomyMin=Math.max(2,Math.min(30,Number(data.automation.recoveryAutonomyMin)||8));data.automation.criticalAutonomyMin=Math.max(1,Math.min(data.automation.recoveryAutonomyMin,Number(data.automation.criticalAutonomyMin)||3));
+    if(raw?.ai&&raw.ai.localResourceMode===undefined){data.ai.localResourceMode='safe_streaming';if(Number(raw.ai.localIdleMinutes)===10)data.ai.localIdleMinutes=5;}if(raw?.automation&&Number(raw.automation.bufferReady)===5&&Number(raw.automation.queueMax)===12){data.automation.bufferReady=15;data.automation.queueMax=30;}return data;
   }
-
-  defaults() {
-    return {
-      rssFeeds: [{
-        id: 'ec-ultimas',
-        name: 'Últimas Noticias',
-        url: 'https://elcomercio.pe/arc/outboundfeeds/rss/category/ultimas-noticias/?outputType=xml',
-        enabled: true,
-        priority: 100
-      }],
-      ai: {
-        primary: 'local',
-        backup1: 'claude',
-        backup2: 'gemini',
-        claudeKeyEnc: '',
-        claudeModel: DEFAULT_CLAUDE_MODEL,
-        geminiKeyEnc: '',
-        geminiModel: '',
-        targetSeconds: 60,
-        localBackupMode: 'on_demand',
-        localIdleMinutes: 5,
-        localResourceMode: 'safe_streaming'
-      },
-      tts: {
-        voice: 'ef_dora',
-        speed: 1.0,
-        resourceMode: 'safe_streaming',
-        pronunciationSmart: true,
-        pronunciationClaudeVerify: true,
-        pronunciationMaxSeconds: 15,
-        persistent: true,
-        persistentIdleMinutes: 5,
-        autoTune: true,
-        autoTuned: false
-      },
-      visual: {
-        fallbackImage: '',
-        pauseSeconds: 2.5,
-        showSummary: true,
-        theme: { yellow: '#F7C600', black: '#000000', white: '#FFFFFF' },
-        queueColors: {
-          rss: '#2E7D32',
-          generated: '#2563EB',
-          content: '#D97706',
-          ad: '#7C3AED',
-          error: '#B91C1C'
-        },
-        output: {
-          format: '16:9',
-          fontFamily: 'Arial',
-          dateFontFamily: 'Arial',
-          titleColor: '#FFFFFF',
-          summaryColor: '#F3F3F3',
-          dateColor: '#F3F3F3',
-          categoryBgColor: '#F7C600',
-          categoryTextColor: '#000000',
-          lowerBgColor: '#000000',
-          lowerOpacity: 0.88,
-          animation: 'auto',
-          motionSpeed: 'normal',
-          tiktokSafe: true,
-          showSafeGuides: true,
-          verticalVideoBackground: '',
-          musicFile: '',
-          musicEnabled: false,
-          musicLoop: true,
-          musicVolume: 20,
-          voiceVolume: 100,
-          cannedVolume: 100,
-          transitionEnabled: true,
-          transitionType: 'fade',
-          transitionDuration: 0.7
-        }
-      },
-      canned: {
-        enabled: false,
-        folder: '',
-        adsFolder: '',
-        insertAdAfterContent: true,
-        emergency: true,
-        interval: 10
-      },
-      documents: {
-        folder: '',
-        watch: false,
-        targetSeconds: 60,
-        categoryMode: 'auto',
-        batchDate: '',
-        priority: 'normal',
-        processed: {}
-      },
-      automation: {
-        updateMinutes: 2,
-        maxAgeHours: 6,
-        bufferReady: 15,
-        queueMax: 30,
-        avoidRepeats: true,
-        onlyMainImage: true,
-        activeFeedIds: [],
-        recoveryAutonomyMin: 8,
-        criticalAutonomyMin: 3
-      }
-    };
-  }
-
-  readRawFile(file) {
-    try {
-      if (!fs.existsSync(file)) return null;
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch { return null; }
-  }
-
-  load() {
-    let data = this.defaults();
-    let raw = this.readRawFile(this.file);
-    if (!raw) raw = this.readRawFile(this.backupFile);
-    if (raw) data = this.merge(data, raw);
-
-    data.ai = data.ai || {};
-    data.tts = data.tts || {};
-    data.visual = data.visual || {};
-    data.visual.output = data.visual.output || {};
-    data.visual.queueColors = data.visual.queueColors || {};
-    data.canned = data.canned || {};
-    data.documents = data.documents || {};
-    data.documents.processed = data.documents.processed && typeof data.documents.processed === 'object' ? data.documents.processed : {};
-    data.automation = data.automation || {};
-    if (!String(data.ai.claudeModel || '').trim()) data.ai.claudeModel = DEFAULT_CLAUDE_MODEL;
-    data.tts.pronunciationMaxSeconds = Math.max(5, Math.min(30, Number(data.tts.pronunciationMaxSeconds) || 15));
-    data.tts.persistentIdleMinutes = Math.max(1, Math.min(30, Number(data.tts.persistentIdleMinutes) || 5));
-    if (!data.visual.output.dateColor) data.visual.output.dateColor = data.visual.output.summaryColor || '#F3F3F3';
-    data.documents.targetSeconds = Math.max(30, Math.min(180, Number(data.documents.targetSeconds) || 60));
-    data.automation.recoveryAutonomyMin = Math.max(2, Math.min(30, Number(data.automation.recoveryAutonomyMin) || 8));
-    data.automation.criticalAutonomyMin = Math.max(1, Math.min(data.automation.recoveryAutonomyMin, Number(data.automation.criticalAutonomyMin) || 3));
-
-    if (raw?.ai && raw.ai.localResourceMode === undefined) {
-      data.ai.localResourceMode = 'safe_streaming';
-      if (Number(raw.ai.localIdleMinutes) === 10) data.ai.localIdleMinutes = 5;
-    }
-
-    if (raw?.automation && Number(raw.automation.bufferReady) === 5 && Number(raw.automation.queueMax) === 12) {
-      data.automation.bufferReady = 15;
-      data.automation.queueMax = 30;
-    }
-    return data;
-  }
-
-  merge(base, extra) {
-    if (!extra || typeof extra !== 'object') return base;
-    const out = Array.isArray(base) ? [...extra] : { ...base };
-    for (const [k, v] of Object.entries(extra)) {
-      if (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) {
-        out[k] = this.merge(base[k], v);
-      } else out[k] = v;
-    }
-    return out;
-  }
-
-  save(settings) {
-    fs.mkdirSync(this.baseDir, { recursive: true });
-    const tmp = `${this.file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
-    if (fs.existsSync(this.file)) {
-      try { fs.copyFileSync(this.file, this.backupFile); } catch {}
-    }
-    try {
-      fs.renameSync(tmp, this.file);
-    } catch {
-      fs.copyFileSync(tmp, this.file);
-      try { fs.rmSync(tmp, { force: true }); } catch {}
-    }
-  }
-
-  encryptSecret(value) {
-    if (!value) return '';
-    if (safeStorage.isEncryptionAvailable()) return safeStorage.encryptString(value).toString('base64');
-    return Buffer.from(value, 'utf8').toString('base64');
-  }
-
-  decryptSecret(value) {
-    if (!value) return '';
-    try {
-      const buf = Buffer.from(value, 'base64');
-      if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
-      return buf.toString('utf8');
-    } catch { return ''; }
-  }
+  merge(base,extra){if(!extra||typeof extra!=='object')return base;const out=Array.isArray(base)?[...extra]:{...base};for(const[k,v]of Object.entries(extra)){if(v&&typeof v==='object'&&!Array.isArray(v)&&base[k]&&typeof base[k]==='object'&&!Array.isArray(base[k]))out[k]=this.merge(base[k],v);else out[k]=v;}return out;}
+  save(settings){fs.mkdirSync(this.baseDir,{recursive:true});const tmp=`${this.file}.tmp`;fs.writeFileSync(tmp,JSON.stringify(settings,null,2),'utf8');if(fs.existsSync(this.file)){try{fs.copyFileSync(this.file,this.backupFile);}catch{}}try{fs.renameSync(tmp,this.file);}catch{fs.copyFileSync(tmp,this.file);try{fs.rmSync(tmp,{force:true});}catch{}}}
+  encryptSecret(value){if(!value)return'';if(safeStorage.isEncryptionAvailable())return safeStorage.encryptString(value).toString('base64');return Buffer.from(value,'utf8').toString('base64');}
+  decryptSecret(value){if(!value)return'';try{const buf=Buffer.from(value,'base64');if(safeStorage.isEncryptionAvailable())return safeStorage.decryptString(buf);return buf.toString('utf8');}catch{return'';}}
 }
-
-module.exports = { SettingsStore, DEFAULT_CLAUDE_MODEL };
+module.exports={SettingsStore,DEFAULT_CLAUDE_MODEL};
