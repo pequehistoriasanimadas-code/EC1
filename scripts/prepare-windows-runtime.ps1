@@ -60,7 +60,8 @@ $kokoroModel = Join-Path $kokoroDir 'kokoro-v1.0.int8.onnx'
 $voicesModel = Join-Path $kokoroDir 'voices-v1.0.bin'
 if (-not (Test-Path $kokoroModel)) { throw 'Modelo Kokoro no encontrado.' }
 if (-not (Test-Path $voicesModel)) { throw 'Archivo de voces Kokoro no encontrado.' }
-if ((Get-Item $kokoroModel).Length -lt 100MB) { throw 'Modelo Kokoro parece incompleto.' }
+# El modelo int8 oficial pesa ~88 MB; 80 MB detecta descargas truncadas sin rechazar el asset válido.
+if ((Get-Item $kokoroModel).Length -lt 80MB) { throw 'Modelo Kokoro parece incompleto.' }
 if ((Get-Item $voicesModel).Length -lt 1MB) { throw 'Archivo de voces Kokoro parece incompleto.' }
 Write-Host "Runtime listo: $($server.FullName)"
 Write-Host "llama.cpp fijado: $LlamaRelease"
