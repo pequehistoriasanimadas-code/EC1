@@ -1,5 +1,6 @@
 const fs=require('fs');
 const path=require('path');
+const os=require('os');
 const {spawn}=require('child_process');
 const {Readable}=require('stream');
 
@@ -8,9 +9,9 @@ const MODEL_NAME='Qwen3-8B-Q4_K_M.gguf';
 const MIN_MODEL_BYTES=4_000_000_000;
 
 const RESOURCE_PROFILES={
-  safe_streaming:{label:'Seguro para streaming',ctx:4096,gpuLayers:20,batch:256,ubatch:128,threads:6,parallel:1,prio:-1,poll:0,warmup:false},
-  balanced:{label:'Equilibrado',ctx:4096,gpuLayers:28,batch:512,ubatch:256,threads:8,parallel:1,prio:-1,poll:0,warmup:false},
-  performance:{label:'Máximo rendimiento',ctx:8192,gpuLayers:99,batch:512,ubatch:256,threads:12,parallel:1,prio:0,poll:50,warmup:true}
+  safe_streaming:{label:'Seguro para streaming',ctx:4096,gpuLayers:20,batch:192,ubatch:96,threadsMax:4,threadShare:.35,parallel:1,prio:-1,poll:0,warmup:false},
+  balanced:{label:'Equilibrado',ctx:4096,gpuLayers:28,batch:384,ubatch:192,threadsMax:6,threadShare:.50,parallel:1,prio:-1,poll:0,warmup:false},
+  performance:{label:'Máximo rendimiento',ctx:8192,gpuLayers:99,batch:512,ubatch:256,threadsMax:10,threadShare:.70,parallel:1,prio:0,poll:25,warmup:true}
 };
 
 function findRecursive(dir,filename){
@@ -21,6 +22,15 @@ function findRecursive(dir,filename){
     else if(e.name.toLowerCase()===filename.toLowerCase())return p;
   }
   return'';
+}
+function cpuBudget(profile){
+  const logical=Math.max(1,os.cpus()?.length||8);
+  const minimum=logical>=4?2:1;
+  const reserve=logical>=6?2:1;
+  const byShare=Math.max(minimum,Math.floor(logical*Math.max(.2,Math.min(.9,Number(profile.threadShare)||.35))));
+  const ceiling=Math.max(minimum,logical-reserve);
+  const threads=Math.max(1,Math.min(Number(profile.threadsMax)||4,byShare,ceiling));
+  return{logical,threads,reserved:Math.max(0,logical-threads)};
 }
 
 class LocalRuntime{
@@ -35,7 +45,11 @@ class LocalRuntime{
   }
   serverExe(){return findRecursive(this.runtimeDir,'llama-server.exe');}
   modelReady(){try{return fs.existsSync(this.modelPath)&&fs.statSync(this.modelPath).size>MIN_MODEL_BYTES;}catch{return false;}}
-  profile(){return RESOURCE_PROFILES[this.resourceMode]||RESOURCE_PROFILES.safe_streaming;}
+  profile(){
+    const base=RESOURCE_PROFILES[this.resourceMode]||RESOURCE_PROFILES.safe_streaming;
+    const budget=cpuBudget(base);
+    return{...base,threads:budget.threads,logicalCpus:budget.logical,reservedCpus:budget.reserved};
+  }
   configure(mode='safe_streaming'){
     const next=RESOURCE_PROFILES[mode]?mode:'safe_streaming';
     if(next===this.resourceMode)return;
@@ -48,7 +62,7 @@ class LocalRuntime{
     const p=this.profile();
     return{
       ok:!!this.serverExe(),runtime:!!this.serverExe(),model:this.modelReady(),running:!!this.server,downloading:!!this.downloadPromise,
-      resourceMode:this.resourceMode,profile:{label:p.label,ctx:p.ctx,gpuLayers:p.gpuLayers,threads:p.threads,batch:p.batch,ubatch:p.ubatch,parallel:p.parallel},
+      resourceMode:this.resourceMode,profile:{label:p.label,ctx:p.ctx,gpuLayers:p.gpuLayers,threads:p.threads,batch:p.batch,ubatch:p.ubatch,parallel:p.parallel,logicalCpus:p.logicalCpus,reservedCpus:p.reservedCpus},
       idleStopScheduled:!!this.idleTimer,idleStopInSec:this.idleDeadline?Math.max(0,Math.ceil((this.idleDeadline-Date.now())/1000)):0
     };
   }
@@ -76,7 +90,7 @@ class LocalRuntime{
       const tmp=this.modelPath+'.part';
       try{if(fs.existsSync(tmp))fs.rmSync(tmp,{force:true});}catch{}
       try{
-        const res=await fetch(MODEL_URL,{redirect:'follow',headers:{'user-agent':'EC-Automatic-News/0.3.11'},signal:AbortSignal.timeout(2*60*60*1000)});
+        const res=await fetch(MODEL_URL,{redirect:'follow',headers:{'user-agent':'EC-Automatic-News/0.3.12'},signal:AbortSignal.timeout(2*60*60*1000)});
         if(!res.ok)throw new Error(`Descarga Qwen HTTP ${res.status}`);
         if(!res.body)throw new Error('El servidor no devolvió datos del modelo Qwen');
         const total=Number(res.headers.get('content-length')||0);let done=0;
@@ -145,4 +159,4 @@ class LocalRuntime{
     const j=await r.json();return j?.choices?.[0]?.message?.content||'';
   }
 }
-module.exports={LocalRuntime,MODEL_URL,MODEL_NAME,RESOURCE_PROFILES};
+module.exports={LocalRuntime,MODEL_URL,MODEL_NAME,RESOURCE_PROFILES,cpuBudget};
