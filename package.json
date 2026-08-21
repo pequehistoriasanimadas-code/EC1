@@ -1,6 +1,6 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "EC Automatic News",
   "main": "src/main.js",
@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "cheerio": "1.1.2",
-    "fast-xml-parser": "5.10.1"
+    "fast-xml-parser": "5.10.1",
+    "mammoth": "1.10.0"
   },
   "devDependencies": {
     "electron": "43.4.0",
