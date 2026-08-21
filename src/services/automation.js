@@ -15,7 +15,7 @@ class AutomationEngine extends EventEmitter {
     this.processingRunning=false;this.processingPaused=false;this.processingNotice='';
     this.emissionRunning=false;this.emissionPaused=false;this.queue=[];this.queuedUrls=new Set();this.playbackResolve=null;
     this.currentItem=null;this.currentKind='none';this.currentCanned=null;this.cachedItems=[];this.lastFeedFetchAt=0;this.lastNoRssAt=0;
-    this.processingEpoch=0;this.emissionEpoch=0;this.inFlight=new Set();this.localHeavyTail=Promise.resolve();
+    this.processingEpoch=0;this.emissionEpoch=0;this.inFlight=new Set();this.localHeavyTail=Promise.resolve();this.localHeavyRunning=false;
     this.documentWorkerRunning=false;this.documentWorkerPromise=null;
     this.newsEmitted=0;this.cannedPlayed=0;this.adsPlayed=0;this.scheduledNewsTotal=0;this.lastScheduledCannedAt=-1;
     this.cannedRequested=false;this.cannedUnavailableUntil=0;this.adsUnavailableUntil=0;this.emissionHistory=[];
@@ -78,7 +78,7 @@ class AutomationEngine extends EventEmitter {
     const settings=this.getSettings()||{},target=Math.max(1,Math.min(30,Number(settings.automation?.bufferReady)||15)),interval=Math.max(0,Math.min(999,Number(settings.canned?.interval)||0));
     const cannedEnabled=!!settings.canned?.enabled,progress=this.scheduledProgress(interval),adsFolder=String(settings.canned?.adsFolder||'').trim(),insertAd=settings.canned?.insertAdAfterContent!==false,health=this.bufferHealth(settings);
     return{
-      processing:{running:this.processingRunning,paused:this.processingPaused,pipelineWorkers:this.inFlight.size,message:this.processingNotice},
+      processing:{running:this.processingRunning,paused:this.processingPaused,pipelineWorkers:this.inFlight.size,message:this.processingNotice,localHeavy:this.localHeavyRunning},
       emission:{running:this.emissionRunning,paused:this.emissionPaused,currentTitle:this.currentItem?.story?.title||this.currentCanned?.name||'',currentKind:this.currentKind},
       counts,session:{newsEmitted:this.newsEmitted,cannedEmitted:this.cannedPlayed,adsEmitted:this.adsPlayed},
       buffer:{target,ready:counts.ready,autonomyMin:health.minutes,autonomySec:health.seconds,health:health.level,recoveryMin:health.recoveryMin,criticalMin:health.criticalMin},
@@ -117,7 +117,7 @@ class AutomationEngine extends EventEmitter {
     this.queue.push(holder);this.state({notice:`Nota agregada al Generador: ${holder.story.title}`});this.kickDocumentWorker();return{id,status:holder.status,title:holder.story.title};
   }
   documentCanRun(item){
-    if(!item)return false;if(this.inFlight.size>0)return false;if(item.priority==='high')return true;
+    if(!item)return false;if(this.inFlight.size>0||this.localHeavyRunning)return false;if(item.priority==='high')return true;
     const s=this.getSettings()||{},health=this.bufferHealth(s);
     if(!this.processingRunning||this.processingPaused)return true;
     if(health.level==='safe'||health.ready>=Math.max(1,Number(s.automation?.bufferReady)||15))return true;
@@ -133,20 +133,23 @@ class AutomationEngine extends EventEmitter {
       try{await this.processDocument(item);item.status='LISTA';item.stage='ready';item.error='';}
       catch(e){item.status='ERROR';item.stage='error';item.error=e.message||String(e);item.attempts=e.details||item.attempts||[];this.emit('error-item',{title:item.story.title,error:item.error,details:item.attempts,stage:item.stage});}
       finally{this.documentWorkerRunning=false;this.state();}
-      await wait(120);
+      await wait(180);
     }
   }
   async processDocument(holder){
     const s=this.getSettings()||{},doc=holder.document||{};holder.stage='ai';this.state();
     const ai=await this.providers.generateDocument(doc,s,{targetSeconds:doc.targetSeconds||s.documents?.targetSeconds||60,category:doc.category||''});
     holder.provider=ai.provider;holder.model=ai.model;holder.attempts=ai.attempts||[];holder.metrics=ai.metrics||null;
-    holder.stage='pronunciation';this.state();
-    const spoken=locutionSource(ai.result.title||holder.story.title,ai.result.script);let locution={text:spoken,elapsedMs:0,smartUsed:false,smartFailed:false};
-    if(this.pronunciation)locution=await this.pronunciation.normalize(spoken,{smart:s.tts?.pronunciationSmart!==false});
-    holder.metrics={...(holder.metrics||{}),pronunciationElapsedMs:locution.elapsedMs||0,pronunciationSmart:!!locution.smartUsed,pronunciationSmartFailed:!!locution.smartFailed,pronunciationClaude:!!locution.claudeUsed,pronunciationLearned:locution.learnedCount||0};
-    holder.stage='tts';this.state();const audio=await this.kokoro.generate(locution.text,{voice:s.tts.voice,speed:s.tts.speed});
-    holder.metrics={...(holder.metrics||{}),ttsElapsedMs:audio.elapsedMs||0,ttsThreads:audio.threads||2,audioDurationSec:audio.durationSec||0,ttsRealtimeFactor:audio.realtimeFactor||0,ttsProfile:audio.performanceLabel||audio.performanceProfile||'',ttsPersistent:!!audio.persistent,ttsWorkerStartupMs:audio.workerStartupMs||0};
-    holder.result={...ai.result,category:ai.result.category||doc.category||'ACTUALIDAD',ttsScript:locution.text};holder.audio=audio;holder.image=doc.imageUrl||this.getFallbackUrl();holder.fallback=this.getFallbackUrl();
+    const local=await this.runLocalHeavy(async()=>{
+      holder.stage='pronunciation';this.state();
+      const spoken=locutionSource(ai.result.title||holder.story.title,ai.result.script);let locution={text:spoken,elapsedMs:0,smartUsed:false,smartFailed:false};
+      if(this.pronunciation)locution=await this.pronunciation.normalize(spoken,{smart:s.tts?.pronunciationSmart!==false});
+      holder.metrics={...(holder.metrics||{}),pronunciationElapsedMs:locution.elapsedMs||0,pronunciationSmart:!!locution.smartUsed,pronunciationSmartFailed:!!locution.smartFailed,pronunciationClaude:!!locution.claudeUsed,pronunciationLearned:locution.learnedCount||0};
+      holder.stage='tts';this.state();const audio=await this.kokoro.generate(locution.text,{voice:s.tts.voice,speed:s.tts.speed});
+      holder.metrics={...(holder.metrics||{}),ttsElapsedMs:audio.elapsedMs||0,ttsThreads:audio.threads||2,audioDurationSec:audio.durationSec||0,ttsRealtimeFactor:audio.realtimeFactor||0,ttsProfile:audio.performanceLabel||audio.performanceProfile||'',ttsPersistent:!!audio.persistent,ttsWorkerStartupMs:audio.workerStartupMs||0};
+      return{locution,audio};
+    });
+    holder.result={...ai.result,category:ai.result.category||doc.category||'ACTUALIDAD',ttsScript:local.locution.text};holder.audio=local.audio;holder.image=doc.imageUrl||this.getFallbackUrl();holder.fallback=this.getFallbackUrl();
     holder.story={...holder.story,title:holder.result.title||holder.story.title,category:holder.result.category||holder.story.category,pubDate:doc.pubDate||holder.story.pubDate};
   }
 
@@ -155,7 +158,10 @@ class AutomationEngine extends EventEmitter {
     return items.find(x=>{if(!x?.link||this.queuedUrls.has(x.link))return false;if(s.automation.avoidRepeats&&this.history.has(x.link))return false;const t=Date.parse(x.pubDate||'');if(t&&t>now+10*60000)return false;if(t&&now-t>maxAge)return false;return true;});
   }
   async refreshFeedCache(s,force=false){const interval=Math.max(15000,(s.automation.updateMinutes||2)*60000);if(!force&&this.cachedItems.length&&Date.now()-this.lastFeedFetchAt<interval)return;const {items,errors,feedStatus}=await this.rss.loadAll(s.rssFeeds);this.cachedItems=items;this.lastFeedFetchAt=Date.now();this.state({rssErrors:errors,feedStatus});}
-  runLocalHeavy(fn){const task=this.localHeavyTail.then(fn,fn);this.localHeavyTail=task.catch(()=>{});return task;}
+  runLocalHeavy(fn){
+    const wrapped=async()=>{this.localHeavyRunning=true;this.state();try{return await fn();}finally{this.localHeavyRunning=false;this.state();}};
+    const task=this.localHeavyTail.then(wrapped,wrapped);this.localHeavyTail=task.catch(()=>{});return task;
+  }
 
   launchCandidate(candidate,s,epoch){
     this.queuedUrls.add(candidate.link);const holder={id:`rss-${Date.now()}-${Math.random().toString(16).slice(2)}`,sourceType:'rss',story:candidate,status:'PROCESANDO',attempts:[],metrics:null,stage:'article',outputRetries:0};this.queue.push(holder);this.state();
@@ -165,7 +171,9 @@ class AutomationEngine extends EventEmitter {
   async producer(epoch){
     while(this.processingRunning&&epoch===this.processingEpoch){
       try{
-        if(this.processingPaused){await wait(400);continue;}const s=this.getSettings(),target=Math.max(1,Math.min(30,Number(s.automation.bufferReady)||15)),readyCount=this.readyItems().length,workers=s.ai.primary==='local'?1:2,availableSlots=Math.max(0,target-readyCount),allowedWorkers=Math.min(workers,availableSlots);
+        if(this.processingPaused){await wait(400);continue;}
+        if(this.documentWorkerRunning){this.processingNotice='Generador de Notas trabajando; se reserva CPU antes de preparar otra noticia.';await wait(300);continue;}
+        const s=this.getSettings(),target=Math.max(1,Math.min(30,Number(s.automation.bufferReady)||15)),readyCount=this.readyItems().length,workers=s.ai.primary==='local'?1:2,availableSlots=Math.max(0,target-readyCount),allowedWorkers=Math.min(workers,availableSlots);
         if(readyCount>=target||allowedWorkers<=0||this.inFlight.size>=allowedWorkers){this.processingNotice=readyCount>=target?`Reserva lista: ${readyCount}/${target} noticias preparadas.`:`Preparando reserva: ${readyCount}/${target} listas.`;this.kickDocumentWorker();await wait(350);continue;}
         const maxQueue=Math.max(target,Math.min(60,Number(s.automation.queueMax)||30)),activeCount=this.queue.filter(x=>!x.history&&!['EMITIDA'].includes(x.status)).length;
         if(activeCount>=maxQueue){const remove=this.queue.find(x=>x.status==='ERROR');if(remove)this.removeItem(remove);else{await wait(700);continue;}}
