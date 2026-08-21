@@ -50,43 +50,16 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows UI and bridge self-test
+      - name: Windows packaged UI, bridge, Output and Kokoro smoke test
         shell: powershell
+        timeout-minutes: 8
         run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
           if (-not (Test-Path $exe)) { throw "No existe $exe" }
-
-          $dataDir = Join-Path (Split-Path $exe -Parent) 'EC Automatic News Data'
-          $log = Join-Path $dataDir 'logs\startup.log'
-          $p = Start-Process -FilePath $exe -ArgumentList '--self-test' -PassThru
-          $deadline = (Get-Date).AddMinutes(6)
-          $ok = $false
-
-          while ((Get-Date) -lt $deadline) {
-            if (Test-Path $log) {
-              $tail = Get-Content $log -Raw -ErrorAction SilentlyContinue
-              if ($tail -match 'SELF_TEST: OK') { $ok = $true; break }
-            }
-            if ($p.HasExited) { break }
-            Start-Sleep -Seconds 2
-            $p.Refresh()
-          }
-
-          if (-not $p.HasExited) {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          }
-
-          if (Test-Path $log) {
-            Write-Host '----- startup.log -----'
-            Get-Content $log -Tail 200
-            Write-Host '-----------------------'
-          }
-
-          if (-not $ok) {
-            $exit = if ($p.HasExited) { $p.ExitCode } else { 'timeout' }
-            throw "Self-test no confirmó SELF_TEST: OK (resultado: $exit)"
-          }
-          Write-Host 'SELF-TEST OK'
+          if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'No existe app.asar empaquetado' }
+          npx electron scripts/packaged-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
 
       - name: Upload portable folder
         uses: actions/upload-artifact@v4
