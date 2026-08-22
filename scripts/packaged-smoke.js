@@ -9,7 +9,7 @@ const appRoot=path.join(resourcesDir,'app.asar');
 const preload=path.join(appRoot,'src','preload.js');
 const controlHtml=path.join(appRoot,'src','control.html');
 const outputHtml=path.join(appRoot,'src','output.html');
-const tempDir=path.join(os.tmpdir(),`ec-0312-smoke-${process.pid}`);
+const tempDir=path.join(os.tmpdir(),`ec-0314-smoke-${process.pid}`);
 
 function assert(ok,message){if(!ok)throw new Error(message);}
 function handle(channel,fn){ipcMain.handle(channel,async(...args)=>fn(...args));}
@@ -19,7 +19,7 @@ function automationState(){return{processing:{running:false,paused:false,message
 
 app.whenReady().then(async()=>{
   fs.mkdirSync(tempDir,{recursive:true});
-  let kokoro=null,control=null,output=null;
+  let kokoro=null,control=null,output=null,oldPythonPath=process.env.PYTHONPATH;
   try{
     for(const p of [appRoot,preload,controlHtml,outputHtml])assert(fs.existsSync(p),`Recurso empaquetado ausente: ${p}`);
     const {SettingsStore,DEFAULT_CLAUDE_MODEL}=require(path.join(appRoot,'src','services','settings.js'));
@@ -47,8 +47,13 @@ app.whenReady().then(async()=>{
 
     const pron=new PronunciationNormalizer({resourcesDir,dataDir:tempDir,getSettings:()=>({tts:{pronunciationMaxSeconds:15,pronunciationClaudeVerify:false}})});const normalized=pron.basic('Apple TV informó un avance de 25% y S/900 millones.');assert(/ápol te uve/i.test(normalized)&&/25 por ciento/i.test(normalized)&&/900 millones de soles/i.test(normalized),'Normalizador empaquetado falló');assert(pron.candidates('Élysée recibió a Donald Trump.').some(x=>x.term==='Élysée'),'Detector Unicode empaquetado falló');
 
-    kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});assert(kokoro.ready(),'Kokoro empaquetado incompleto');const voices=await kokoro.listVoices();assert(voices.length>0,'Kokoro no listó voces reales');const sample1=await kokoro.generate('Prueba breve de voz número uno.',{voice:voices.includes('ef_dora')?'ef_dora':voices[0],speed:1});assert(sample1.path&&fs.existsSync(sample1.path)&&fs.statSync(sample1.path).size>1000,'Kokoro no generó el primer WAV real');assert(sample1.persistent===true,'Kokoro empaquetado no usó el trabajador persistente');const workerPid=kokoro.worker?.pid||0;const sample2=await kokoro.generate('Prueba breve de voz número dos.',{voice:voices.includes('ef_dora')?'ef_dora':voices[0],speed:1});assert(sample2.path&&fs.existsSync(sample2.path)&&fs.statSync(sample2.path).size>1000,'Kokoro no generó el segundo WAV real');assert(workerPid&&kokoro.worker?.pid===workerPid,'Kokoro recargó el trabajador entre notas');kokoro.cleanupAudio(sample1.path);kokoro.cleanupAudio(sample2.path);kokoro.stop('smoke');kokoro=null;
+    kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});assert(kokoro.ready(),'Kokoro empaquetado incompleto');const voices=await kokoro.listVoices();assert(voices.length>0,'Kokoro no listó voces reales');const selectedVoice=voices.includes('ef_dora')?'ef_dora':voices[0];const sample1=await kokoro.generate('Prueba breve de voz número uno.',{voice:selectedVoice,speed:1});assert(sample1.path&&fs.existsSync(sample1.path)&&fs.statSync(sample1.path).size>1000,'Kokoro no generó el primer WAV real');assert(sample1.persistent===true,'Kokoro empaquetado no usó el trabajador persistente');const workerPid=kokoro.worker?.pid||0;const sample2=await kokoro.generate('Prueba breve de voz número dos.',{voice:selectedVoice,speed:1});assert(sample2.path&&fs.existsSync(sample2.path)&&fs.statSync(sample2.path).size>1000,'Kokoro no generó el segundo WAV real');assert(workerPid&&kokoro.worker?.pid===workerPid,'Kokoro recargó el trabajador entre notas');kokoro.cleanupAudio(sample1.path);kokoro.cleanupAudio(sample2.path);kokoro.stop('smoke-relocation');kokoro=null;
 
-    control.destroy();control=null;output.destroy();output=null;console.log(`PACKAGED SMOKE 0.3.12 OK · bridge · Generador TXT · fecha independiente · Output · normalizador · Kokoro persistente real · voces=${voices.length}`);fs.rmSync(tempDir,{recursive:true,force:true});app.exit(0);
-  }catch(e){console.error(e.stack||e);try{kokoro?.stop('smoke-error');}catch{}try{control?.destroy();output?.destroy();}catch{}try{fs.rmSync(tempDir,{recursive:true,force:true});}catch{}app.exit(1);}
+    // Simula renombrar/mover la carpeta: eSpeak se importa desde otra ruta con espacios,
+    // mientras el resto del runtime sigue empaquetado. Si hubiera quedado una ruta D:/a/...
+    // de compilación, esta síntesis real falla al leer phontab.
+    const loaderSrc=path.join(resourcesDir,'runtime','python','Lib','site-packages','espeakng_loader');assert(fs.existsSync(loaderSrc),'espeakng_loader no está incluido en Python portable');const relocatedSite=path.join(tempDir,'EC Automatic News Movido','Lib','site-packages'),loaderDst=path.join(relocatedSite,'espeakng_loader');fs.mkdirSync(relocatedSite,{recursive:true});fs.cpSync(loaderSrc,loaderDst,{recursive:true});process.env.PYTHONPATH=relocatedSite+(oldPythonPath?`${path.delimiter}${oldPythonPath}`:'');kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});const movedSample=await kokoro.generate('Prueba de voz después de mover la carpeta portable.',{voice:selectedVoice,speed:1});assert(movedSample.path&&fs.existsSync(movedSample.path)&&fs.statSync(movedSample.path).size>1000,'eSpeak/Kokoro falló al resolver datos desde una carpeta movida');kokoro.cleanupAudio(movedSample.path);kokoro.stop('smoke');kokoro=null;process.env.PYTHONPATH=oldPythonPath;
+
+    control.destroy();control=null;output.destroy();output=null;console.log(`PACKAGED SMOKE 0.3.14 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · eSpeak relocatable · voces=${voices.length}`);fs.rmSync(tempDir,{recursive:true,force:true});app.exit(0);
+  }catch(e){console.error(e.stack||e);try{kokoro?.stop('smoke-error');}catch{}try{control?.destroy();output?.destroy();}catch{}if(oldPythonPath===undefined)delete process.env.PYTHONPATH;else process.env.PYTHONPATH=oldPythonPath;try{fs.rmSync(tempDir,{recursive:true,force:true});}catch{}app.exit(1);}
 });
