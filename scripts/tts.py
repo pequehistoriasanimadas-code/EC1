@@ -1,4 +1,5 @@
-import argparse, json, re, sys, time
+import argparse, json, os, re, sys, time
+from pathlib import Path
 import numpy as np
 import soundfile as sf
 
@@ -41,16 +42,31 @@ def _limited_inference_session(path_or_bytes, sess_options=None, providers=None,
 
 ort.InferenceSession=_limited_inference_session
 
-# Resuelve eSpeak desde la ubicación ACTUAL del runtime portable. Estas rutas se
-# fijan una sola vez al arrancar el worker y el mismo G2P se reutiliza entre notas.
+# eSpeak portable en Windows:
+# 1) la ruta Python absoluta sigue siendo la principal;
+# 2) además dejamos el proceso dentro de la carpeta del loader y usamos
+#    ESPEAK_DATA_PATH='.' como fallback nativo. Esto evita que libespeak-ng
+#    caiga en la ruta de compilación D:/a/... cuando la ruta real del Portable
+#    es larga, temporal o contiene caracteres que la API C de Windows no lee bien.
 import espeakng_loader
-from phonemizer.backend.espeak.wrapper import EspeakWrapper
+_ESPEAK_LIBRARY=str(Path(espeakng_loader.get_library_path()).resolve())
+_ESPEAK_DATA=str(Path(espeakng_loader.get_data_path()).resolve())
+_ESPEAK_ROOT=str(Path(_ESPEAK_DATA).parent.resolve())
+_ESPEAK_PHONTAB=str(Path(_ESPEAK_DATA)/'phontab')
+if not Path(_ESPEAK_LIBRARY).is_file():
+    raise RuntimeError(f'eSpeak DLL no encontrada: {_ESPEAK_LIBRARY}')
+if not Path(_ESPEAK_PHONTAB).is_file():
+    raise RuntimeError(f'eSpeak phontab no encontrado: {_ESPEAK_PHONTAB}')
 try:
     espeakng_loader.make_library_available()
 except Exception:
     pass
-_ESPEAK_LIBRARY=str(espeakng_loader.get_library_path())
-_ESPEAK_DATA=str(espeakng_loader.get_data_path())
+os.environ['PHONEMIZER_ESPEAK_LIBRARY']=_ESPEAK_LIBRARY
+os.environ['PHONEMIZER_ESPEAK_DATA_PATH']=_ESPEAK_DATA
+os.environ['ESPEAK_DATA_PATH']='.'
+os.chdir(_ESPEAK_ROOT)
+
+from phonemizer.backend.espeak.wrapper import EspeakWrapper
 EspeakWrapper.set_library(_ESPEAK_LIBRARY)
 EspeakWrapper.set_data_path(_ESPEAK_DATA)
 
@@ -80,6 +96,9 @@ def load_engine():
     styles=np.load(a.voices)
     voices=list(styles.files)
     g2p=EspeakG2P(language='es')
+    probe,_=g2p('prueba')
+    if not str(probe or '').strip():
+        raise RuntimeError('eSpeak no devolvió fonemas en la prueba de inicio')
     kokoro=Kokoro(a.model,a.voices)
     return styles,voices,g2p,kokoro
 
@@ -112,9 +131,9 @@ def emit_worker(payload):
 if a.worker:
     try:
         engine=load_engine()
-        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),'espeak_data':_ESPEAK_DATA})
+        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),'espeak_data':_ESPEAK_DATA,'espeak_cwd':os.getcwd(),'espeak_phontab':_ESPEAK_PHONTAB})
     except Exception as e:
-        emit_worker({'type':'ready','ok':False,'error':str(e)})
+        emit_worker({'type':'ready','ok':False,'error':str(e),'espeak_data':_ESPEAK_DATA,'espeak_cwd':os.getcwd()})
         sys.exit(2)
     for raw in sys.stdin:
         raw=raw.strip()
