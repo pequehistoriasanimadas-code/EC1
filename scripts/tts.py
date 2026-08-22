@@ -1,4 +1,4 @@
-import argparse, json, os, re, sys, time
+import argparse, hashlib, json, os, re, shutil, sys, tempfile, time
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -42,29 +42,83 @@ def _limited_inference_session(path_or_bytes, sess_options=None, providers=None,
 
 ort.InferenceSession=_limited_inference_session
 
-# eSpeak portable en Windows:
-# 1) la ruta Python absoluta sigue siendo la principal;
-# 2) además dejamos el proceso dentro de la carpeta del loader y usamos
-#    ESPEAK_DATA_PATH='.' como fallback nativo. Esto evita que libespeak-ng
-#    caiga en la ruta de compilación D:/a/... cuando la ruta real del Portable
-#    es larga, temporal o contiene caracteres que la API C de Windows no lee bien.
+# eSpeak portable en Windows.
+# Misaki vuelve a pedir las rutas a espeakng_loader durante su importación, por
+# lo que no basta con configurar EspeakWrapper una vez. EC prepara una copia
+# corta/controlada del DLL + espeak-ng-data y parchea los getters del loader
+# antes de importar Misaki. Así cualquier inicialización posterior recibe las
+# mismas rutas válidas aunque el Portable haya sido movido o renombrado.
 import espeakng_loader
-_ESPEAK_LIBRARY=str(Path(espeakng_loader.get_library_path()).resolve())
-_ESPEAK_DATA=str(Path(espeakng_loader.get_data_path()).resolve())
-_ESPEAK_ROOT=str(Path(_ESPEAK_DATA).parent.resolve())
-_ESPEAK_PHONTAB=str(Path(_ESPEAK_DATA)/'phontab')
-if not Path(_ESPEAK_LIBRARY).is_file():
-    raise RuntimeError(f'eSpeak DLL no encontrada: {_ESPEAK_LIBRARY}')
-if not Path(_ESPEAK_PHONTAB).is_file():
-    raise RuntimeError(f'eSpeak phontab no encontrado: {_ESPEAK_PHONTAB}')
-try:
-    espeakng_loader.make_library_available()
-except Exception:
-    pass
+_SOURCE_LIBRARY=Path(espeakng_loader.get_library_path()).resolve()
+_SOURCE_DATA=Path(espeakng_loader.get_data_path()).resolve()
+_SOURCE_PHONTAB=_SOURCE_DATA/'phontab'
+if not _SOURCE_LIBRARY.is_file():
+    raise RuntimeError(f'eSpeak DLL no encontrada: {_SOURCE_LIBRARY}')
+if not _SOURCE_PHONTAB.is_file():
+    raise RuntimeError(f'eSpeak phontab no encontrado: {_SOURCE_PHONTAB}')
+
+def _short_windows_path(value):
+    value=str(value)
+    if os.name!='nt':
+        return value
+    try:
+        import ctypes
+        size=ctypes.windll.kernel32.GetShortPathNameW(value,None,0)
+        if size:
+            buf=ctypes.create_unicode_buffer(size+1)
+            if ctypes.windll.kernel32.GetShortPathNameW(value,buf,len(buf)):
+                return buf.value
+    except Exception:
+        pass
+    return value
+
+def _prepare_espeak_runtime():
+    fingerprint=hashlib.sha1(f'{_SOURCE_LIBRARY.stat().st_size}:{_SOURCE_PHONTAB.stat().st_size}:{int(_SOURCE_PHONTAB.stat().st_mtime)}'.encode()).hexdigest()[:12]
+    bases=[Path(tempfile.gettempdir())/'EC-ESpeak-Runtime']
+    system_root=os.environ.get('SystemRoot','').strip()
+    if system_root:
+        bases.append(Path(system_root)/'Temp'/'EC-ESpeak-Runtime')
+    last_error=None
+    for base in bases:
+        try:
+            target=base/fingerprint
+            lib=target/'espeak-ng.dll'
+            data=target/'espeak-ng-data'
+            phontab=data/'phontab'
+            target.mkdir(parents=True,exist_ok=True)
+            probe=target/'.write-test'
+            probe.write_text('ok',encoding='ascii')
+            probe.unlink(missing_ok=True)
+            if not lib.is_file():
+                shutil.copy2(_SOURCE_LIBRARY,lib)
+            if not phontab.is_file():
+                if data.exists():
+                    shutil.rmtree(data,ignore_errors=True)
+                shutil.copytree(_SOURCE_DATA,data)
+            if lib.is_file() and phontab.is_file():
+                return Path(_short_windows_path(lib)),Path(_short_windows_path(data))
+        except Exception as e:
+            last_error=e
+    raise RuntimeError(f'No se pudo preparar eSpeak portable: {last_error or "ruta temporal no disponible"}')
+
+_ESPEAK_LIBRARY_PATH,_ESPEAK_DATA_PATH=_prepare_espeak_runtime()
+_ESPEAK_LIBRARY=str(_ESPEAK_LIBRARY_PATH)
+_ESPEAK_DATA=str(_ESPEAK_DATA_PATH)
+_ESPEAK_PHONTAB=str(_ESPEAK_DATA_PATH/'phontab')
+if os.name=='nt':
+    try:
+        os.add_dll_directory(str(_ESPEAK_LIBRARY_PATH.parent))
+    except Exception:
+        pass
 os.environ['PHONEMIZER_ESPEAK_LIBRARY']=_ESPEAK_LIBRARY
 os.environ['PHONEMIZER_ESPEAK_DATA_PATH']=_ESPEAK_DATA
-os.environ['ESPEAK_DATA_PATH']='.'
-os.chdir(_ESPEAK_ROOT)
+os.environ['ESPEAK_DATA_PATH']=_ESPEAK_DATA
+
+# Crítico: misaki.espeak ejecuta EspeakWrapper.set_* usando estos getters al
+# importarse. Los apuntamos al runtime preparado para impedir que vuelva a la
+# ruta original o a la ruta de compilación D:/a/....
+espeakng_loader.get_library_path=lambda: _ESPEAK_LIBRARY
+espeakng_loader.get_data_path=lambda: _ESPEAK_DATA
 
 from phonemizer.backend.espeak.wrapper import EspeakWrapper
 EspeakWrapper.set_library(_ESPEAK_LIBRARY)
@@ -72,6 +126,11 @@ EspeakWrapper.set_data_path(_ESPEAK_DATA)
 
 from kokoro_onnx import Kokoro
 from misaki.espeak import EspeakG2P
+
+# Misaki puede haber configurado de nuevo el wrapper durante el import; fijamos
+# una última vez las rutas controladas antes de crear cualquier G2P.
+EspeakWrapper.set_library(_ESPEAK_LIBRARY)
+EspeakWrapper.set_data_path(_ESPEAK_DATA)
 
 def _currency_phrase(amount, scale, currency):
     scale=(scale or '').strip()
@@ -92,18 +151,30 @@ def normalize_currency(text):
     text=re.sub(r'(\d+(?:[.,]\d+)?)\s+dólares\s+(mil|miles)',lambda m:f'{m.group(1)} {m.group(2)} dólares',text,flags=re.I)
     return text
 
+def _available_languages():
+    wrapper=EspeakWrapper()
+    langs=sorted({str(getattr(v,'language','') or '').lower() for v in wrapper.available_voices() if getattr(v,'language','')})
+    return langs
+
+def _has_spanish(langs):
+    return any(x=='es' or x.startswith('es-') for x in langs)
+
 def load_engine():
     styles=np.load(a.voices)
     voices=list(styles.files)
+    languages=_available_languages()
+    if not _has_spanish(languages):
+        sample=', '.join(languages[:18]) or 'ninguno'
+        raise RuntimeError(f'eSpeak inició pero no cargó el idioma español. Idiomas detectados: {sample}')
     g2p=EspeakG2P(language='es')
-    probe,_=g2p('prueba')
+    probe,_=g2p('prueba en español')
     if not str(probe or '').strip():
-        raise RuntimeError('eSpeak no devolvió fonemas en la prueba de inicio')
+        raise RuntimeError('eSpeak no devolvió fonemas en la prueba de español')
     kokoro=Kokoro(a.model,a.voices)
-    return styles,voices,g2p,kokoro
+    return styles,voices,g2p,kokoro,languages
 
 def synthesize(text_file,output,voice,speed,engine):
-    styles,voices,g2p,kokoro=engine
+    styles,voices,g2p,kokoro,_languages=engine
     with open(text_file,'r',encoding='utf-8') as f:
         text=f.read().strip()
     if not text:
@@ -131,9 +202,9 @@ def emit_worker(payload):
 if a.worker:
     try:
         engine=load_engine()
-        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),'espeak_data':_ESPEAK_DATA,'espeak_cwd':os.getcwd(),'espeak_phontab':_ESPEAK_PHONTAB})
+        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':True,'languages':engine[4]})
     except Exception as e:
-        emit_worker({'type':'ready','ok':False,'error':str(e),'espeak_data':_ESPEAK_DATA,'espeak_cwd':os.getcwd()})
+        emit_worker({'type':'ready','ok':False,'error':str(e),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':False})
         sys.exit(2)
     for raw in sys.stdin:
         raw=raw.strip()
@@ -145,7 +216,7 @@ if a.worker:
             if cmd=='stop':
                 emit_worker({'id':req_id,'ok':True,'stopped':True});break
             if cmd=='ping':
-                emit_worker({'id':req_id,'ok':True,'pong':True});continue
+                emit_worker({'id':req_id,'ok':True,'pong':True,'es_supported':True,'espeak_data':_ESPEAK_DATA});continue
             if cmd!='generate':
                 raise ValueError('Comando no reconocido')
             result=synthesize(req.get('text_file',''),req.get('output',''),req.get('voice','ef_dora'),req.get('speed',1.0),engine)
