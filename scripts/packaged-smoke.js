@@ -14,6 +14,17 @@ const tempDir=path.join(os.tmpdir(),`ec-0314-smoke-${process.pid}`);
 function assert(ok,message){if(!ok)throw new Error(message);}
 function handle(channel,fn){ipcMain.handle(channel,async(...args)=>fn(...args));}
 function securePrefs(extra={}){return{preload,contextIsolation:true,nodeIntegration:false,sandbox:true,...extra};}
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+async function cleanupTempBestEffort(dir){
+  if(!dir||!fs.existsSync(dir))return true;
+  let lastError=null;
+  for(let attempt=0;attempt<6;attempt++){
+    try{fs.rmSync(dir,{recursive:true,force:true,maxRetries:2,retryDelay:120});return true;}
+    catch(e){lastError=e;await delay(150*(attempt+1));}
+  }
+  console.warn(`SMOKE CLEANUP WARNING · no se pudo borrar ${dir}: ${lastError?.message||lastError}`);
+  return false;
+}
 async function waitForJs(win,expression,timeoutMs=20000){const started=Date.now();let lastError='';while(Date.now()-started<timeoutMs){try{if(await win.webContents.executeJavaScript(`Boolean(${expression})`))return;}catch(e){lastError=e.message||String(e);}await new Promise(r=>setTimeout(r,200));}throw new Error(`Timeout esperando ${expression}${lastError?` · ${lastError}`:''}`);}
 function automationState(){return{processing:{running:false,paused:false,message:'Smoke test: preparación detenida.'},emission:{running:false,paused:false,currentKind:'',currentTitle:''},counts:{ready:0,processing:0,pending:0,error:0,total:0},buffer:{target:15,autonomyMin:0,health:'critical'},canned:{enabled:true,available:0,nextIn:10,due:false},ads:{enabled:true,available:0},documents:{pending:0,processing:false},session:{newsEmitted:0,cannedEmitted:0,adsEmitted:0},queue:[]};}
 
@@ -54,6 +65,10 @@ app.whenReady().then(async()=>{
     // de compilación, esta síntesis real falla al leer phontab.
     const loaderSrc=path.join(resourcesDir,'runtime','python','Lib','site-packages','espeakng_loader');assert(fs.existsSync(loaderSrc),'espeakng_loader no está incluido en Python portable');const relocatedSite=path.join(tempDir,'EC Automatic News Movido','Lib','site-packages'),loaderDst=path.join(relocatedSite,'espeakng_loader');fs.mkdirSync(relocatedSite,{recursive:true});fs.cpSync(loaderSrc,loaderDst,{recursive:true});process.env.PYTHONPATH=relocatedSite+(oldPythonPath?`${path.delimiter}${oldPythonPath}`:'');kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});const movedSample=await kokoro.generate('Prueba de voz después de mover la carpeta portable.',{voice:selectedVoice,speed:1});assert(movedSample.path&&fs.existsSync(movedSample.path)&&fs.statSync(movedSample.path).size>1000,'eSpeak/Kokoro falló al resolver datos desde una carpeta movida');kokoro.cleanupAudio(movedSample.path);kokoro.stop('smoke');kokoro=null;process.env.PYTHONPATH=oldPythonPath;
 
-    control.destroy();control=null;output.destroy();output=null;console.log(`PACKAGED SMOKE 0.3.14 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · eSpeak relocatable · voces=${voices.length}`);fs.rmSync(tempDir,{recursive:true,force:true});app.exit(0);
-  }catch(e){console.error(e.stack||e);try{kokoro?.stop('smoke-error');}catch{}try{control?.destroy();output?.destroy();}catch{}if(oldPythonPath===undefined)delete process.env.PYTHONPATH;else process.env.PYTHONPATH=oldPythonPath;try{fs.rmSync(tempDir,{recursive:true,force:true});}catch{}app.exit(1);}
+    control.destroy();control=null;output.destroy();output=null;
+    // En Windows el worker de Python puede tardar unos milisegundos en liberar DLL/WAV.
+    // La limpieza del directorio temporal no forma parte de la validación funcional.
+    await delay(350);await cleanupTempBestEffort(tempDir);
+    console.log(`PACKAGED SMOKE 0.3.14 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · eSpeak relocatable · voces=${voices.length}`);app.exit(0);
+  }catch(e){console.error(e.stack||e);try{kokoro?.stop('smoke-error');}catch{}try{control?.destroy();output?.destroy();}catch{}if(oldPythonPath===undefined)delete process.env.PYTHONPATH;else process.env.PYTHONPATH=oldPythonPath;await delay(250);await cleanupTempBestEffort(tempDir);app.exit(1);}
 });
