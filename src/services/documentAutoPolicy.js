@@ -3,11 +3,26 @@ const path=require('path');
 const {SettingsStore}=require('./settings');
 const {AutomationEngine}=require('./automation');
 
+const transientFingerprints=new Set();
+
 function deferred(message,code='DOCUMENT_DEFERRED'){
   const e=new Error(message);e.code=code;return e;
 }
 
+function installSettingsSaveGuard(){
+  const proto=SettingsStore.prototype;if(proto.__ecDocumentSaveGuardInstalled)return;
+  const originalSave=proto.save;
+  Object.defineProperty(proto,'__ecDocumentSaveGuardInstalled',{value:true,configurable:false,enumerable:false,writable:false});
+  proto.save=function(settings){
+    if(!transientFingerprints.size||!settings?.documents?.processed)return originalSave.call(this,settings);
+    const processed={...(settings.documents.processed||{})};
+    for(const fingerprint of transientFingerprints){const entry=processed[fingerprint];if(entry&&!entry.completedAt)delete processed[fingerprint];}
+    const safe={...settings,documents:{...settings.documents,processed}};return originalSave.call(this,safe);
+  };
+}
+
 function installDocumentAutoPolicy(){
+  installSettingsSaveGuard();
   const proto=AutomationEngine.prototype;
   if(proto.__ecDocumentAutoPolicyInstalled)return;
   Object.defineProperty(proto,'__ecDocumentAutoPolicyInstalled',{value:true,configurable:false,enumerable:false,writable:false});
@@ -29,6 +44,7 @@ function installDocumentAutoPolicy(){
   };
   proto.__ecSetDocumentProcessed=function(doc,completed){
     const fingerprint=String(doc?.fingerprint||'').trim();if(!fingerprint)return;
+    transientFingerprints.delete(fingerprint);
     const store=this.__ecDocumentSettingsStore();if(!store)return;
     const s=store.load();s.documents=s.documents||{};s.documents.processed=s.documents.processed&&typeof s.documents.processed==='object'?s.documents.processed:{};
     if(completed)s.documents.processed[fingerprint]={path:String(doc?.path||''),title:String(doc?.title||''),completedAt:new Date().toISOString()};
@@ -55,9 +71,7 @@ function installDocumentAutoPolicy(){
     if(fingerprint&&this.queue.some(x=>x?.sourceType==='generated'&&String(x.document?.fingerprint||'')===fingerprint&&['PENDIENTE','PROCESANDO','LISTA'].includes(x.status)))throw deferred('La nota ya está en la cola.','DOCUMENT_ALREADY_QUEUED');
     if(!this.__ecDocumentAdmissionAvailable(priority))throw deferred('EC esperará a que exista capacidad antes de admitir otra nota del Generador.','DOCUMENT_NO_CAPACITY');
     const result=originalEnqueue.call(this,doc,{...options,priority});
-    // main.js legado marca la nota al encolarla. Se limpia después del retorno para que
-    // "procesada" signifique realmente IA + pronunciación + Kokoro completados.
-    setTimeout(()=>{try{this.__ecSetDocumentProcessed(doc,false);}catch{}},1200);
+    if(fingerprint)transientFingerprints.add(fingerprint);
     return result;
   };
 
