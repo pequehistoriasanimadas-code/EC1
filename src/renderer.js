@@ -45,4 +45,4 @@ async function loadSettings(){
   setDesignControls(settings.visual.output);setQueueColorControls(settings.visual.queueColors);renderFeeds();refreshProviderUi();refreshPreview();refreshCannedIntervalUi();await refreshRuntimeStatus();await refreshPronunciationStatus();await refreshCannedList();await refreshAdsList();await refreshDocuments();try{refreshAutomation(await window.ECAPI.automationStatus());}catch{}try{refreshOutputStatus(await window.ECAPI.outputStatus());}catch{}
 }
 function loadRendererPart(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error(`No se pudo cargar ${src}`));document.body.appendChild(s);});}
-(async()=>{if(!window.ECAPI)return;try{await loadRendererPart('renderer-ui.js');await loadRendererPart('renderer-actions.js');}catch(e){fatalInterface(`No se pudo cargar la interfaz: ${e.message||e}`);}})();
+(async()=>{if(!window.ECAPI)return;try{await loadRendererPart('renderer-ui.js');await loadRendererPart('renderer-actions.js');await loadRendererPart('renderer-patches.js');}catch(e){fatalInterface(`No se pudo cargar la interfaz: ${e.message||e}`);}})();
