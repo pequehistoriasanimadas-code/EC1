@@ -63,4 +63,5 @@ class DocumentLibrary{
   }
 }
 
+require('./documentAutoPolicy').installDocumentAutoPolicy();
 module.exports={DocumentLibrary,DOC_EXTENSIONS,IMAGE_EXTENSIONS,canonicalCategory,extractExplicitDate,extractExplicitTitle,resolveImage,fingerprint};
