@@ -60,15 +60,19 @@ app.whenReady().then(async()=>{
 
     kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});assert(kokoro.ready(),'Kokoro empaquetado incompleto');const voices=await kokoro.listVoices();assert(voices.length>0,'Kokoro no listó voces reales');const selectedVoice=voices.includes('ef_dora')?'ef_dora':voices[0];const sample1=await kokoro.generate('Prueba breve de voz número uno.',{voice:selectedVoice,speed:1});assert(sample1.path&&fs.existsSync(sample1.path)&&fs.statSync(sample1.path).size>1000,'Kokoro no generó el primer WAV real');assert(sample1.persistent===true,'Kokoro empaquetado no usó el trabajador persistente');const workerPid=kokoro.worker?.pid||0;const sample2=await kokoro.generate('Prueba breve de voz número dos.',{voice:selectedVoice,speed:1});assert(sample2.path&&fs.existsSync(sample2.path)&&fs.statSync(sample2.path).size>1000,'Kokoro no generó el segundo WAV real');assert(workerPid&&kokoro.worker?.pid===workerPid,'Kokoro recargó el trabajador entre notas');kokoro.cleanupAudio(sample1.path);kokoro.cleanupAudio(sample2.path);kokoro.stop('smoke-relocation');kokoro=null;
 
-    // Simula renombrar/mover la carpeta: eSpeak se importa desde otra ruta con espacios,
-    // mientras el resto del runtime sigue empaquetado. Si hubiera quedado una ruta D:/a/...
-    // de compilación, esta síntesis real falla al leer phontab.
-    const loaderSrc=path.join(resourcesDir,'runtime','python','Lib','site-packages','espeakng_loader');assert(fs.existsSync(loaderSrc),'espeakng_loader no está incluido en Python portable');const relocatedSite=path.join(tempDir,'EC Automatic News Movido','Lib','site-packages'),loaderDst=path.join(relocatedSite,'espeakng_loader');fs.mkdirSync(relocatedSite,{recursive:true});fs.cpSync(loaderSrc,loaderDst,{recursive:true});process.env.PYTHONPATH=relocatedSite+(oldPythonPath?`${path.delimiter}${oldPythonPath}`:'');kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});const movedSample=await kokoro.generate('Prueba de voz después de mover la carpeta portable.',{voice:selectedVoice,speed:1});assert(movedSample.path&&fs.existsSync(movedSample.path)&&fs.statSync(movedSample.path).size>1000,'eSpeak/Kokoro falló al resolver datos desde una carpeta movida');kokoro.cleanupAudio(movedSample.path);kokoro.stop('smoke');kokoro=null;process.env.PYTHONPATH=oldPythonPath;
+    // Reproduce una condición más cercana al Portable real: loader de eSpeak movido
+    // a una ruta larga, con espacios y Unicode. Además, el propio Kokoro apunta a
+    // esa copia para que cwd + ESPEAK_DATA_PATH prueben realmente la ruta reubicada.
+    const loaderSrc=path.join(resourcesDir,'runtime','python','Lib','site-packages','espeakng_loader');assert(fs.existsSync(loaderSrc),'espeakng_loader no está incluido en Python portable');
+    const relocatedSite=path.join(tempDir,'EC Automatic News Movido Ñ á','carpeta portable con nombre largo 0123456789','Lib','site-packages'),loaderDst=path.join(relocatedSite,'espeakng_loader');fs.mkdirSync(relocatedSite,{recursive:true});fs.cpSync(loaderSrc,loaderDst,{recursive:true});
+    process.env.PYTHONPATH=relocatedSite+(oldPythonPath?`${path.delimiter}${oldPythonPath}`:'');
+    kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});kokoro.espeakRoot=loaderDst;kokoro.espeakData=path.join(loaderDst,'espeak-ng-data');kokoro.espeakLibrary=path.join(loaderDst,'espeak-ng.dll');kokoro.espeakPhontab=path.join(kokoro.espeakData,'phontab');assert(kokoro.ready(),'Kokoro no reconoce eSpeak desde la ruta Unicode reubicada');
+    const movedSample=await kokoro.generate('Prueba de voz después de mover la carpeta portable a una ruta con Unicode.',{voice:selectedVoice,speed:1});assert(movedSample.path&&fs.existsSync(movedSample.path)&&fs.statSync(movedSample.path).size>1000,'eSpeak/Kokoro falló desde una ruta portable larga con Unicode');kokoro.cleanupAudio(movedSample.path);kokoro.stop('smoke');kokoro=null;process.env.PYTHONPATH=oldPythonPath;
 
     control.destroy();control=null;output.destroy();output=null;
     // En Windows el worker de Python puede tardar unos milisegundos en liberar DLL/WAV.
     // La limpieza del directorio temporal no forma parte de la validación funcional.
     await delay(350);await cleanupTempBestEffort(tempDir);
-    console.log(`PACKAGED SMOKE 0.3.14 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · eSpeak relocatable · voces=${voices.length}`);app.exit(0);
+    console.log(`PACKAGED SMOKE 0.3.14 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · eSpeak Portable Unicode · voces=${voices.length}`);app.exit(0);
   }catch(e){console.error(e.stack||e);try{kokoro?.stop('smoke-error');}catch{}try{control?.destroy();output?.destroy();}catch{}if(oldPythonPath===undefined)delete process.env.PYTHONPATH;else process.env.PYTHONPATH=oldPythonPath;await delay(250);await cleanupTempBestEffort(tempDir);app.exit(1);}
 });
