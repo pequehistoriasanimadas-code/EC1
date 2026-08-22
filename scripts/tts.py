@@ -41,6 +41,19 @@ def _limited_inference_session(path_or_bytes, sess_options=None, providers=None,
 
 ort.InferenceSession=_limited_inference_session
 
+# Resuelve eSpeak desde la ubicación ACTUAL del runtime portable. Estas rutas se
+# fijan una sola vez al arrancar el worker y el mismo G2P se reutiliza entre notas.
+import espeakng_loader
+from phonemizer.backend.espeak.wrapper import EspeakWrapper
+try:
+    espeakng_loader.make_library_available()
+except Exception:
+    pass
+_ESPEAK_LIBRARY=str(espeakng_loader.get_library_path())
+_ESPEAK_DATA=str(espeakng_loader.get_data_path())
+EspeakWrapper.set_library(_ESPEAK_LIBRARY)
+EspeakWrapper.set_data_path(_ESPEAK_DATA)
+
 from kokoro_onnx import Kokoro
 from misaki.espeak import EspeakG2P
 
@@ -99,7 +112,7 @@ def emit_worker(payload):
 if a.worker:
     try:
         engine=load_engine()
-        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1))})
+        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),'espeak_data':_ESPEAK_DATA})
     except Exception as e:
         emit_worker({'type':'ready','ok':False,'error':str(e)})
         sys.exit(2)
