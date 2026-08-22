@@ -1,0 +1,84 @@
+'use strict';
+
+const {AutomationEngine}=require('./automation');
+
+const clamp=(n,min,max,fallback)=>{n=Number(n);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;};
+const isNews=x=>x&&['rss','generated'].includes(x.sourceType||'rss');
+
+function stateFor(engine){
+  if(!engine.__ecBroadcastScheduler)engine.__ecBroadcastScheduler={sessionSeq:0,rssSinceGenerated:0,samples:[]};
+  return engine.__ecBroadcastScheduler;
+}
+function settingsFor(engine){
+  const s=engine.getSettings?.()||{},a=s.automation||{},c=s.canned||{};
+  return{settings:s,generatedEveryRss:clamp(a.generatedEveryRss,0,50,5),targetAutonomyMin:clamp(a.targetAutonomyMin,3,60,15),adaptiveCanned:c.adaptiveDuration!==false};
+}
+function assignSequences(engine){
+  const st=stateFor(engine);
+  for(const item of engine.queue||[]){if(!isNews(item))continue;if(!(Number(item.sessionSeq)>0))item.sessionSeq=++st.sessionSeq;else st.sessionSeq=Math.max(st.sessionSeq,Number(item.sessionSeq)||0);}
+}
+function moveItem(queue,item,index){const from=queue.indexOf(item);if(from<0||from===index)return;queue.splice(from,1);if(from<index)index--;queue.splice(Math.max(0,index),0,item);}
+function rebalance(engine){
+  const {generatedEveryRss}=settingsFor(engine),st=stateFor(engine),q=engine.queue||[];if(!generatedEveryRss||engine.currentKind==='news'&&engine.currentItem?.sourceType==='generated')return;
+  const readyRss=q.filter(x=>x.sourceType==='rss'&&x.status==='LISTA'),readyGen=q.filter(x=>x.sourceType==='generated'&&x.status==='LISTA');if(!readyGen.length)return;
+  if(st.rssSinceGenerated>=generatedEveryRss&&readyRss.length){
+    const chosen=readyGen[0],firstRss=readyRss[0],target=q.indexOf(firstRss);moveItem(q,chosen,target);chosen.schedulerPinned=true;return;
+  }
+  if(st.rssSinceGenerated<generatedEveryRss&&readyRss.length){
+    const lastRssIndex=Math.max(...readyRss.map(x=>q.indexOf(x)));for(const g of readyGen){const gi=q.indexOf(g);if(gi>=0&&gi<q.indexOf(readyRss[0]))moveItem(q,g,lastRssIndex+1);g.schedulerPinned=false;}
+  }
+}
+function sampleFromItem(item,extra={}){
+  const m=item?.metrics||{},audio=Number(extra.durationSec)||Number(m.audioDurationSec)||Number(item?.audio?.durationSec)||0,text=Number(m.elapsedMs||0)/1000,local=(Number(m.pronunciationElapsedMs||0)+Number(m.ttsElapsedMs||0))/1000,bottleneck=Math.max(text,local,1);
+  if(!(audio>0))return null;return{audio,bottleneck,at:Date.now(),sourceType:item?.sourceType||'rss'};
+}
+function productionProfile(engine){
+  const st=stateFor(engine),live=[];
+  for(const x of engine.queue||[]){if(!isNews(x))continue;const s=sampleFromItem(x);if(s)live.push(s);}
+  const samples=[...st.samples,...live].slice(-24);if(!samples.length)return{rate:.6,avgAudio:50,count:0};
+  const audio=samples.reduce((a,x)=>a+x.audio,0),work=samples.reduce((a,x)=>a+x.bottleneck,0),rate=clamp(audio/Math.max(1,work),.2,1.5,.6),avgAudio=clamp(audio/samples.length,20,120,50);return{rate,avgAudio,count:samples.length};
+}
+function adRecoverySeconds(engine,s){
+  const folder=String(s?.canned?.adsFolder||'').trim();if(!folder||s?.canned?.insertAdAfterContent===false)return 0;try{return Number(engine.ads?.peek?.(folder)?.durationSec)||0;}catch{return 0;}
+}
+function recoveryTargetSeconds(engine,s,reason){
+  if(reason==='manual')return 0;if(reason==='emergency')return Number.POSITIVE_INFINITY;if(s?.canned?.adaptiveDuration===false)return 0;
+  const profile=productionProfile(engine),targetMin=clamp(s?.automation?.targetAutonomyMin,3,60,15),current=Math.max(0,Number(engine.autonomy?.().seconds)||0),interval=clamp(s?.canned?.interval,0,999,0),expectedLoss=interval*profile.avgAudio*Math.max(0,1-profile.rate),desired=targetMin*60+expectedLoss,deficit=Math.max(0,desired-current),adSec=adRecoverySeconds(engine,s),needed=Math.max(30,deficit/Math.max(.2,profile.rate)-adSec);return clamp(needed,30,15*60,30);
+}
+function plannedRows(engine,s,realRows){
+  const c=s.canned||{},rows=[];if(!c.enabled||['canned','ad'].includes(engine.currentKind))return rows;const interval=clamp(c.interval,0,999,0),progress=engine.scheduledProgress(interval),qualified=realRows.filter(x=>['LISTA','AL AIRE'].includes(x.status));let reason='',after=0;
+  if(engine.cannedRequested){reason='manual';after=0;}
+  else if(progress.due){reason='scheduled';after=0;}
+  else if(interval>0&&progress.nextIn!=null&&qualified.length>=progress.nextIn){reason='scheduled';after=Math.max(0,progress.nextIn);}
+  else if(c.emergency!==false&&qualified.length===0){reason='emergency';after=0;}
+  if(!reason)return rows;
+  const target=recoveryTargetSeconds(engine,s,reason);let media=null;try{media=target>0&&engine.canned?.peekForDuration?engine.canned.peekForDuration(c.folder||'',target):engine.canned?.peek(c.folder||'');}catch{}if(!media)return rows;
+  const duration=Number(media.durationSec)||0,recoveryText=reason==='scheduled'&&c.adaptiveDuration!==false&&duration>0?` · ${Math.round(duration/60*10)/10} min de recuperación`:'';
+  const planText=reason==='scheduled'?`Después de ${interval} noticia${interval===1?'':'s'}${recoveryText}`:reason==='emergency'?'Recuperación por autonomía baja':'Próximo en emisión';rows.push({title:media.name,status:'PROGRAMADO',sourceType:'content',planned:true,stage:'',planAfter:after,planText,planReason:reason,durationSec:duration,recoveryTargetSec:Number.isFinite(target)?target:0});
+  if(c.insertAdAfterContent!==false&&String(c.adsFolder||'').trim()){let ad=null;try{ad=engine.ads?.peek(c.adsFolder||'');}catch{}if(ad)rows.push({title:ad.name,status:'PROGRAMADO',sourceType:'ad',planned:true,stage:'',planAfter:after,planText:'Después del contenido',planReason:reason,durationSec:Number(ad.durationSec)||0});}
+  return rows;
+}
+
+function installBroadcastSchedulerPolicy(){
+  const proto=AutomationEngine.prototype;if(proto.__ecBroadcastSchedulerInstalled)return;Object.defineProperty(proto,'__ecBroadcastSchedulerInstalled',{value:true});
+  const originalState=proto.state,originalSnapshot=proto.snapshot,originalReset=proto.resetSessionCounters,originalAddHistory=proto.addEmissionHistory,originalPlayCanned=proto.playCanned;
+
+  proto.state=function(extra={}){assignSequences(this);rebalance(this);return originalState.call(this,extra);};
+  proto.addEmissionHistory=function(type,title,status='EMITIDA',extra={}){
+    if(status==='EMITIDA'&&(type==='rss'||type==='generated')){const st=stateFor(this),sample=sampleFromItem(this.currentItem,extra);if(sample){st.samples.push(sample);st.samples=st.samples.slice(-20);}if(type==='rss')st.rssSinceGenerated++;else st.rssSinceGenerated=0;}
+    return originalAddHistory.call(this,type,title,status,extra);
+  };
+  proto.resetSessionCounters=function(){const st=stateFor(this);st.sessionSeq=0;st.rssSinceGenerated=0;for(const x of this.queue||[])if(isNews(x))delete x.sessionSeq;return originalReset.call(this);};
+  proto.__ecRecoveryTargetSec=function(s,reason){return recoveryTargetSeconds(this,s||this.getSettings?.()||{},reason);};
+  proto.__ecProductionProfile=function(){return productionProfile(this);};
+  proto.playCanned=async function(s,reason){const target=recoveryTargetSeconds(this,s,reason);if(target>0&&this.canned?.requestDuration)this.canned.requestDuration(target);return originalPlayCanned.call(this,s,reason);};
+  proto.plannedMediaRows=function(s,realRows){return plannedRows(this,s,realRows);};
+  proto.displayQueue=function(s){
+    assignSequences(this);rebalance(this);const real=(this.queue||[]).filter(x=>x.status!=='EMITIDA').map(x=>({id:x.id||'',title:x.story?.title||x.result?.title||'',status:x.status,sourceType:x.sourceType||'rss',provider:x.provider||'',model:x.model||'',attempts:x.attempts||[],metrics:x.metrics||null,error:x.error||'',stage:x.stage||'',outputRetries:x.outputRetries||0,priority:x.priority||'normal',sessionSeq:Number(x.sessionSeq)||0}));
+    if(this.currentKind==='canned'&&this.currentCanned)real.unshift({title:this.currentCanned.name,status:'AL AIRE',sourceType:'content',planned:false,durationSec:Number(this.currentCanned.durationSec)||0});else if(this.currentKind==='ad'&&this.currentCanned)real.unshift({title:this.currentCanned.name,status:'AL AIRE',sourceType:'ad',planned:false,durationSec:Number(this.currentCanned.durationSec)||0});
+    const planned=plannedRows(this,s,real);if(planned.length){const after=Math.max(0,Number(planned[0].planAfter)||0);let seen=0,index=real.length;if(after>0){for(let i=0;i<real.length;i++){if(['LISTA','AL AIRE'].includes(real[i].status)&&isNews(real[i]))seen++;if(seen>=after){index=i+1;break;}}}else{const onAir=real.findIndex(x=>x.status==='AL AIRE');if(onAir>=0)index=onAir+1;else{index=real.findIndex(x=>x.status==='LISTA');if(index<0)index=0;}}real.splice(index,0,...planned);}return real;
+  };
+  proto.snapshot=function(extra={}){const snap=originalSnapshot.call(this,extra),cfg=settingsFor(this),st=stateFor(this),profile=productionProfile(this);snap.scheduler={generatedEveryRss:cfg.generatedEveryRss,rssSinceGenerated:st.rssSinceGenerated,generatedReady:(this.queue||[]).filter(x=>x.sourceType==='generated'&&x.status==='LISTA').length,targetAutonomyMin:cfg.targetAutonomyMin,productionRate:Number(profile.rate.toFixed(2)),averageAudioSec:Number(profile.avgAudio.toFixed(1))};return snap;};
+}
+
+module.exports={installBroadcastSchedulerPolicy,productionProfile,recoveryTargetSeconds};
