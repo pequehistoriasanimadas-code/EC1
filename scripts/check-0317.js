@@ -6,7 +6,7 @@ const root=path.resolve(__dirname,'..');
 const ok=(v,m)=>{if(!v)throw new Error(m);};
 const read=rel=>fs.readFileSync(path.join(root,rel),'utf8');
 
-const pkg=JSON.parse(read('package.json'));ok(['0.3.17','0.3.18'].includes(pkg.version),'package version debe ser 0.3.17 o posterior compatible');
+const pkg=JSON.parse(read('package.json'));ok(['0.3.17','0.3.18','0.3.19'].includes(pkg.version),'package version debe ser 0.3.17 o posterior compatible');
 const ttsPy=read('scripts/tts.py');ok(/--onnx-mode/.test(ttsPy)&&/--spin-duration-us/.test(ttsPy)&&/spin_backoff_max/.test(ttsPy),'tts.py no expone los controles avanzados de ONNX');ok(/ORT_PARALLEL/.test(ttsPy)&&/intra_op_num_threads=intra/.test(ttsPy),'tts.py no puede probar AUTO/ORT_PARALLEL');
 const documents=read('src/services/documents.js');ok(/version0316Policy[\s\S]*version0317Policy[\s\S]*version0317RendererLoader/.test(documents),'la política/UI 0.3.17 no se instala después de 0.3.16');
 const policySource=read('src/services/version0317Policy.js');for(const token of ['auto-sequential','auto-spin','fixed-spin','parallel-safe','performanceConfig','recentInferencePct'])ok(policySource.includes(token),`falta ${token} en la política 0.3.17`);
