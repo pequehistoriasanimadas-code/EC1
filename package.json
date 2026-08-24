@@ -13,7 +13,7 @@
   "dependencies": {
     "cheerio": "1.1.2",
     "fast-xml-parser": "5.10.1",
-    "mammoth": "1.10.0"
+    "mammoth": "1.12.1"
   },
   "devDependencies": {
     "electron": "43.4.0",
