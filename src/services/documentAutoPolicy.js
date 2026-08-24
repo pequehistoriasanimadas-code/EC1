@@ -1,10 +1,7 @@
 'use strict';
-const fs=require('fs');
-const os=require('os');
 const path=require('path');
 const {SettingsStore}=require('./settings');
 const {AutomationEngine}=require('./automation');
-const {KokoroTTS}=require('./kokoro');
 const {Providers}=require('./providers');
 
 const transientFingerprints=new Set();
@@ -67,39 +64,6 @@ function installQueueSessionPolicy(){
   };
 }
 
-function installTtsPerformancePolicy(){
-  const proto=KokoroTTS.prototype;if(proto.__ecAdaptiveTtsInstalled)return;
-  Object.defineProperty(proto,'__ecAdaptiveTtsInstalled',{value:true,configurable:false,enumerable:false,writable:false});
-  const originalProfile=proto.profile;
-
-  proto.profile=function(){
-    const base=originalProfile.call(this);if(base.name!=='performance')return base;
-    const logical=Math.max(2,os.cpus()?.length||2),stored=Number(this.settings()?.tts?.performanceThreads)||0;
-    const dynamic=Math.min(12,Math.max(6,Math.ceil(logical*.55))),threads=Math.max(2,Math.min(Math.min(12,logical),stored||dynamic));
-    return{...base,intra:threads,inter:1,priority:'normal',label:`Rápido · ${threads} hilos`};
-  };
-
-  proto.benchmark=async function({voice='ef_dora',speed=1}={}){
-    const phrase='Esta es una prueba de rendimiento de voz para que EC encuentre la configuración más rápida sin usar recursos innecesarios durante la transmisión.';
-    const logical=Math.max(2,os.cpus()?.length||2),limit=Math.max(2,Math.min(12,logical));
-    let candidates=[2,4,6,8,10,12].filter(x=>x<=limit);if(!candidates.includes(limit))candidates.push(limit);candidates=[...new Set(candidates)].sort((a,b)=>a-b);
-    const results=[];this.stop('benchmark-adaptive');
-    for(const threads of candidates){
-      const profile={name:`benchmark_${threads}`,label:`${threads} hilos`,intra:threads,inter:1,priority:'normal'},id=`bench-${threads}-${Date.now()}`,txt=path.join(this.audioDir,`${id}.txt`),wav=path.join(this.audioDir,`${id}.wav`);fs.writeFileSync(txt,phrase,'utf8');const started=Date.now();
-      try{
-        const out=await this.run(['--text-file',txt,'--output',wav,'--voice',voice,'--speed',String(speed),'--model',this.model,'--voices',this.voices,'--onnx-intra',String(threads),'--onnx-inter','1'],profile,180000);let meta={};try{meta=JSON.parse(out);}catch{}
-        const elapsedMs=Date.now()-started,durationSec=Number(meta.duration_sec||0),rtf=durationSec?elapsedMs/1000/durationSec:999;results.push({threads,label:`${threads} hilos`,elapsedMs,durationSec,realtimeFactor:Number(rtf.toFixed(3))});
-      }catch(e){results.push({threads,label:`${threads} hilos`,error:e.message||String(e),realtimeFactor:999});}
-      finally{try{fs.rmSync(txt,{force:true});fs.rmSync(wav,{force:true});}catch{}}
-    }
-    const valid=results.filter(x=>!x.error&&Number.isFinite(x.realtimeFactor)&&x.realtimeFactor<50);
-    if(!valid.length)return{ok:false,recommended:'performance',recommendedThreads:Math.min(6,limit),results};
-    const fastest=valid.reduce((a,b)=>b.realtimeFactor<a.realtimeFactor?b:a),near=valid.filter(x=>x.realtimeFactor<=fastest.realtimeFactor*1.08).sort((a,b)=>a.threads-b.threads),realtime=valid.filter(x=>x.realtimeFactor<=.90).sort((a,b)=>a.threads-b.threads);
-    const selected=realtime[0]||near[0]||fastest;
-    return{ok:true,recommended:'performance',recommendedThreads:selected.threads,bestRealtimeFactor:selected.realtimeFactor,fastestThreads:fastest.threads,fastestRealtimeFactor:fastest.realtimeFactor,results};
-  };
-}
-
 function installDurationGuidance(){
   const proto=Providers.prototype;if(proto.__ecDurationGuidanceInstalled)return;
   Object.defineProperty(proto,'__ecDurationGuidanceInstalled',{value:true,configurable:false,enumerable:false,writable:false});
@@ -114,7 +78,7 @@ function installDurationGuidance(){
 }
 
 function installDocumentAutoPolicy(){
-  installSettingsSaveGuard();installQueueSessionPolicy();installTtsPerformancePolicy();installDurationGuidance();
+  installSettingsSaveGuard();installQueueSessionPolicy();installDurationGuidance();
   const proto=AutomationEngine.prototype;
   if(proto.__ecDocumentAutoPolicyInstalled)return;
   Object.defineProperty(proto,'__ecDocumentAutoPolicyInstalled',{value:true,configurable:false,enumerable:false,writable:false});
@@ -143,9 +107,7 @@ function installDocumentAutoPolicy(){
     else delete s.documents.processed[fingerprint];
     const entries=Object.entries(s.documents.processed);if(entries.length>2000)s.documents.processed=Object.fromEntries(entries.slice(-2000));store.save(s);
   };
-  proto.__ecGeneratedWorkActive=function(){
-    return this.queue.some(x=>x?.sourceType==='generated'&&['PENDIENTE','PROCESANDO'].includes(x.status));
-  };
+  proto.__ecGeneratedWorkActive=function(){return this.queue.some(x=>x?.sourceType==='generated'&&['PENDIENTE','PROCESANDO'].includes(x.status));};
   proto.__ecDocumentAdmissionAvailable=function(priority='normal'){
     if(!this.processingRunning||this.processingPaused)return false;
     if(this.__ecGeneratedWorkActive()||this.documentWorkerRunning||this.inFlight.size>0||this.localHeavyRunning)return false;
@@ -162,24 +124,14 @@ function installDocumentAutoPolicy(){
     if(fingerprint&&this.__ecDocumentFailedSet().has(fingerprint))throw deferred('La nota ya falló en esta sesión y no se reintentará automáticamente.','DOCUMENT_FAILED_SESSION');
     if(fingerprint&&this.queue.some(x=>x?.sourceType==='generated'&&String(x.document?.fingerprint||'')===fingerprint&&['PENDIENTE','PROCESANDO','LISTA'].includes(x.status)))throw deferred('La nota ya está en la cola.','DOCUMENT_ALREADY_QUEUED');
     if(!this.__ecDocumentAdmissionAvailable(priority))throw deferred('EC esperará a que exista capacidad antes de admitir otra nota del Generador.','DOCUMENT_NO_CAPACITY');
-    const result=originalEnqueue.call(this,doc,{...options,priority});
-    if(fingerprint)transientFingerprints.add(fingerprint);
-    return result;
+    const result=originalEnqueue.call(this,doc,{...options,priority});if(fingerprint)transientFingerprints.add(fingerprint);return result;
   };
 
-  proto.documentCanRun=function(item){
-    if(!this.processingRunning||this.processingPaused)return false;
-    return originalCanRun.call(this,item);
-  };
-
+  proto.documentCanRun=function(item){if(!this.processingRunning||this.processingPaused)return false;return originalCanRun.call(this,item);};
   proto.processDocument=async function(holder){
     const doc=holder?.document||{},fingerprint=String(doc.fingerprint||'').trim();
-    try{
-      const outcome=await originalProcessDocument.call(this,holder);
-      if(outcome?.omitted){if(fingerprint)this.__ecDocumentFailedSet().add(fingerprint);this.__ecSetDocumentProcessed(doc,false);}
-      else{if(fingerprint)this.__ecDocumentFailedSet().delete(fingerprint);this.__ecSetDocumentProcessed(doc,true);}
-      return outcome;
-    }catch(e){if(fingerprint)this.__ecDocumentFailedSet().add(fingerprint);try{this.__ecSetDocumentProcessed(doc,false);}catch{}throw e;}
+    try{const outcome=await originalProcessDocument.call(this,holder);if(outcome?.omitted){if(fingerprint)this.__ecDocumentFailedSet().add(fingerprint);this.__ecSetDocumentProcessed(doc,false);}else{if(fingerprint)this.__ecDocumentFailedSet().delete(fingerprint);this.__ecSetDocumentProcessed(doc,true);}return outcome;}
+    catch(e){if(fingerprint)this.__ecDocumentFailedSet().add(fingerprint);try{this.__ecSetDocumentProcessed(doc,false);}catch{}throw e;}
   };
 }
 
