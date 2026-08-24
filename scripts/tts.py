@@ -12,6 +12,9 @@ p.add_argument('--model')
 p.add_argument('--voices')
 p.add_argument('--onnx-intra',type=int,default=2)
 p.add_argument('--onnx-inter',type=int,default=1)
+p.add_argument('--onnx-mode',choices=['sequential','parallel'],default='sequential')
+p.add_argument('--spin-duration-us',type=int,default=-1)
+p.add_argument('--spin-backoff-max',type=int,default=1)
 p.add_argument('--list-voices',action='store_true')
 p.add_argument('--worker',action='store_true')
 a=p.parse_args()
@@ -26,11 +29,28 @@ _original_inference_session=ort.InferenceSession
 
 def _limited_inference_session(path_or_bytes, sess_options=None, providers=None, provider_options=None, **kwargs):
     opts=ort.SessionOptions()
-    opts.intra_op_num_threads=max(1,int(a.onnx_intra or 1))
-    opts.inter_op_num_threads=max(1,int(a.onnx_inter or 1))
-    opts.execution_mode=ort.ExecutionMode.ORT_SEQUENTIAL
+    intra=max(0,int(a.onnx_intra if a.onnx_intra is not None else 0))
+    inter=max(1,int(a.onnx_inter or 1))
+    mode='parallel' if str(a.onnx_mode).lower()=='parallel' else 'sequential'
+    # intra=0 deja que ONNX Runtime use sus núcleos físicos y afinidad automática.
+    opts.intra_op_num_threads=intra
+    opts.inter_op_num_threads=inter
+    opts.execution_mode=ort.ExecutionMode.ORT_PARALLEL if mode=='parallel' else ort.ExecutionMode.ORT_SEQUENTIAL
     try:
         opts.graph_optimization_level=ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    except Exception:
+        pass
+    spin_duration=int(a.spin_duration_us if a.spin_duration_us is not None else -1)
+    spin_backoff=max(1,int(a.spin_backoff_max or 1))
+    try:
+        if spin_duration>=0:
+            opts.add_session_config_entry('session.intra_op.spin_duration_us',str(spin_duration))
+            if mode=='parallel':
+                opts.add_session_config_entry('session.inter_op.spin_duration_us',str(spin_duration))
+        if spin_backoff>1:
+            opts.add_session_config_entry('session.intra_op.spin_backoff_max',str(spin_backoff))
+            if mode=='parallel':
+                opts.add_session_config_entry('session.inter_op.spin_backoff_max',str(spin_backoff))
     except Exception:
         pass
     call_kwargs=dict(kwargs)
@@ -191,9 +211,13 @@ def synthesize(text_file,output,voice,speed,engine):
     duration=float(len(samples))/float(sr)
     return {
         'ok':True,'voice':selected,'sample_rate':sr,'duration_sec':duration,
-        'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),
+        'onnx_intra_threads':int(a.onnx_intra if a.onnx_intra is not None else 0),
+        'onnx_intra_auto':int(a.onnx_intra if a.onnx_intra is not None else 0)==0,
         'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),
-        'execution_mode':'sequential','phoneme_ms':round(phoneme_ms,2),'inference_ms':round(inference_ms,2)
+        'execution_mode':'parallel' if str(a.onnx_mode).lower()=='parallel' else 'sequential',
+        'spin_duration_us':int(a.spin_duration_us if a.spin_duration_us is not None else -1),
+        'spin_backoff_max':max(1,int(a.spin_backoff_max or 1)),
+        'phoneme_ms':round(phoneme_ms,2),'inference_ms':round(inference_ms,2)
     }
 
 def emit_worker(payload):
@@ -202,7 +226,7 @@ def emit_worker(payload):
 if a.worker:
     try:
         engine=load_engine()
-        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':max(1,int(a.onnx_intra or 1)),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':True,'languages':engine[4]})
+        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':int(a.onnx_intra if a.onnx_intra is not None else 0),'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),'execution_mode':'parallel' if str(a.onnx_mode).lower()=='parallel' else 'sequential','spin_duration_us':int(a.spin_duration_us if a.spin_duration_us is not None else -1),'spin_backoff_max':max(1,int(a.spin_backoff_max or 1)),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':True,'languages':engine[4]})
     except Exception as e:
         emit_worker({'type':'ready','ok':False,'error':str(e),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':False})
         sys.exit(2)
