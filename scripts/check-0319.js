@@ -6,7 +6,7 @@ const root=path.resolve(__dirname,'..');
 const ok=(v,m)=>{if(!v)throw new Error(m);};
 const read=rel=>fs.readFileSync(path.join(root,rel),'utf8');
 
-const pkg=JSON.parse(read('package.json'));ok(pkg.version==='0.3.19','package version debe ser 0.3.19');
+const pkg=JSON.parse(read('package.json'));ok(['0.3.19','0.3.20'].includes(pkg.version),'package version debe ser 0.3.19 o posterior compatible');
 const docs=read('src/services/documents.js');ok(/version0318Policy[\s\S]*version0319Policy/.test(docs),'0.3.19 debe instalarse después de 0.3.18');ok(/version0319RendererLoader/.test(docs),'falta loader UI 0.3.19');
 const policy=read('src/services/version0319Policy.js');for(const token of ['pipelineOverlap','OMITIDA','short-medium-long','worstRealtimeFactor','pronunciationClaudeVerify:false','CPU conservada','IA local redacta la siguiente nota'])ok(policy.includes(token),`falta ${token} en política 0.3.19`);
 const ui=read('src/renderer-0319.js');for(const token of ['Ver noticia','Abrir fuente original','OMITIDAS','Aceleración NVIDIA de Kokoro · Opcional','peor caso','Solapamiento activo'])ok(ui.includes(token),`falta ${token} en UI 0.3.19`);
