@@ -50,9 +50,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows packaged UI, bridge, Output and Kokoro smoke test
+      - name: Windows packaged UI, Output, Kokoro and learned-pronunciation smoke tests
         shell: powershell
-        timeout-minutes: 8
+        timeout-minutes: 12
         run: |
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
@@ -60,6 +60,8 @@ jobs:
           if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'No existe app.asar empaquetado' }
           npx electron scripts/packaged-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-pronunciation-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
 
       - name: Upload portable folder
         uses: actions/upload-artifact@v4
