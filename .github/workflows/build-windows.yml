@@ -50,7 +50,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows packaged UI, Output, Kokoro, pronunciation and ONNX smoke tests
+      - name: Windows packaged UI, Output, Kokoro, pronunciation, ONNX and NVIDIA fallback smoke tests
         shell: powershell
         timeout-minutes: 15
         run: |
@@ -64,6 +64,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-onnx-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged ONNX smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-gpu-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged NVIDIA fallback smoke test falló con código $LASTEXITCODE" }
 
       - name: Upload portable folder
         uses: actions/upload-artifact@v7
