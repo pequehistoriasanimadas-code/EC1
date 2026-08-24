@@ -6,13 +6,13 @@ const root=path.resolve(__dirname,'..');
 const ok=(v,m)=>{if(!v)throw new Error(m);};
 const read=rel=>fs.readFileSync(path.join(root,rel),'utf8');
 
-const pkg=JSON.parse(read('package.json'));ok(pkg.version==='0.3.16','package version debe ser 0.3.16');
+const pkg=JSON.parse(read('package.json'));ok(['0.3.16','0.3.17'].includes(pkg.version),'package version debe ser 0.3.16 o posterior compatible');
 const docPolicy=read('src/services/documentAutoPolicy.js');ok(!/installTtsPerformancePolicy|KokoroTTS/.test(docPolicy),'documentAutoPolicy todavía contiene el optimizador Kokoro antiguo');
 const documentsSource=read('src/services/documents.js');ok(/broadcastSchedulerPolicy[\s\S]*version0316Policy/.test(documentsSource),'la política final 0.3.16 no se instala después del scheduler');
 const ui=read('src/renderer-patches.js');ok(/generatedSchedulerControls/.test(ui)&&/recoveryControls/.test(ui),'la programación de Notas Generadas no está separada de Recuperación de autonomía');ok(/buffer\.onchange/.test(ui)&&/saveAutomationOnly/.test(ui),'Objetivo de noticias listas no se sincroniza en vivo');ok(/documentStatusLabel/.test(ui)&&/Al aire/.test(ui)&&/Emitida/.test(ui),'Generador no muestra el ciclo completo de estados');
 const policySource=read('src/services/version0316Policy.js');ok(/performanceThreads:answer\.recommendedThreads/.test(policySource)&&/baselineCpu>=75/.test(policySource)&&/tolerance:\.03/.test(policySource),'Kokoro 0.3.16 no conserva optimización segura/persistente');ok(/source='manual'/.test(policySource)&&/manualChanges/.test(policySource),'cambios importados de pronunciación no quedan protegidos como manuales');ok(/pronunciation-learning\.backup-0\.3\.16\.json/.test(policySource),'falta backup de migración de pronunciación');ok(/__ec0316ReservedAd/.test(policySource)&&/Después del contenido/.test(policySource),'el anuncio no queda reservado/visible durante el contenido');
 
-// Cargar documents instala, en orden, las políticas de documentos, scheduler y 0.3.16.
+// Cargar documents instala, en orden, las políticas de documentos, scheduler y 0.3.16+.
 require(path.join(root,'src/services/documents.js'));
 const {SettingsStore}=require(path.join(root,'src/services/settings.js'));
 const {PronunciationNormalizer}=require(path.join(root,'src/services/pronunciation.js'));
