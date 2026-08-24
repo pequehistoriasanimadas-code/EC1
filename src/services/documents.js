@@ -68,6 +68,8 @@ require('./broadcastSchedulerPolicy').installBroadcastSchedulerPolicy();
 require('./version0316Policy').installVersion0316Policy();
 require('./version0317Policy').installVersion0317Policy();
 require('./version0318Policy').installVersion0318Policy();
+require('./version0319Policy').installVersion0319Policy();
 require('./version0317RendererLoader').installVersion0317RendererLoader();
 require('./version0318RendererLoader').installVersion0318RendererLoader();
+require('./version0319RendererLoader').installVersion0319RendererLoader();
 module.exports={DocumentLibrary,DOC_EXTENSIONS,IMAGE_EXTENSIONS,canonicalCategory,extractExplicitDate,extractExplicitTitle,resolveImage,fingerprint};
