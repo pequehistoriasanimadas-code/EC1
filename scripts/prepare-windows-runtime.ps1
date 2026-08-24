@@ -2,14 +2,16 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $Runtime = Join-Path $Root 'runtime'
 $Temp = Join-Path $Root '.runtime-temp'
+$LlamaRelease = 'b10218'
 New-Item -ItemType Directory -Force -Path $Runtime,$Temp | Out-Null
 
 function Download-File {
-  param([Parameter(Mandatory=$true)][string]$Url,[Parameter(Mandatory=$true)][string]$OutFile)
+  param([Parameter(Mandatory=$true)][string]$Url,[Parameter(Mandatory=$true)][string]$OutFile,[int]$MaxSeconds=900)
   Write-Host "Descargando: $Url"
-  & curl.exe -L --fail --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 900 --output $OutFile $Url
+  & curl.exe -L --fail --retry 5 --retry-delay 5 --connect-timeout 30 --max-time $MaxSeconds --output $OutFile $Url
   if ($LASTEXITCODE -ne 0) { throw "curl falló ($LASTEXITCODE): $Url" }
   if (-not (Test-Path $OutFile)) { throw "No se creó el archivo esperado: $OutFile" }
+  if ((Get-Item $OutFile).Length -le 0) { throw "Archivo vacío: $OutFile" }
 }
 
 Write-Host '== Preparando Python portable para Kokoro =='
@@ -20,6 +22,7 @@ New-Item -ItemType Directory -Force -Path $pyDest | Out-Null
 robocopy $pyRoot $pyDest /E /XD __pycache__ /XF *.pyc | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy Python falló: $LASTEXITCODE" }
 & (Join-Path $pyDest 'python.exe') -m pip install --disable-pip-version-check --no-warn-script-location --upgrade "kokoro-onnx==0.5.0" soundfile misaki-fork
+if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias de Kokoro.' }
 
 Write-Host '== Descargando modelos Kokoro =='
 $kokoroDir = Join-Path $Runtime 'kokoro'
@@ -28,29 +31,39 @@ Download-File 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/mod
 Download-File 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' (Join-Path $kokoroDir 'voices-v1.0.bin')
 Copy-Item (Join-Path $Root 'scripts\tts.py') (Join-Path $kokoroDir 'tts.py') -Force
 
-Write-Host '== Descargando llama.cpp Windows Vulkan x64 =='
+Write-Host "== Descargando llama.cpp Windows x64 fijado en $LlamaRelease =="
 $llamaDir = Join-Path $Runtime 'llama'
 if (Test-Path $llamaDir) { Remove-Item $llamaDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $llamaDir | Out-Null
-$release = Invoke-RestMethod -Uri 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest' -Headers @{ 'User-Agent'='EC-Automatic-News-Build' }
-$binAsset = $release.assets | Where-Object { $_.name -match '^llama-.*bin-win-vulkan-x64\.zip$' } | Select-Object -First 1
-if (-not $binAsset) {
-  Write-Warning 'No se encontró build Vulkan; usando CPU x64.'
-  $binAsset = $release.assets | Where-Object { $_.name -match '^llama-.*bin-win-cpu-x64\.zip$' } | Select-Object -First 1
+$baseUrl = "https://github.com/ggml-org/llama.cpp/releases/download/$LlamaRelease"
+$vkName = "llama-$LlamaRelease-bin-win-vulkan-x64.zip"
+$cpuName = "llama-$LlamaRelease-bin-win-cpu-x64.zip"
+$zip = Join-Path $Temp $vkName
+try {
+  Download-File "$baseUrl/$vkName" $zip
+  Write-Host "Runtime seleccionado: Vulkan x64 ($LlamaRelease)"
+} catch {
+  Write-Warning "Vulkan no pudo descargarse: $($_.Exception.Message)"
+  $zip = Join-Path $Temp $cpuName
+  Download-File "$baseUrl/$cpuName" $zip
+  Write-Host "Runtime seleccionado: CPU x64 ($LlamaRelease)"
 }
-if (-not $binAsset) { throw 'No se encontró un asset Windows x64 de llama.cpp.' }
-Write-Host "Asset seleccionado: $($binAsset.name)"
-$z1 = Join-Path $Temp $binAsset.name
-Download-File $binAsset.browser_download_url $z1
-Write-Host "ZIP descargado: $([math]::Round((Get-Item $z1).Length / 1MB, 1)) MB"
-Expand-Archive -Path $z1 -DestinationPath $llamaDir -Force
+Write-Host "ZIP descargado: $([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB"
+Expand-Archive -Path $zip -DestinationPath $llamaDir -Force
 
 Write-Host '== Verificación runtime =='
 $server = Get-ChildItem $llamaDir -Recurse -Filter 'llama-server.exe' | Select-Object -First 1
 if (-not $server) { throw 'llama-server.exe no encontrado tras extraer runtime.' }
 $py = Join-Path $pyDest 'python.exe'
 if (-not (Test-Path $py)) { throw 'python.exe portable no encontrado.' }
-if (-not (Test-Path (Join-Path $kokoroDir 'kokoro-v1.0.int8.onnx'))) { throw 'Modelo Kokoro no encontrado.' }
+$kokoroModel = Join-Path $kokoroDir 'kokoro-v1.0.int8.onnx'
+$voicesModel = Join-Path $kokoroDir 'voices-v1.0.bin'
+if (-not (Test-Path $kokoroModel)) { throw 'Modelo Kokoro no encontrado.' }
+if (-not (Test-Path $voicesModel)) { throw 'Archivo de voces Kokoro no encontrado.' }
+# El modelo int8 oficial pesa ~88 MB; 80 MB detecta descargas truncadas sin rechazar el asset válido.
+if ((Get-Item $kokoroModel).Length -lt 80MB) { throw 'Modelo Kokoro parece incompleto.' }
+if ((Get-Item $voicesModel).Length -lt 1MB) { throw 'Archivo de voces Kokoro parece incompleto.' }
 Write-Host "Runtime listo: $($server.FullName)"
-Write-Host 'Backend local preferido: Vulkan (compatible con NVIDIA/AMD/Intel mediante drivers gráficos de Windows).'
+Write-Host "llama.cpp fijado: $LlamaRelease"
+Write-Host 'Backend local preferido: Vulkan; fallback CPU x64 si el asset Vulkan no está disponible.'
 Remove-Item $Temp -Recurse -Force -ErrorAction SilentlyContinue
