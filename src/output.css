@@ -3,6 +3,7 @@
   --date-font-family:Arial,sans-serif;
   --title-color:#fff;
   --summary-color:#f3f3f3;
+  --date-color:#f3f3f3;
   --cat-bg:#F7C600;
   --cat-color:#000;
   --lower-bg:rgba(0,0,0,.88);
@@ -23,7 +24,7 @@ body{font-family:var(--font-family);user-select:none}
 #lowerContent{position:absolute;left:64px;right:64px;bottom:54px;max-height:72%;overflow:hidden}
 #metaRow{display:flex;align-items:center;gap:22px;margin-bottom:15px}
 #cat{display:inline-block;background:var(--cat-bg);color:var(--cat-color);padding:10px 15px;font-size:28px;font-weight:900;margin:0}
-#pubDate{display:inline-block;color:var(--summary-color);font-family:var(--date-font-family);font-size:27px;line-height:1;font-weight:500;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap}
+#pubDate{display:inline-block;color:var(--date-color);font-family:var(--date-font-family);font-size:27px;line-height:1;font-weight:500;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap}
 #title{font-size:70px;line-height:1.02;font-weight:900;max-width:1580px;color:var(--title-color)}
 #summary{font-size:34px;line-height:1.24;margin-top:14px;max-width:1500px;color:var(--summary-color)}
 #cannedLayer{z-index:2;display:flex;align-items:center;justify-content:center;background:#000}
@@ -36,7 +37,7 @@ body{font-family:var(--font-family);user-select:none}
 .snapshot-lower-content{position:absolute;left:64px;right:64px;bottom:54px;max-height:72%;overflow:hidden}
 .snapshot-meta-row{display:flex;align-items:center;gap:22px;margin-bottom:15px}
 .snapshot-cat{display:inline-block;background:var(--cat-bg);color:var(--cat-color);padding:10px 15px;font-size:28px;font-weight:900}
-.snapshot-date{color:var(--summary-color);font-family:var(--date-font-family);font-size:27px;line-height:1;font-weight:500;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap}
+.snapshot-date{color:var(--date-color);font-family:var(--date-font-family);font-size:27px;line-height:1;font-weight:500;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap}
 .snapshot-title{font-size:70px;line-height:1.02;font-weight:900;max-width:1580px;color:var(--title-color)}
 .snapshot-summary{font-size:34px;line-height:1.24;margin-top:14px;max-width:1500px;color:var(--summary-color)}
 #stage[data-format="9:16"]{width:1080px;height:1920px}
