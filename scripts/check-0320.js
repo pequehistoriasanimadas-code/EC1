@@ -36,3 +36,5 @@ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'ec-0320-check-'));
 
   console.log('EC 0.3.20 checks OK · Qwen autotune · 1 Qwen + 1 Kokoro · fallback real · omitidas explicadas · pipeline visible');
 }finally{try{fs.rmSync(temp,{recursive:true,force:true});}catch{}}})().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
+
+// Validación específica de la build Windows 0.3.20.
