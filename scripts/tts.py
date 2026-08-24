@@ -13,6 +13,8 @@ p.add_argument('--voices')
 p.add_argument('--onnx-intra',type=int,default=2)
 p.add_argument('--onnx-inter',type=int,default=1)
 p.add_argument('--onnx-mode',choices=['sequential','parallel'],default='sequential')
+p.add_argument('--onnx-provider',choices=['cpu','cuda'],default='cpu')
+p.add_argument('--gpu-mem-limit-mb',type=int,default=3072)
 p.add_argument('--spin-duration-us',type=int,default=-1)
 p.add_argument('--spin-backoff-max',type=int,default=1)
 p.add_argument('--list-voices',action='store_true')
@@ -26,8 +28,21 @@ if a.list_voices:
 
 import onnxruntime as ort
 _original_inference_session=ort.InferenceSession
+_ACTIVE_PROVIDERS=[]
+_REQUESTED_PROVIDER='cuda' if str(a.onnx_provider).lower()=='cuda' else 'cpu'
+
+if _REQUESTED_PROVIDER=='cuda':
+    # El runtime GPU se instala dentro de la carpeta de datos de EC. Desde ORT
+    # 1.21 preload_dlls puede cargar CUDA/cuDNN desde los paquetes NVIDIA de
+    # site-packages, por lo que el usuario no necesita instalar CUDA en Windows.
+    try:
+        if hasattr(ort,'preload_dlls'):
+            ort.preload_dlls(directory='')
+    except Exception as e:
+        raise RuntimeError(f'No se pudieron cargar las bibliotecas NVIDIA CUDA/cuDNN: {e}')
 
 def _limited_inference_session(path_or_bytes, sess_options=None, providers=None, provider_options=None, **kwargs):
+    global _ACTIVE_PROVIDERS
     opts=ort.SessionOptions()
     intra=max(0,int(a.onnx_intra if a.onnx_intra is not None else 0))
     inter=max(1,int(a.onnx_inter or 1))
@@ -53,12 +68,34 @@ def _limited_inference_session(path_or_bytes, sess_options=None, providers=None,
                 opts.add_session_config_entry('session.inter_op.spin_backoff_max',str(spin_backoff))
     except Exception:
         pass
+
     call_kwargs=dict(kwargs)
-    if providers is not None:
-        call_kwargs['providers']=providers
-    if provider_options is not None:
-        call_kwargs['provider_options']=provider_options
-    return _original_inference_session(path_or_bytes,sess_options=opts,**call_kwargs)
+    if _REQUESTED_PROVIDER=='cuda':
+        available=list(ort.get_available_providers())
+        if 'CUDAExecutionProvider' not in available:
+            raise RuntimeError(f'CUDAExecutionProvider no está disponible. Proveedores detectados: {", ".join(available) or "ninguno"}')
+        mem_limit=max(512,min(8192,int(a.gpu_mem_limit_mb or 3072)))*1024*1024
+        cuda_options={
+            'device_id':'0',
+            'gpu_mem_limit':str(mem_limit),
+            'arena_extend_strategy':'kSameAsRequested',
+            'cudnn_conv_algo_search':'HEURISTIC',
+            'do_copy_in_default_stream':'1'
+        }
+        call_kwargs['providers']=[('CUDAExecutionProvider',cuda_options),'CPUExecutionProvider']
+    else:
+        # Incluso si el runtime CUDA está descargado, el baseline CPU debe ser
+        # realmente CPU para que el benchmark compare hardware de forma limpia.
+        call_kwargs['providers']=['CPUExecutionProvider']
+
+    session=_original_inference_session(path_or_bytes,sess_options=opts,**call_kwargs)
+    try:
+        _ACTIVE_PROVIDERS=list(session.get_providers())
+    except Exception:
+        _ACTIVE_PROVIDERS=[]
+    if _REQUESTED_PROVIDER=='cuda' and (not _ACTIVE_PROVIDERS or _ACTIVE_PROVIDERS[0]!='CUDAExecutionProvider'):
+        raise RuntimeError(f'ONNX Runtime no activó CUDA. Proveedores activos: {", ".join(_ACTIVE_PROVIDERS) or "ninguno"}')
+    return session
 
 ort.InferenceSession=_limited_inference_session
 
@@ -191,6 +228,8 @@ def load_engine():
     if not str(probe or '').strip():
         raise RuntimeError('eSpeak no devolvió fonemas en la prueba de español')
     kokoro=Kokoro(a.model,a.voices)
+    if _REQUESTED_PROVIDER=='cuda' and (not _ACTIVE_PROVIDERS or _ACTIVE_PROVIDERS[0]!='CUDAExecutionProvider'):
+        raise RuntimeError('Kokoro se inició, pero el modelo no quedó asignado a CUDAExecutionProvider')
     return styles,voices,g2p,kokoro,languages
 
 def synthesize(text_file,output,voice,speed,engine):
@@ -215,6 +254,9 @@ def synthesize(text_file,output,voice,speed,engine):
         'onnx_intra_auto':int(a.onnx_intra if a.onnx_intra is not None else 0)==0,
         'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),
         'execution_mode':'parallel' if str(a.onnx_mode).lower()=='parallel' else 'sequential',
+        'execution_provider':_REQUESTED_PROVIDER,
+        'active_providers':list(_ACTIVE_PROVIDERS),
+        'gpu_mem_limit_mb':max(512,min(8192,int(a.gpu_mem_limit_mb or 3072))) if _REQUESTED_PROVIDER=='cuda' else 0,
         'spin_duration_us':int(a.spin_duration_us if a.spin_duration_us is not None else -1),
         'spin_backoff_max':max(1,int(a.spin_backoff_max or 1)),
         'phoneme_ms':round(phoneme_ms,2),'inference_ms':round(inference_ms,2)
@@ -226,9 +268,9 @@ def emit_worker(payload):
 if a.worker:
     try:
         engine=load_engine()
-        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':int(a.onnx_intra if a.onnx_intra is not None else 0),'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),'execution_mode':'parallel' if str(a.onnx_mode).lower()=='parallel' else 'sequential','spin_duration_us':int(a.spin_duration_us if a.spin_duration_us is not None else -1),'spin_backoff_max':max(1,int(a.spin_backoff_max or 1)),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':True,'languages':engine[4]})
+        emit_worker({'type':'ready','ok':True,'voices':len(engine[1]),'onnx_intra_threads':int(a.onnx_intra if a.onnx_intra is not None else 0),'onnx_inter_threads':max(1,int(a.onnx_inter or 1)),'execution_mode':'parallel' if str(a.onnx_mode).lower()=='parallel' else 'sequential','execution_provider':_REQUESTED_PROVIDER,'active_providers':list(_ACTIVE_PROVIDERS),'gpu_mem_limit_mb':max(512,min(8192,int(a.gpu_mem_limit_mb or 3072))) if _REQUESTED_PROVIDER=='cuda' else 0,'spin_duration_us':int(a.spin_duration_us if a.spin_duration_us is not None else -1),'spin_backoff_max':max(1,int(a.spin_backoff_max or 1)),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':True,'languages':engine[4]})
     except Exception as e:
-        emit_worker({'type':'ready','ok':False,'error':str(e),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':False})
+        emit_worker({'type':'ready','ok':False,'error':str(e),'execution_provider':_REQUESTED_PROVIDER,'active_providers':list(_ACTIVE_PROVIDERS),'espeak_data':_ESPEAK_DATA,'espeak_phontab':_ESPEAK_PHONTAB,'es_supported':False})
         sys.exit(2)
     for raw in sys.stdin:
         raw=raw.strip()
@@ -240,13 +282,13 @@ if a.worker:
             if cmd=='stop':
                 emit_worker({'id':req_id,'ok':True,'stopped':True});break
             if cmd=='ping':
-                emit_worker({'id':req_id,'ok':True,'pong':True,'es_supported':True,'espeak_data':_ESPEAK_DATA});continue
+                emit_worker({'id':req_id,'ok':True,'pong':True,'es_supported':True,'execution_provider':_REQUESTED_PROVIDER,'active_providers':list(_ACTIVE_PROVIDERS),'espeak_data':_ESPEAK_DATA});continue
             if cmd!='generate':
                 raise ValueError('Comando no reconocido')
             result=synthesize(req.get('text_file',''),req.get('output',''),req.get('voice','ef_dora'),req.get('speed',1.0),engine)
             result['id']=req_id;emit_worker(result)
         except Exception as e:
-            emit_worker({'id':req_id,'ok':False,'error':str(e)})
+            emit_worker({'id':req_id,'ok':False,'error':str(e),'execution_provider':_REQUESTED_PROVIDER})
     sys.exit(0)
 
 engine=load_engine()
