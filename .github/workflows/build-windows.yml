@@ -50,9 +50,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows packaged UI, Output, Kokoro and learned-pronunciation smoke tests
+      - name: Windows packaged UI, Output, Kokoro, pronunciation and ONNX smoke tests
         shell: powershell
-        timeout-minutes: 12
+        timeout-minutes: 15
         run: |
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
@@ -62,9 +62,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-pronunciation-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-onnx-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged ONNX smoke test falló con código $LASTEXITCODE" }
 
       - name: Upload portable folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: EC-Automatic-News-Portable-Folder
           path: dist/win-unpacked/**
@@ -72,7 +74,7 @@ jobs:
           retention-days: 14
 
       - name: Upload portable EXE
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: EC-Automatic-News-Windows-Portable-EXE
           path: dist/*.exe
