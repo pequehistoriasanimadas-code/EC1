@@ -6,394 +6,155 @@ const { pathToFileURL } = require('url');
 
 const rss = require('./services/rss');
 const { fetchArticle } = require('./services/article');
-const { SettingsStore } = require('./services/settings');
+const { SettingsStore, DEFAULT_CLAUDE_MODEL } = require('./services/settings');
 const { LocalRuntime } = require('./services/localRuntime');
 const { PronunciationNormalizer } = require('./services/pronunciation');
 const { KokoroTTS } = require('./services/kokoro');
 const { Providers } = require('./services/providers');
 const { HistoryStore } = require('./services/history');
 const { CannedManager } = require('./services/canned');
+const { DocumentLibrary, canonicalCategory } = require('./services/documents');
 const { AutomationEngine } = require('./services/automation');
 
-let controlWindow;
-let outputWindow;
-let settingsStore;
-let localRuntime;
-let pronunciation;
-let kokoro;
-let providers;
-let history;
-let canned;
-let automation;
-let dataDir;
-let resourcesDir;
-let startupLogFile = '';
+let controlWindow,outputWindow,settingsStore,localRuntime,pronunciation,kokoro,providers,history,canned,ads,documents,automation;
+let dataDir,resourcesDir,startupLogFile='';
+let documentWatchTimer=null,documentWatchBusy=false;
 let outputState={open:false,source:'none',kind:'none',title:'',format:'16:9',resolution:'1920×1080'};
 
-function portableDataDir() {
-  const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
-  if (portableDir) return path.join(portableDir, 'EC Automatic News Data');
-  if (app.isPackaged) return path.join(path.dirname(process.execPath), 'EC Automatic News Data');
-  return path.join(app.getPath('userData'), 'EC Automatic News Data');
-}
-function initStartupLog() {
-  try {
-    const base = portableDataDir();
-    const dir = path.join(base, 'logs');
-    fs.mkdirSync(dir, { recursive: true });
-    startupLogFile = path.join(dir, 'startup.log');
-  } catch { startupLogFile = path.join(app.getPath('temp'), 'EC-Automatic-News-startup.log'); }
-  logEvent('START', `version=${app.getVersion()} packaged=${app.isPackaged} exec=${process.execPath}`);
-}
-function logEvent(kind, message) {
-  const line = `[${new Date().toISOString()}] ${kind}: ${String(message || '')}\n`;
-  try { if (startupLogFile) fs.appendFileSync(startupLogFile, line, 'utf8'); } catch {}
-  try { console.log(line.trim()); } catch {}
-}
-function fatalError(label, err) {
-  const msg = err?.stack || err?.message || String(err);
-  logEvent(label, msg);
-  try { dialog.showErrorBox('EC Automatic News', `${label}\n\n${err?.message || err}\n\nLog: ${startupLogFile || 'no disponible'}`); } catch {}
-}
-function sendControl(channel, payload) {
-  if (controlWindow && !controlWindow.isDestroyed()) controlWindow.webContents.send(channel, payload);
-}
-function notify(title, body) { if (Notification.isSupported()) new Notification({title,body}).show(); }
-function fileUrl(p){
-  const value=String(p||'').trim();
-  return value&&fs.existsSync(value)?pathToFileURL(value).href:'';
-}
-function fallbackUrl() {
-  const s=settingsStore.load();
-  return fileUrl(s.visual.fallbackImage);
-}
-function enrichDesign(raw={}){
-  return {
-    ...raw,
-    verticalVideoBackgroundUrl:fileUrl(raw.verticalVideoBackground),
-    musicUrl:fileUrl(raw.musicFile)
-  };
-}
+function portableDataDir(){const portableDir=process.env.PORTABLE_EXECUTABLE_DIR;if(portableDir)return path.join(portableDir,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function initStartupLog(){try{const base=portableDataDir(),dir=path.join(base,'logs');fs.mkdirSync(dir,{recursive:true});startupLogFile=path.join(dir,'startup.log');}catch{startupLogFile=path.join(app.getPath('temp'),'EC-Automatic-News-startup.log');}logEvent('START',`version=${app.getVersion()} packaged=${app.isPackaged} exec=${process.execPath}`);}
+function logEvent(kind,message){const line=`[${new Date().toISOString()}] ${kind}: ${String(message||'')}\n`;try{if(startupLogFile)fs.appendFileSync(startupLogFile,line,'utf8');}catch{}try{console.log(line.trim());}catch{}}
+function fatalError(label,err){const msg=err?.stack||err?.message||String(err);logEvent(label,msg);try{dialog.showErrorBox('EC Automatic News',`${label}\n\n${err?.message||err}\n\nLog: ${startupLogFile||'no disponible'}`);}catch{}}
+function sendControl(channel,payload){if(controlWindow&&!controlWindow.isDestroyed())controlWindow.webContents.send(channel,payload);}
+function notify(title,body){if(Notification.isSupported())new Notification({title,body}).show();}
+function fileUrl(p){const value=String(p||'').trim();return value&&fs.existsSync(value)?pathToFileURL(value).href:'';}
+function fallbackUrl(){return fileUrl(settingsStore.load().visual.fallbackImage);}
+function enrichDesign(raw={}){return{...raw,verticalVideoBackgroundUrl:fileUrl(raw.verticalVideoBackground),musicUrl:fileUrl(raw.musicFile)};}
 function currentDesign(){return enrichDesign(settingsStore?.load()?.visual?.output||{});}
 function broadcastOutputState(){sendControl('output:state',{...outputState});}
 function setOutputState(patch){outputState={...outputState,...patch};broadcastOutputState();}
-function nativeOutputSize(format,win=null){
-  const px=format==='9:16'?{width:1080,height:1920,resolution:'1080×1920'}:{width:1920,height:1080,resolution:'1920×1080'};
-  let scaleFactor=1;
-  try{
-    const d=win&&!win.isDestroyed()?screen.getDisplayMatching(win.getBounds()):screen.getPrimaryDisplay();
-    scaleFactor=Number(d?.scaleFactor)||1;
-  }catch{}
-  return {...px,dipWidth:Math.max(1,Math.round(px.width/scaleFactor)),dipHeight:Math.max(1,Math.round(px.height/scaleFactor)),scaleFactor};
-}
+function nativeOutputSize(format,win=null){const px=format==='9:16'?{width:1080,height:1920,resolution:'1080×1920'}:{width:1920,height:1080,resolution:'1920×1080'};let scaleFactor=1;try{const d=win&&!win.isDestroyed()?screen.getDisplayMatching(win.getBounds()):screen.getPrimaryDisplay();scaleFactor=Number(d?.scaleFactor)||1;}catch{}return{...px,dipWidth:Math.max(1,Math.round(px.width/scaleFactor)),dipHeight:Math.max(1,Math.round(px.height/scaleFactor)),scaleFactor};}
 function sendDesignLive(){if(outputWindow&&!outputWindow.isDestroyed())outputWindow.webContents.send('output:design',currentDesign());}
+function secureWebPreferences(extra={}){return{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,...extra};}
 
 async function syncLocalPolicy(settings=settingsStore?.load()){
-  if(!settings||!localRuntime)return;
-  const ai=settings.ai||{};
-  const localAsBackup=ai.primary!=='local'&&[ai.backup1,ai.backup2].includes('local');
-  if(localAsBackup&&(ai.localBackupMode||'on_demand')==='always'){
-    try{
-      const st=await localRuntime.status();
-      if(st.model&&!st.running) await localRuntime.start();
-    }catch(e){sendControl('local:event',{type:'local-ai-error',message:e.message||String(e)});}
-  } else if(localAsBackup&&(ai.localBackupMode||'on_demand')==='on_demand'){
-    const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||5));
-    localRuntime.scheduleIdleStop(minutes*60000);
-  }
+  if(!settings||!localRuntime)return;const ai=settings.ai||{},localAsBackup=ai.primary!=='local'&&[ai.backup1,ai.backup2].includes('local');
+  if(localAsBackup&&(ai.localBackupMode||'on_demand')==='always'){try{const st=await localRuntime.status();if(st.model&&!st.running)await localRuntime.start();}catch(e){sendControl('local:event',{type:'local-ai-error',message:e.message||String(e)});}}
+  else if(localAsBackup&&(ai.localBackupMode||'on_demand')==='on_demand'){const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||5));localRuntime.scheduleIdleStop(minutes*60000);}
 }
 
-function createControlWindow() {
-  controlWindow = new BrowserWindow({
-    width: 1500, height: 940, minWidth: 1100, minHeight: 720,
-    title: 'EC Automatic News', backgroundColor:'#0f0f0f',
-    webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false}
-  });
+function createControlWindow(){
+  controlWindow=new BrowserWindow({width:1500,height:940,minWidth:1100,minHeight:720,title:'EC Automatic News',backgroundColor:'#0f0f0f',webPreferences:secureWebPreferences()});
   controlWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('CONTROL_LOAD_FAIL',`${code} ${desc} ${url}`));
   controlWindow.webContents.on('render-process-gone',(_,details)=>logEvent('CONTROL_RENDER_GONE',JSON.stringify(details)));
   controlWindow.loadFile(path.join(__dirname,'control.html')).catch(e=>fatalError('No se pudo cargar la interfaz',e));
   controlWindow.webContents.once('did-finish-load',()=>{broadcastOutputState();if(automation)sendControl('automation:state',automation.getState());});
 }
-function applyOutputWindowFormat(format,resize=false){
-  if(!outputWindow||outputWindow.isDestroyed()) return;
-  const vertical=format==='9:16';
-  const n=nativeOutputSize(format,outputWindow);
-  try{outputWindow.setAspectRatio(vertical?9/16:16/9);}catch{}
-  if(resize){try{outputWindow.setContentSize(n.dipWidth,n.dipHeight,false);}catch{}}
-  setOutputState({format:vertical?'9:16':'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});
-}
-function createOutputWindow() {
-  if (outputWindow && !outputWindow.isDestroyed()) { outputWindow.show(); return outputWindow; }
-  const design=currentDesign();
-  const n=nativeOutputSize(design.format);
-  outputWindow = new BrowserWindow({
-    width:n.dipWidth,height:n.dipHeight,
-    useContentSize:true,
-    frame:false,
-    resizable:false,
-    maximizable:false,
-    fullscreenable:false,
-    roundedCorners:false,
-    hasShadow:false,
-    title:'EC Automatic News — OUTPUT',
-    backgroundColor:'#000000',autoHideMenuBar:true,
-    webPreferences:{
-      preload:path.join(__dirname,'preload.js'),
-      contextIsolation:true,nodeIntegration:false,
-      backgroundThrottling:false
-    }
-  });
-  setOutputState({open:true,source:'none',kind:'none',title:'',format:design.format||'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});
-  try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
-  outputWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('OUTPUT_LOAD_FAIL',`${code} ${desc} ${url}`));
-  outputWindow.webContents.on('render-process-gone',(_,details)=>logEvent('OUTPUT_RENDER_GONE',JSON.stringify(details)));
+function applyOutputWindowFormat(format,resize=false){if(!outputWindow||outputWindow.isDestroyed())return;const vertical=format==='9:16',n=nativeOutputSize(format,outputWindow);try{outputWindow.setAspectRatio(vertical?9/16:16/9);}catch{}if(resize){try{outputWindow.setContentSize(n.dipWidth,n.dipHeight,false);}catch{}}setOutputState({format:vertical?'9:16':'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});}
+function createOutputWindow(show=true){
+  if(outputWindow&&!outputWindow.isDestroyed()){if(show)outputWindow.show();return outputWindow;}
+  const design=currentDesign(),n=nativeOutputSize(design.format);outputWindow=new BrowserWindow({width:n.dipWidth,height:n.dipHeight,useContentSize:true,show,frame:false,resizable:false,maximizable:false,fullscreenable:false,roundedCorners:false,hasShadow:false,title:'EC Automatic News — OUTPUT',backgroundColor:'#000000',autoHideMenuBar:true,webPreferences:secureWebPreferences({backgroundThrottling:false})});
+  setOutputState({open:true,source:'none',kind:'none',title:'',format:design.format||'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
+  outputWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('OUTPUT_LOAD_FAIL',`${code} ${desc} ${url}`));outputWindow.webContents.on('render-process-gone',(_,details)=>logEvent('OUTPUT_RENDER_GONE',JSON.stringify(details)));
   outputWindow.loadFile(path.join(__dirname,'output.html')).catch(e=>fatalError('No se pudo cargar Output',e));
-  outputWindow.webContents.once('did-finish-load',()=>{
-    try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}
-    outputWindow.webContents.send('output:design',currentDesign());
-    const actual=nativeOutputSize(design.format,outputWindow);
-    setOutputState({open:true,format:design.format||'16:9',resolution:actual.resolution,scaleFactor:actual.scaleFactor});
-  });
-  outputWindow.on('move',()=>{try{applyOutputWindowFormat(currentDesign().format||'16:9',true);}catch{}});
-  outputWindow.on('closed',()=>{
-    outputWindow=null;
-    automation?.outputClosed();
-    setOutputState({open:false,source:'none',kind:'none',title:''});
-  });
-  applyOutputWindowFormat(design.format||'16:9',false);
-  return outputWindow;
+  outputWindow.webContents.once('did-finish-load',()=>{try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}outputWindow.webContents.send('output:design',currentDesign());const actual=nativeOutputSize(design.format,outputWindow);setOutputState({open:true,format:design.format||'16:9',resolution:actual.resolution,scaleFactor:actual.scaleFactor});});
+  outputWindow.on('move',()=>{try{applyOutputWindowFormat(currentDesign().format||'16:9',true);}catch{}});outputWindow.on('closed',()=>{outputWindow=null;automation?.outputClosed();setOutputState({open:false,source:'none',kind:'none',title:''});});applyOutputWindowFormat(design.format||'16:9',false);return outputWindow;
 }
-function outputReady(){return !!(outputWindow&&!outputWindow.isDestroyed());}
-function deliverToOutput(payload,source,autoOpen=false){
-  let win=outputWindow;
-  if((!win||win.isDestroyed())&&autoOpen) win=createOutputWindow();
-  if(!win||win.isDestroyed()) return false;
-  // El diseño (incluido el canal de música) es estado global persistente del Output.
-  // No se reenvía con cada noticia para evitar reinicializar/pausar la música entre notas.
-  const enriched={...payload,source};
-  const deliver=()=>{if(win&&!win.isDestroyed())win.webContents.send('output:story',enriched);};
-  if(win.webContents.isLoading()) win.webContents.once('did-finish-load',deliver); else deliver();
-  setOutputState({open:true,source,kind:payload.kind||'news',title:payload.title||''});
-  return true;
-}
+function outputReady(){return!!(outputWindow&&!outputWindow.isDestroyed());}
+function deliverToOutput(payload,source,autoOpen=false){let win=outputWindow;if((!win||win.isDestroyed())&&autoOpen)win=createOutputWindow();if(!win||win.isDestroyed())return false;const enriched={...payload,source},deliver=()=>{if(win&&!win.isDestroyed())win.webContents.send('output:story',enriched);};if(win.webContents.isLoading())win.webContents.once('did-finish-load',deliver);else deliver();const kind=payload.mediaRole==='ad'?'ad':(payload.kind||'news');setOutputState({open:true,source,kind,title:payload.title||''});return true;}
 function sendAutomaticOutput(payload){return deliverToOutput(payload,'automatic',false);}
 function controlOutput(action){if(outputReady())outputWindow.webContents.send('output:control',action);}
 
-function initServices() {
-  dataDir = portableDataDir();
-  fs.mkdirSync(dataDir,{recursive:true});
-  resourcesDir = app.isPackaged ? process.resourcesPath : path.join(__dirname,'..');
-  logEvent('PATHS',`dataDir=${dataDir} resourcesDir=${resourcesDir}`);
-  settingsStore = new SettingsStore(dataDir);
-  history = new HistoryStore(dataDir);
-  localRuntime = new LocalRuntime({resourcesDir,dataDir,onEvent:e=>sendControl('local:event',e)});
-  pronunciation = new PronunciationNormalizer({resourcesDir,dataDir,onEvent:e=>sendControl('pronunciation:event',e)});
-  kokoro = new KokoroTTS({resourcesDir,dataDir});
-  providers = new Providers({settingsStore,localRuntime});
-  canned = new CannedManager();
-  automation = new AutomationEngine({
-    rss,fetchArticle,providers,kokoro,pronunciation,canned,history,
-    getSettings:()=>settingsStore.load(),
-    getFallbackUrl:fallbackUrl,
-    sendAutomaticOutput,
-    isOutputReady:outputReady,
-    controlOutput
-  });
-  automation.on('state',s=>{
-    sendControl('automation:state',s);
-    if(outputState.source==='automatic'&&!s.emission.running)setOutputState({source:'none',kind:'none',title:''});
-  });
-  automation.on('error-item',e=>sendControl('automation:itemError',e));
-  automation.on('engine-error',e=>sendControl('automation:engineError',{message:e.message}));
-  setTimeout(()=>syncLocalPolicy(settingsStore.load()),800);
-  logEvent('SERVICES','initialized');
+function initServices(){
+  dataDir=portableDataDir();fs.mkdirSync(dataDir,{recursive:true});resourcesDir=app.isPackaged?process.resourcesPath:path.join(__dirname,'..');logEvent('PATHS',`dataDir=${dataDir} resourcesDir=${resourcesDir}`);
+  settingsStore=new SettingsStore(dataDir);history=new HistoryStore(dataDir);documents=new DocumentLibrary();
+  localRuntime=new LocalRuntime({resourcesDir,dataDir,onEvent:e=>sendControl('local:event',e)});providers=new Providers({settingsStore,localRuntime});
+  pronunciation=new PronunciationNormalizer({resourcesDir,dataDir,onEvent:e=>sendControl('pronunciation:event',e),getSettings:()=>settingsStore.load(),claudeVerify:(items,proposals,settings,timeoutMs)=>providers.verifyPronunciations(items,proposals,settings,timeoutMs)});
+  kokoro=new KokoroTTS({resourcesDir,dataDir});canned=new CannedManager();ads=new CannedManager();
+  automation=new AutomationEngine({rss,fetchArticle,providers,kokoro,pronunciation,canned,ads,history,getSettings:()=>settingsStore.load(),getFallbackUrl:fallbackUrl,sendAutomaticOutput,isOutputReady:outputReady,controlOutput});
+  automation.on('state',s=>{sendControl('automation:state',s);if(outputState.source==='automatic'&&!s.emission.running)setOutputState({source:'none',kind:'none',title:''});});automation.on('error-item',e=>sendControl('automation:itemError',e));automation.on('engine-error',e=>sendControl('automation:engineError',{message:e.message}));
+  setTimeout(()=>{syncLocalPolicy(settingsStore.load());syncDocumentWatch(settingsStore.load());},800);logEvent('SERVICES','initialized');
 }
 
-async function runSelfTest() {
-  logEvent('SELF_TEST','begin');
-  const local = await localRuntime.status();
-  if (!local.runtime) throw new Error('llama.cpp runtime no encontrado');
-  if (!kokoro.ready()) throw new Error('Kokoro runtime incompleto');
-  const normalized=await pronunciation.normalize('Apple TV informó un avance de 25%.',{smart:false});
-  if(!/ápol te uve/i.test(normalized.text)||!/25 por ciento/i.test(normalized.text))throw new Error('Normalizador básico falló');
-  const testDir=path.join(dataDir,'self-test-canned');fs.mkdirSync(testDir,{recursive:true});
-  const dummy=path.join(testDir,'test.mp4');fs.writeFileSync(dummy,'x');
-  const scan=canned.list(testDir);if(scan.count!==1)throw new Error('Escaneo de enlatados falló');
-  try{fs.unlinkSync(dummy);fs.rmdirSync(testDir);}catch{}
-  const voices = await kokoro.listVoices();
-  if (!voices.length) throw new Error('Kokoro no pudo listar voces');
-  const sample = await kokoro.generate('Prueba de voz.', { voice: voices.includes('ef_dora') ? 'ef_dora' : voices[0], speed: 1.0 });
-  if (!sample.path || !fs.existsSync(sample.path) || fs.statSync(sample.path).size < 1000) throw new Error('Kokoro no generó audio válido');
-  try { fs.unlinkSync(sample.path); } catch {}
-  const html=fs.readFileSync(path.join(__dirname,'output.html'),'utf8');
-  if(!html.includes('cannedVideo')||!html.includes('music'))throw new Error('Output multimedia incompleto');
-  logEvent('SELF_TEST',`OK voices=${voices.length}`);
+function normalizeBatchDate(value){const s=String(value||'').trim();if(!/^20\d{2}-\d{2}-\d{2}$/.test(s))return'';const d=new Date(`${s}T12:00:00`);return Number.isNaN(d.getTime())?'':d.toISOString();}
+function isInsideFolder(file,folder){try{const root=path.resolve(folder)+path.sep,resolved=path.resolve(file);return resolved.startsWith(root);}catch{return false;}}
+async function queueDocumentPaths(paths,options={},force=false){
+  const s=settingsStore.load(),folder=String(s.documents?.folder||'').trim();if(!folder)throw new Error('Primero selecciona una carpeta de documentos');
+  const unique=[...new Set((Array.isArray(paths)?paths:[]).map(String))].filter(p=>isInsideFolder(p,folder));const queued=[],skipped=[],errors=[];s.documents.processed=s.documents.processed||{};
+  for(const file of unique){
+    try{
+      const read=await documents.read(file);if(!force&&s.documents.processed[read.fingerprint]){skipped.push({path:file,reason:'already-processed'});continue;}
+      const folderCategory=canonicalCategory(path.basename(path.dirname(file))),mode=String(options.categoryMode||s.documents.categoryMode||'auto'),category=mode&&mode!=='auto'?mode.toUpperCase():(folderCategory||'');
+      const title=read.explicitTitle||path.basename(file,path.extname(file)).replace(/[_-]+/g,' ').trim(),pubDate=read.explicitDate||normalizeBatchDate(options.batchDate||s.documents.batchDate)||new Date().toISOString();
+      const imagePath=read.image?.path||'',doc={path:file,fingerprint:read.fingerprint,text:read.text,title,category,pubDate,imagePath,imageUrl:imagePath?pathToFileURL(imagePath).href:'',imageSource:read.image?.source||'fallback',targetSeconds:Math.max(30,Math.min(180,Number(options.targetSeconds)||Number(s.documents.targetSeconds)||60))};
+      const q=automation.enqueueDocument(doc,{category,priority:options.priority||s.documents.priority||'normal'});queued.push({...q,path:file});s.documents.processed[read.fingerprint]={path:file,queuedAt:new Date().toISOString(),title};
+    }catch(e){errors.push({path:file,error:e.message||String(e)});}
+  }
+  const entries=Object.entries(s.documents.processed);if(entries.length>2000)s.documents.processed=Object.fromEntries(entries.slice(-2000));settingsStore.save(s);return{ok:true,queued,skipped,errors,state:automation.getState()};
 }
-process.on('uncaughtException',e=>fatalError('Error no controlado',e));
-process.on('unhandledRejection',e=>fatalError('Promesa rechazada',e));
+async function queueNewDocumentsFromWatch(){
+  if(documentWatchBusy)return;documentWatchBusy=true;
+  try{const s=settingsStore.load();if(!s.documents?.watch||!s.documents?.folder)return;const scan=documents.scan(s.documents.folder);if(!scan.ok)return;const fresh=scan.files.filter(x=>!s.documents.processed?.[x.fingerprint]);if(fresh.length)await queueDocumentPaths(fresh.map(x=>x.path),{targetSeconds:s.documents.targetSeconds,categoryMode:s.documents.categoryMode,batchDate:s.documents.batchDate,priority:s.documents.priority},false);}
+  catch(e){sendControl('automation:engineError',{message:`Generador de Notas: ${e.message||e}`});}finally{documentWatchBusy=false;}
+}
+function syncDocumentWatch(settings=settingsStore?.load()){
+  clearInterval(documentWatchTimer);documentWatchTimer=null;if(!settings?.documents?.watch||!settings.documents.folder)return;
+  documentWatchTimer=setInterval(queueNewDocumentsFromWatch,5000);setTimeout(queueNewDocumentsFromWatch,1200);
+}
 
-app.whenReady().then(async()=>{
-  initStartupLog();
-  try {
-    initServices();
-    if (process.argv.includes('--self-test')) { await runSelfTest(); app.exit(0); return; }
-    createControlWindow();logEvent('WINDOW','control created');
-  } catch (e) { fatalError('La aplicación no pudo iniciar',e);app.exit(1); }
-});
-app.on('window-all-closed',()=>{
-  localRuntime?.stop('app-close');pronunciation?.stop('app-close');
-  if(process.platform!=='darwin') app.quit();
-});
-app.on('before-quit',()=>{localRuntime?.stop('app-quit');pronunciation?.stop('app-quit');});
+async function waitForJs(win,expression,timeoutMs=30000){const started=Date.now();while(Date.now()-started<timeoutMs){try{if(await win.webContents.executeJavaScript(`Boolean(${expression})`))return true;}catch{}await new Promise(r=>setTimeout(r,250));}throw new Error(`UI smoke test timeout: ${expression}`);}
+async function runUiBridgeSelfTest(){
+  const testWin=new BrowserWindow({show:false,width:1200,height:800,webPreferences:secureWebPreferences()});
+  try{await testWin.loadFile(path.join(__dirname,'control.html'),{query:{selftest:'1'}});await waitForJs(testWin,"window.ECAPI && typeof window.ECAPI.getSettings==='function'",10000);await waitForJs(testWin,"document.querySelector('#voice') && document.querySelector('#voice').options.length>0",30000);await waitForJs(testWin,"document.querySelector('#dateColor') && document.querySelector('#documentList') && document.querySelector('#processingDetail')",10000);const bridge=await testWin.webContents.executeJavaScript("window.ECAPI.getSettings().then(s=>({ok:!!s,model:s.ai.claudeModel,voice:s.tts.voice}))");if(!bridge?.ok||bridge.model!==DEFAULT_CLAUDE_MODEL)throw new Error('Bridge settings/Claude model smoke test falló');}finally{try{testWin.destroy();}catch{}}
+  const outWin=new BrowserWindow({show:false,width:960,height:540,webPreferences:secureWebPreferences({backgroundThrottling:false})});try{await outWin.loadFile(path.join(__dirname,'output.html'));await waitForJs(outWin,"window.ECAPI && typeof window.ECAPI.outputPlayback==='function' && document.querySelector('#stage')",10000);}finally{try{outWin.destroy();}catch{}}
+}
+async function runSelfTest(){
+  logEvent('SELF_TEST','begin');const local=await localRuntime.status();if(!local.runtime)throw new Error('llama.cpp runtime no encontrado');if(!kokoro.ready())throw new Error('Kokoro runtime incompleto');
+  const normalized=await pronunciation.normalize('Apple TV informó un avance de 25%.',{smart:false});if(!/ápol te uve/i.test(normalized.text)||!/25 por ciento/i.test(normalized.text))throw new Error('Normalizador básico falló');
+  const candidates=pronunciation.candidates('Élysée recibió a Donald Trump y Emmanuel Macron.');if(!candidates.some(x=>x.term==='Élysée')||!candidates.some(x=>x.term==='Donald Trump'))throw new Error('Detector Unicode/nombres del normalizador falló');if(!/elisé/u.test(pronunciation.applyMap('Élysée informó.',{'Élysée':'elisé'})))throw new Error('Sustitución Unicode del normalizador falló');
+  const exported=pronunciation.exportLearning();if(exported.schemaVersion<2)throw new Error('Exportación de aprendizaje inválida');const testDir=path.join(dataDir,'self-test-canned');fs.mkdirSync(testDir,{recursive:true});for(const name of ['content.mp4','ad.mp4'])fs.writeFileSync(path.join(testDir,name),'x');if(canned.list(testDir).count!==2||ads.list(testDir).count!==2||!canned.peek(testDir))throw new Error('Escaneo de contenidos/anuncios falló');try{fs.rmSync(testDir,{recursive:true,force:true});}catch{}
+  const voices=await kokoro.listVoices();if(!voices.length)throw new Error('Kokoro no pudo listar voces');const sample=await kokoro.generate('Prueba de voz.',{voice:voices.includes('ef_dora')?'ef_dora':voices[0],speed:1});if(!sample.path||!fs.existsSync(sample.path)||fs.statSync(sample.path).size<1000)throw new Error('Kokoro no generó audio válido');kokoro.cleanupAudio(sample.path);kokoro.stop('self-test');await runUiBridgeSelfTest();logEvent('SELF_TEST',`OK voices=${voices.length} bridge=OK`);
+}
+process.on('uncaughtException',e=>fatalError('Error no controlado',e));process.on('unhandledRejection',e=>fatalError('Promesa rechazada',e));
+app.whenReady().then(async()=>{initStartupLog();try{initServices();if(process.argv.includes('--self-test')){await runSelfTest();app.exit(0);return;}createControlWindow();logEvent('WINDOW','control created');}catch(e){fatalError('La aplicación no pudo iniciar',e);app.exit(1);}});
+app.on('window-all-closed',()=>{localRuntime?.stop('app-close');pronunciation?.stop('app-close');kokoro?.stop('app-close');clearInterval(documentWatchTimer);if(process.platform!=='darwin')app.quit();});
+app.on('before-quit',()=>{localRuntime?.stop('app-quit');pronunciation?.stop('app-quit');kokoro?.stop('app-quit');clearInterval(documentWatchTimer);});
 
-ipcMain.handle('settings:get',()=>{
-  const s=settingsStore.load();
-  const { claudeKeyEnc, geminiKeyEnc, ...publicAi } = s.ai;
-  return {
-    ...s,
-    visual:{...s.visual,fallbackImageUrl:fallbackUrl(),output:enrichDesign(s.visual.output||{})},
-    ai:{...publicAi,claudeKey:'',geminiKey:'',hasClaudeKey:!!claudeKeyEnc,hasGeminiKey:!!geminiKeyEnc}
-  };
-});
+ipcMain.handle('settings:get',()=>{const s=settingsStore.load(),{claudeKeyEnc,geminiKeyEnc,...publicAi}=s.ai;return{...s,visual:{...s.visual,fallbackImageUrl:fallbackUrl(),output:enrichDesign(s.visual.output||{})},ai:{...publicAi,claudeModel:DEFAULT_CLAUDE_MODEL,claudeKey:'',geminiKey:'',hasClaudeKey:!!claudeKeyEnc,hasGeminiKey:!!geminiKeyEnc}};});
+function cleanupManagedAsset(oldPath,newPath){try{const old=String(oldPath||''),next=String(newPath||''),root=path.resolve(path.join(dataDir,'assets'))+path.sep;if(old&&old!==next&&path.resolve(old).startsWith(root)&&fs.existsSync(old))fs.rmSync(old,{force:true});}catch{}}
 ipcMain.handle('settings:save',async(_,incoming)=>{
-  const current=settingsStore.load();
-  const incomingAi={...(incoming.ai||{})};
-  const claudePlain=String(incomingAi.claudeKey||'').trim();
-  const geminiPlain=String(incomingAi.geminiKey||'').trim();
-  delete incomingAi.claudeKey;delete incomingAi.geminiKey;delete incomingAi.claudeKeyEnc;delete incomingAi.geminiKeyEnc;delete incomingAi.hasClaudeKey;delete incomingAi.hasGeminiKey;
-  const incomingOutput={...(incoming.visual?.output||{})};
-  delete incomingOutput.verticalVideoBackgroundUrl;delete incomingOutput.musicUrl;
-  const next={
-    ...current,...incoming,
-    ai:{...current.ai,...incomingAi},
-    tts:{...current.tts,...(incoming.tts||{})},
-    visual:{...current.visual,...(incoming.visual||{}),output:{...current.visual.output,...incomingOutput}},
-    canned:{...current.canned,...(incoming.canned||{})},
-    automation:{...current.automation,...(incoming.automation||{})}
-  };
-  if(claudePlain) next.ai.claudeKeyEnc=settingsStore.encryptSecret(claudePlain); else next.ai.claudeKeyEnc=current.ai.claudeKeyEnc||'';
-  if(geminiPlain) next.ai.geminiKeyEnc=settingsStore.encryptSecret(geminiPlain); else next.ai.geminiKeyEnc=current.ai.geminiKeyEnc||'';
-  if(String(current.canned?.folder||'')!==String(next.canned?.folder||''))canned.reset();
-  settingsStore.save(next);
-  syncLocalPolicy(next);
-  if(outputReady()){
-    sendDesignLive();
-    if(next.visual.output.format!==outputState.format)applyOutputWindowFormat(next.visual.output.format,true);
-  }
-  return {ok:true,hasClaudeKey:!!next.ai.claudeKeyEnc,hasGeminiKey:!!next.ai.geminiKeyEnc};
+  const current=settingsStore.load(),incomingAi={...(incoming.ai||{})},claudePlain=String(incomingAi.claudeKey||'').trim(),geminiPlain=String(incomingAi.geminiKey||'').trim();delete incomingAi.claudeKey;delete incomingAi.geminiKey;delete incomingAi.claudeKeyEnc;delete incomingAi.geminiKeyEnc;delete incomingAi.hasClaudeKey;delete incomingAi.hasGeminiKey;incomingAi.claudeModel=DEFAULT_CLAUDE_MODEL;
+  const incomingOutput={...(incoming.visual?.output||{})};delete incomingOutput.verticalVideoBackgroundUrl;delete incomingOutput.musicUrl;
+  const next={...current,...incoming,ai:{...current.ai,...incomingAi,claudeModel:DEFAULT_CLAUDE_MODEL},tts:{...current.tts,...(incoming.tts||{})},visual:{...current.visual,...(incoming.visual||{}),queueColors:{...current.visual.queueColors,...(incoming.visual?.queueColors||{})},output:{...current.visual.output,...incomingOutput}},canned:{...current.canned,...(incoming.canned||{})},documents:{...current.documents,...(incoming.documents||{}),processed:current.documents?.processed||{}},automation:{...current.automation,...(incoming.automation||{})}};
+  if(claudePlain)next.ai.claudeKeyEnc=settingsStore.encryptSecret(claudePlain);else next.ai.claudeKeyEnc=current.ai.claudeKeyEnc||'';if(geminiPlain)next.ai.geminiKeyEnc=settingsStore.encryptSecret(geminiPlain);else next.ai.geminiKeyEnc=current.ai.geminiKeyEnc||'';
+  if(String(current.canned?.folder||'')!==String(next.canned?.folder||''))canned.reset();if(String(current.canned?.adsFolder||'')!==String(next.canned?.adsFolder||''))ads.reset();settingsStore.save(next);cleanupManagedAsset(current.visual?.output?.musicFile,next.visual?.output?.musicFile);cleanupManagedAsset(current.visual?.output?.verticalVideoBackground,next.visual?.output?.verticalVideoBackground);syncLocalPolicy(next);syncDocumentWatch(next);if(outputReady()){sendDesignLive();if(next.visual.output.format!==outputState.format)applyOutputWindowFormat(next.visual.output.format,true);}return{ok:true,hasClaudeKey:!!next.ai.claudeKeyEnc,hasGeminiKey:!!next.ai.geminiKeyEnc,claudeModel:DEFAULT_CLAUDE_MODEL};
 });
 
-ipcMain.handle('rss:load',async()=>rss.loadAll(settingsStore.load().rssFeeds));
-ipcMain.handle('rss:test',async(_,feed)=>rss.testFeed(feed));
-ipcMain.handle('article:fetch',(_,url)=>fetchArticle(url));
-ipcMain.handle('providers:test',async(_,provider)=>providers.test(provider,settingsStore.load()));
-ipcMain.handle('providers:generate',async(_,story,article)=>providers.generate(story,article,settingsStore.load()));
-ipcMain.handle('local:status',()=>localRuntime.status());
-ipcMain.handle('local:downloadModel',()=>localRuntime.downloadModel());
-ipcMain.handle('local:start',async()=>{await localRuntime.start();return localRuntime.status();});
-ipcMain.handle('local:stop',async()=>{localRuntime.stop('manual');return localRuntime.status();});
-ipcMain.handle('pronunciation:status',()=>pronunciation.status());
-ipcMain.handle('pronunciation:downloadModel',()=>pronunciation.downloadModel());
-ipcMain.handle('pronunciation:stop',()=>{pronunciation.stop('manual');return pronunciation.status();});
-ipcMain.handle('pronunciation:test',async()=>{
-  const s=settingsStore.load();
-  const source='Apple TV informó novedades en YouTube y un avance de 25%.';
-  const loc=await pronunciation.normalize(source,{smart:s.tts?.pronunciationSmart!==false});
-  const audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});
-  return{source,text:loc.text,audioUrl:audio.url,durationSec:audio.durationSec,smartUsed:loc.smartUsed,smartFailed:loc.smartFailed,smartError:loc.smartError,modelReady:loc.modelReady};
-});
-ipcMain.handle('tts:status',async()=>({ready:kokoro.ready(),voices:kokoro.ready()?await kokoro.listVoices():[],threads:4}));
-ipcMain.handle('tts:generate',async(_,text)=>{
-  const s=settingsStore.load();
-  const loc=await pronunciation.normalize(text,{smart:s.tts?.pronunciationSmart!==false});
-  const audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});
-  return {...audio,ttsScript:loc.text,pronunciation:loc};
-});
+ipcMain.handle('rss:load',async()=>rss.loadAll(settingsStore.load().rssFeeds));ipcMain.handle('rss:test',async(_,feed)=>rss.testFeed(feed));ipcMain.handle('article:fetch',(_,url)=>fetchArticle(url));ipcMain.handle('providers:test',async(_,provider)=>providers.test(provider,settingsStore.load()));ipcMain.handle('providers:generate',async(_,story,article)=>providers.generate(story,article,settingsStore.load()));
+ipcMain.handle('local:status',()=>localRuntime.status());ipcMain.handle('local:downloadModel',()=>localRuntime.downloadModel());ipcMain.handle('local:start',async()=>{await localRuntime.start();return localRuntime.status();});ipcMain.handle('local:stop',async()=>{localRuntime.stop('manual');return localRuntime.status();});
+ipcMain.handle('pronunciation:status',()=>pronunciation.status());ipcMain.handle('pronunciation:downloadModel',()=>pronunciation.downloadModel());ipcMain.handle('pronunciation:stop',()=>{pronunciation.stop('manual');return pronunciation.status();});
+ipcMain.handle('pronunciation:test',async()=>{const s=settingsStore.load(),source='Reuters informó que Huawei y Apple presentaron novedades en YouTube y un avance de 25%.';const loc=await pronunciation.normalize(source,{smart:s.tts?.pronunciationSmart!==false}),audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});return{source,text:loc.text,audioUrl:audio.url,durationSec:audio.durationSec,smartUsed:loc.smartUsed,smartFailed:loc.smartFailed,smartError:loc.smartError,modelReady:loc.modelReady,claudeUsed:loc.claudeUsed,learningEntries:loc.learningEntries};});
+ipcMain.handle('pronunciation:exportLearning',async()=>{const result=await dialog.showSaveDialog(controlWindow,{title:'Exportar aprendizaje de pronunciación',defaultPath:'EC-Pronunciation-Learning.json',filters:[{name:'JSON',extensions:['json']}]});if(result.canceled||!result.filePath)return{ok:false,cancelled:true};fs.writeFileSync(result.filePath,JSON.stringify(pronunciation.exportLearning(),null,2),'utf8');return{ok:true,path:result.filePath,count:pronunciation.status().learningEntries};});
+ipcMain.handle('pronunciation:importLearning',async()=>{const result=await dialog.showOpenDialog(controlWindow,{title:'Importar aprendizaje de pronunciación',properties:['openFile'],filters:[{name:'JSON',extensions:['json']}]});if(result.canceled||!result.filePaths[0])return{ok:false,cancelled:true};const data=JSON.parse(fs.readFileSync(result.filePaths[0],'utf8'));return{...(pronunciation.importLearning(data)),path:result.filePaths[0]};});ipcMain.handle('pronunciation:clearLearning',()=>pronunciation.clearLearning());
+ipcMain.handle('tts:status',async()=>{const p=kokoro.profile(),st=kokoro.status();return{...st,voices:kokoro.ready()?await kokoro.listVoices():[],threads:p.intra,profile:p.name,profileLabel:p.label,onnxInterThreads:p.inter,executionMode:'sequential'};});
+ipcMain.handle('tts:generate',async(_,text)=>{const s=settingsStore.load(),loc=await pronunciation.normalize(text,{smart:s.tts?.pronunciationSmart!==false}),audio=await kokoro.generate(loc.text,{voice:s.tts.voice,speed:s.tts.speed});return{...audio,ttsScript:loc.text,pronunciation:loc};});
+ipcMain.handle('tts:benchmark',async()=>{const s=settingsStore.load(),r=await kokoro.benchmark({voice:s.tts.voice,speed:s.tts.speed});if(r.ok){s.tts.resourceMode=r.recommended;s.tts.autoTuned=true;settingsStore.save(s);}return r;});
 
-ipcMain.handle('fallback:pick',async()=>{
-  const r=await dialog.showOpenDialog({properties:['openFile'],filters:[{name:'Imágenes',extensions:['png','jpg','jpeg','webp']}]});
-  if(r.canceled||!r.filePaths[0])return{ok:false};
-  const src=r.filePaths[0],ext=path.extname(src)||'.png',dest=path.join(dataDir,`fallback${ext}`);
-  fs.copyFileSync(src,dest);const s=settingsStore.load();s.visual.fallbackImage=dest;settingsStore.save(s);
-  return{ok:true,path:dest,url:pathToFileURL(dest).href};
-});
+ipcMain.handle('documents:pickFolder',async()=>{const r=await dialog.showOpenDialog(controlWindow,{properties:['openDirectory']});if(r.canceled||!r.filePaths[0])return{ok:false,cancelled:true};const s=settingsStore.load();s.documents.folder=r.filePaths[0];settingsStore.save(s);syncDocumentWatch(s);return{ok:true,...documents.scan(s.documents.folder)};});
+ipcMain.handle('documents:list',()=>{const s=settingsStore.load(),r=documents.scan(s.documents?.folder||'');return{...r,files:(r.files||[]).map(x=>({...x,processed:!!s.documents?.processed?.[x.fingerprint]}))};});
+ipcMain.handle('documents:enqueue',async(_,payload={})=>queueDocumentPaths(payload.paths||[],payload.options||{},!!payload.force));
+ipcMain.handle('documents:resetProcessed',()=>{const s=settingsStore.load();s.documents.processed={};settingsStore.save(s);return{ok:true};});
 
-async function pickOutputAsset(kind){
-  const isMusic=kind==='music';
-  const r=await dialog.showOpenDialog({properties:['openFile'],filters:isMusic?[{name:'Música MP3',extensions:['mp3']}]:[{name:'Imagen vertical',extensions:['png','jpg','jpeg','webp']}]});
-  if(r.canceled||!r.filePaths[0])return{ok:false};
-  const src=r.filePaths[0],ext=path.extname(src)||(isMusic?'.mp3':'.png');
-  const dir=path.join(dataDir,'assets');fs.mkdirSync(dir,{recursive:true});
-  const dest=path.join(dir,isMusic?`background-music${ext}`:`vertical-video-background${ext}`);
-  fs.copyFileSync(src,dest);
-  const s=settingsStore.load();
-  if(isMusic)s.visual.output.musicFile=dest;else s.visual.output.verticalVideoBackground=dest;
-  settingsStore.save(s);sendDesignLive();
-  return{ok:true,path:dest,url:pathToFileURL(dest).href,design:currentDesign()};
-}
-function clearOutputAsset(kind){
-  const s=settingsStore.load();const isMusic=kind==='music';
-  const old=isMusic?s.visual.output.musicFile:s.visual.output.verticalVideoBackground;
-  if(isMusic)s.visual.output.musicFile='';else s.visual.output.verticalVideoBackground='';
-  settingsStore.save(s);
-  try{if(old&&old.startsWith(path.join(dataDir,'assets'))&&fs.existsSync(old))fs.unlinkSync(old);}catch{}
-  sendDesignLive();return{ok:true,design:currentDesign()};
-}
-ipcMain.handle('output:pickVerticalBackground',()=>pickOutputAsset('background'));
-ipcMain.handle('output:clearVerticalBackground',()=>clearOutputAsset('background'));
-ipcMain.handle('output:pickMusic',()=>pickOutputAsset('music'));
-ipcMain.handle('output:clearMusic',()=>clearOutputAsset('music'));
+ipcMain.handle('fallback:pick',async()=>{const r=await dialog.showOpenDialog({properties:['openFile'],filters:[{name:'Imágenes',extensions:['png','jpg','jpeg','webp']}]});if(r.canceled||!r.filePaths[0])return{ok:false};const src=r.filePaths[0],ext=path.extname(src)||'.png',dest=path.join(dataDir,`fallback${ext}`);fs.copyFileSync(src,dest);const s=settingsStore.load();s.visual.fallbackImage=dest;settingsStore.save(s);return{ok:true,path:dest,url:pathToFileURL(dest).href};});
+async function pickOutputAsset(kind){const isMusic=kind==='music',r=await dialog.showOpenDialog({properties:['openFile'],filters:isMusic?[{name:'Música MP3',extensions:['mp3']}]:[{name:'Imagen vertical',extensions:['png','jpg','jpeg','webp']}]});if(r.canceled||!r.filePaths[0])return{ok:false};const src=r.filePaths[0],ext=path.extname(src)||(isMusic?'.mp3':'.png'),dir=path.join(dataDir,'assets');fs.mkdirSync(dir,{recursive:true});const prefix=isMusic?'background-music':'vertical-video-background';for(const name of fs.readdirSync(dir)){if(name.startsWith(prefix+'.'))try{fs.rmSync(path.join(dir,name),{force:true});}catch{}}const dest=path.join(dir,`${prefix}${ext}`);fs.copyFileSync(src,dest);const s=settingsStore.load();if(isMusic)s.visual.output.musicFile=dest;else s.visual.output.verticalVideoBackground=dest;settingsStore.save(s);sendDesignLive();return{ok:true,path:dest,url:pathToFileURL(dest).href,design:currentDesign()};}
+function clearOutputAsset(kind){const s=settingsStore.load(),isMusic=kind==='music',old=isMusic?s.visual.output.musicFile:s.visual.output.verticalVideoBackground;if(isMusic)s.visual.output.musicFile='';else s.visual.output.verticalVideoBackground='';settingsStore.save(s);cleanupManagedAsset(old,'');sendDesignLive();return{ok:true,design:currentDesign()};}
+ipcMain.handle('output:pickVerticalBackground',()=>pickOutputAsset('background'));ipcMain.handle('output:clearVerticalBackground',()=>clearOutputAsset('background'));ipcMain.handle('output:pickMusic',()=>pickOutputAsset('music'));ipcMain.handle('output:clearMusic',()=>clearOutputAsset('music'));
 
-ipcMain.handle('canned:pickFolder',async()=>{
-  const r=await dialog.showOpenDialog({properties:['openDirectory']});
-  if(r.canceled||!r.filePaths[0])return{ok:false};
-  const s=settingsStore.load();s.canned.folder=r.filePaths[0];settingsStore.save(s);canned.reset();
-  return{ok:true,...canned.list(s.canned.folder)};
-});
-ipcMain.handle('canned:list',()=>canned.list(settingsStore.load().canned?.folder||''));
-ipcMain.handle('canned:launchNow',()=>automation.requestCannedNow());
+ipcMain.handle('canned:pickFolder',async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory']});if(r.canceled||!r.filePaths[0])return{ok:false};const s=settingsStore.load();s.canned.folder=r.filePaths[0];settingsStore.save(s);canned.reset();return{ok:true,...canned.list(s.canned.folder)};});ipcMain.handle('canned:list',()=>canned.list(settingsStore.load().canned?.folder||''));
+ipcMain.handle('canned:pickAdsFolder',async()=>{const r=await dialog.showOpenDialog({properties:['openDirectory']});if(r.canceled||!r.filePaths[0])return{ok:false};const s=settingsStore.load();s.canned.adsFolder=r.filePaths[0];s.canned.insertAdAfterContent=true;settingsStore.save(s);ads.reset();return{ok:true,...ads.list(s.canned.adsFolder)};});ipcMain.handle('canned:listAds',()=>ads.list(settingsStore.load().canned?.adsFolder||''));ipcMain.handle('canned:launchNow',()=>automation.requestCannedNow());
 
-ipcMain.handle('output:open',()=>{createOutputWindow();return{ok:true,state:{...outputState}};});
-ipcMain.handle('output:close',async()=>{
-  if(!outputReady())return{ok:true,alreadyClosed:true,state:{...outputState}};
-  const a=automation.getState();
-  if(a.emission.running){
-    const r=await dialog.showMessageBox(controlWindow,{type:'warning',buttons:['Cancelar','Cerrar Output'],defaultId:0,cancelId:0,title:'Cerrar Output',message:'La emisión automática está activa.',detail:'Cerrar Output pausará la emisión, pero el procesamiento y el buffer seguirán funcionando.'});
-    if(r.response!==1)return{ok:false,cancelled:true,state:{...outputState}};
-  }
-  outputWindow.close();
-  return{ok:true,state:{...outputState}};
-});
-ipcMain.handle('output:status',()=>({...outputState}));
-ipcMain.handle('output:manualSend',async(_,p)=>{
-  const a=automation.getState();
-  if(a.emission.running){
-    const r=await dialog.showMessageBox(controlWindow,{type:'warning',buttons:['Cancelar','Emitir noticia manual'],defaultId:0,cancelId:0,title:'Emisión automática activa',message:'La emisión automática está activa.',detail:'Si continúas, la emisión automática se pausará y esta noticia manual tomará el Output. Luego podrás reanudarla.'});
-    if(r.response!==1)return{ok:false,cancelled:true};
-    automation.interruptForManual();
-  }
-  const ok=deliverToOutput({...p,kind:'news'},'editor',true);
-  return{ok,source:'editor'};
-});
-ipcMain.on('output:control',(_,action)=>controlOutput(action));
-ipcMain.on('output:playback',(_,event)=>{automation.outputPlayback(event);if(event?.source==='editor'&&event?.type==='ended')setOutputState({source:'editor'});});
-ipcMain.on('output:designPreview',(_,design)=>{
-  if(!outputReady())return;
-  const merged=enrichDesign({...settingsStore.load().visual.output,...design});
-  outputWindow.webContents.send('output:design',merged);
-  if(design?.format&&design.format!==outputState.format)applyOutputWindowFormat(design.format,true);
-});
+ipcMain.handle('output:open',()=>{createOutputWindow(true);return{ok:true,state:{...outputState}};});ipcMain.handle('output:close',async()=>{if(!outputReady())return{ok:true,alreadyClosed:true,state:{...outputState}};const a=automation.getState();if(a.emission.running){const r=await dialog.showMessageBox(controlWindow,{type:'warning',buttons:['Cancelar','Cerrar Output'],defaultId:0,cancelId:0,title:'Cerrar Output',message:'La emisión automática está activa.',detail:'Cerrar Output pausará la emisión, pero la preparación de noticias seguirá funcionando.'});if(r.response!==1)return{ok:false,cancelled:true,state:{...outputState}};}outputWindow.close();return{ok:true,state:{...outputState}};});ipcMain.handle('output:status',()=>({...outputState}));
+ipcMain.handle('output:manualSend',async(_,p)=>{const a=automation.getState();if(a.emission.running){const r=await dialog.showMessageBox(controlWindow,{type:'warning',buttons:['Cancelar','Emitir ahora'],defaultId:0,cancelId:0,title:'Emisión automática activa',message:'La emisión automática está activa.',detail:'Si continúas, la emisión automática se pausará y esta nota tomará el Output.'});if(r.response!==1)return{ok:false,cancelled:true};automation.interruptForManual();}const ok=deliverToOutput({...p,kind:'news'},'manual',true);return{ok,source:'manual'};});
+ipcMain.on('output:control',(_,action)=>controlOutput(action));ipcMain.on('output:playback',(_,event)=>{automation.outputPlayback(event);if(event?.source==='manual'&&event?.type==='ended')setOutputState({source:'manual'});});ipcMain.on('output:designPreview',(_,design)=>{if(!outputReady())return;const merged=enrichDesign({...settingsStore.load().visual.output,...design});outputWindow.webContents.send('output:design',merged);if(design?.format&&design.format!==outputState.format)applyOutputWindowFormat(design.format,true);});
 
-ipcMain.handle('automation:status',()=>automation.getState());
-ipcMain.handle('automation:processingStart',()=>automation.startProcessing());
-ipcMain.handle('automation:processingPause',()=>automation.pauseProcessing());
-ipcMain.handle('automation:processingResume',()=>automation.resumeProcessing());
-ipcMain.handle('automation:processingStop',()=>automation.stopProcessing());
-ipcMain.handle('automation:emissionStart',()=>automation.startEmission());
-ipcMain.handle('automation:emissionPause',()=>automation.pauseEmission());
-ipcMain.handle('automation:emissionResume',()=>automation.resumeEmission());
-ipcMain.handle('automation:emissionStop',()=>automation.stopEmission());
-ipcMain.handle('automation:clearQueue',()=>automation.clearQueue());
-ipcMain.handle('automation:resetCounters',()=>automation.resetSessionCounters());
-ipcMain.handle('history:reset',()=>{history.reset();return{ok:true};});
-ipcMain.on('notify',(_,p)=>notify(p.title||'EC Automatic News',p.body||''));
+ipcMain.handle('automation:status',()=>automation.getState());ipcMain.handle('automation:processingStart',()=>automation.startProcessing());ipcMain.handle('automation:processingPause',()=>automation.pauseProcessing());ipcMain.handle('automation:processingResume',()=>automation.resumeProcessing());ipcMain.handle('automation:processingStop',()=>automation.stopProcessing());ipcMain.handle('automation:emissionStart',()=>automation.startEmission());ipcMain.handle('automation:emissionPause',()=>automation.pauseEmission());ipcMain.handle('automation:emissionResume',()=>automation.resumeEmission());ipcMain.handle('automation:emissionStop',()=>automation.stopEmission());ipcMain.handle('automation:clearQueue',()=>automation.clearQueue());ipcMain.handle('automation:resetCounters',()=>automation.resetSessionCounters());ipcMain.handle('history:reset',()=>{history.reset();return{ok:true};});ipcMain.on('notify',(_,p)=>notify(p.title||'EC Automatic News',p.body||''));
