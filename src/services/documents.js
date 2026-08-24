@@ -66,4 +66,5 @@ class DocumentLibrary{
 require('./documentAutoPolicy').installDocumentAutoPolicy();
 require('./broadcastSchedulerPolicy').installBroadcastSchedulerPolicy();
 require('./version0316Policy').installVersion0316Policy();
+require('./version0317Policy').installVersion0317Policy();
 module.exports={DocumentLibrary,DOC_EXTENSIONS,IMAGE_EXTENSIONS,canonicalCategory,extractExplicitDate,extractExplicitTitle,resolveImage,fingerprint};
