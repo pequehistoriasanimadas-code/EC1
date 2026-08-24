@@ -6,7 +6,7 @@ const root=path.resolve(__dirname,'..');
 const ok=(v,m)=>{if(!v)throw new Error(m);};
 const read=rel=>fs.readFileSync(path.join(root,rel),'utf8');
 
-const pkg=JSON.parse(read('package.json'));ok(['0.3.18','0.3.19'].includes(pkg.version),'package version debe ser 0.3.18 o posterior compatible');
+const pkg=JSON.parse(read('package.json'));ok(['0.3.18','0.3.19','0.3.20'].includes(pkg.version),'package version debe ser 0.3.18 o posterior compatible');
 const ttsPy=read('scripts/tts.py');for(const token of ['--onnx-provider','CUDAExecutionProvider','preload_dlls','--gpu-mem-limit-mb','CPUExecutionProvider'])ok(ttsPy.includes(token),`tts.py no contiene ${token}`);
 const documents=read('src/services/documents.js');ok(/version0317Policy[\s\S]*version0318Policy/.test(documents),'0.3.18 no se instala después de la optimización CPU 0.3.17');ok(/version0318RendererLoader/.test(documents),'falta loader UI 0.3.18');
 const policy=read('src/services/version0318Policy.js');for(const token of ['onnxruntime-gpu[cuda,cudnn]==','GPU_ORT_VERSION=\'1.26.0\'','CUDA_MIN_DRIVER=525','gpu-runtime','benchmarkGpu','cuda-fallback','gpuMemoryLimitMb'])ok(policy.includes(token),`falta ${token} en política GPU 0.3.18`);
