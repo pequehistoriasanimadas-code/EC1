@@ -1,7 +1,7 @@
 'use strict';
 const {contextBridge,ipcRenderer}=require('electron');
 const invoke=(channel,...args)=>ipcRenderer.invoke(channel,...args);
-const allowedEvents=new Set(['automation:state','automation:itemError','automation:engineError','local:event','pronunciation:event','output:story','output:control','output:design','output:state']);
+const allowedEvents=new Set(['automation:state','automation:itemError','automation:engineError','local:event','pronunciation:event','tts:gpuEvent','output:story','output:control','output:design','output:state']);
 let localDownloadActive=false,ttsStatusCache=null,ttsStatusPromise=null,localStatusCache=null,localStatusAt=0,localStatusPromise=null;
 function cachedLocalStatus(){const now=Date.now(),ttl=localDownloadActive?1000:0;if(ttl&&localStatusCache&&now-localStatusAt<ttl)return Promise.resolve(localStatusCache);if(localStatusPromise)return localStatusPromise;const task=invoke('local:status').then(r=>{localStatusCache=r;localStatusAt=Date.now();return r;});localStatusPromise=task;return task.finally(()=>{if(localStatusPromise===task)localStatusPromise=null;});}
 function cachedTtsStatus(){if(localDownloadActive&&ttsStatusCache)return Promise.resolve(ttsStatusCache);if(ttsStatusPromise)return ttsStatusPromise;const task=invoke('tts:status').then(r=>{ttsStatusCache=r;return r;});ttsStatusPromise=task;return task.finally(()=>{if(ttsStatusPromise===task)ttsStatusPromise=null;});}
@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('ECAPI',{
   loadRss:()=>invoke('rss:load'),testRss:f=>invoke('rss:test',f),fetchArticle:u=>invoke('article:fetch',u),testProvider:p=>invoke('providers:test',p),generate:(story,article)=>invoke('providers:generate',story,article),
   localStatus:()=>cachedLocalStatus(),downloadLocalModel:()=>invoke('local:downloadModel'),startLocal:()=>invoke('local:start'),stopLocal:()=>invoke('local:stop'),
   pronunciationStatus:()=>invoke('pronunciation:status'),downloadPronunciationModel:()=>invoke('pronunciation:downloadModel'),stopPronunciation:()=>invoke('pronunciation:stop'),testPronunciation:()=>invoke('pronunciation:test'),exportPronunciationLearning:()=>invoke('pronunciation:exportLearning'),importPronunciationLearning:()=>invoke('pronunciation:importLearning'),clearPronunciationLearning:()=>invoke('pronunciation:clearLearning'),
-  ttsStatus:()=>cachedTtsStatus(),generateTts:text=>invoke('tts:generate',text),benchmarkTts:()=>invoke('tts:benchmark'),
+  ttsStatus:()=>cachedTtsStatus(),generateTts:text=>invoke('tts:generate',text),benchmarkTts:()=>invoke('tts:benchmark'),gpuTtsStatus:()=>invoke('tts:gpuStatus'),installGpuTts:()=>invoke('tts:gpuInstall'),benchmarkGpuTts:()=>invoke('tts:gpuBenchmark'),
   documentPickFolder:()=>invoke('documents:pickFolder'),documentList:()=>invoke('documents:list'),documentEnqueue:(paths,options={},force=false)=>invoke('documents:enqueue',{paths,options,force}),documentResetProcessed:()=>invoke('documents:resetProcessed'),
   pickFallback:()=>invoke('fallback:pick'),pickVerticalVideoBackground:()=>invoke('output:pickVerticalBackground'),clearVerticalVideoBackground:()=>invoke('output:clearVerticalBackground'),pickMusic:()=>invoke('output:pickMusic'),clearMusic:()=>invoke('output:clearMusic'),
   cannedPickFolder:()=>invoke('canned:pickFolder'),cannedList:()=>invoke('canned:list'),cannedPickAdsFolder:()=>invoke('canned:pickAdsFolder'),cannedListAds:()=>invoke('canned:listAds'),cannedLaunchNow:()=>invoke('canned:launchNow'),
