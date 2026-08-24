@@ -8,8 +8,10 @@ const read=rel=>fs.readFileSync(path.join(root,rel),'utf8');
 
 const pkg=JSON.parse(read('package.json'));ok(pkg.version==='0.3.17','package version debe ser 0.3.17');
 const ttsPy=read('scripts/tts.py');ok(/--onnx-mode/.test(ttsPy)&&/--spin-duration-us/.test(ttsPy)&&/spin_backoff_max/.test(ttsPy),'tts.py no expone los controles avanzados de ONNX');ok(/ORT_PARALLEL/.test(ttsPy)&&/intra_op_num_threads=intra/.test(ttsPy),'tts.py no puede probar AUTO/ORT_PARALLEL');
-const documents=read('src/services/documents.js');ok(/version0316Policy[\s\S]*version0317Policy/.test(documents),'la política 0.3.17 no se instala después de 0.3.16');
+const documents=read('src/services/documents.js');ok(/version0316Policy[\s\S]*version0317Policy[\s\S]*version0317RendererLoader/.test(documents),'la política/UI 0.3.17 no se instala después de 0.3.16');
 const policySource=read('src/services/version0317Policy.js');for(const token of ['auto-sequential','auto-spin','fixed-spin','parallel-safe','performanceConfig','recentInferencePct'])ok(policySource.includes(token),`falta ${token} en la política 0.3.17`);
+const uiSource=read('src/renderer-0317.js');ok(/ORT_PARALLEL/.test(uiSource)&&/AUTO CPU/.test(uiSource)&&/Cuello de botella/.test(uiSource)&&/inferencia/.test(uiSource),'la interfaz 0.3.17 no muestra diagnóstico/benchmark avanzado');
+const loaderSource=read('src/services/version0317RendererLoader.js');ok(/renderer-0317\.js/.test(loaderSource)&&/web-contents-created/.test(loaderSource),'renderer-0317.js no se carga en la ventana de control');
 
 require(path.join(root,'src/services/documents.js'));
 const {SettingsStore}=require(path.join(root,'src/services/settings.js'));
@@ -31,5 +33,5 @@ try{
 
   const rec={intraMode:'auto',intra:0,inter:1,executionMode:'sequential',spinDurationUs:1000,spinBackoffMax:8};global.__ec0317TtsRecommendation={settingsFile:store.file,performanceThreads:6,config:rec,summary:{recommendedId:'auto-spin'}};global.__ec0316TtsRecommendation={settingsFile:store.file,threads:6};const stale=store.load();stale.tts.performanceConfig={intraMode:'fixed',intra:6,inter:1,executionMode:'sequential',spinDurationUs:-1,spinBackoffMax:1};store.save(stale);const saved=store.load();ok(saved.tts.performanceConfig?.intraMode==='auto'&&saved.tts.performanceConfig?.spinBackoffMax===8,'un guardado posterior puede pisar la configuración ONNX recomendada');delete global.__ec0317TtsRecommendation;delete global.__ec0316TtsRecommendation;
 
-  console.log(`EC 0.3.17 checks OK · AUTO CPU · spin 1 ms/backoff 8 · ORT_PARALLEL · perfil persistente · cap=${cap}`);
+  console.log(`EC 0.3.17 checks OK · AUTO CPU · spin 1 ms/backoff 8 · ORT_PARALLEL · diagnóstico UI · perfil persistente · cap=${cap}`);
 }finally{try{fs.rmSync(temp,{recursive:true,force:true});}catch{}}
