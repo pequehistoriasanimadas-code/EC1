@@ -27,9 +27,7 @@ function installOptimizedSettingsGuard(){
   proto.save=function(settings){
     let next=settings;
     try{
-      if(next?.tts?.autoTuned===true&&next?.tts?.performanceConfig){
-        next={...next,tts:{...next.tts,resourceMode:'performance'}};
-      }
+      if(next?.tts?.autoTuned===true&&next?.tts?.performanceConfig){next={...next,tts:{...next.tts,resourceMode:'performance'}};}
     }catch{}
     return baseSave.call(this,next);
   };
@@ -40,9 +38,9 @@ function installPronunciationLearningRestore(){
   const baseStatus=proto.status;
 
   // 0.3.19 reducía silenciosamente el presupuesto a 8 s y desactivaba Claude
-  // cuando la IA editorial principal era local. 0.3.22 vuelve a respetar los
-  // ajustes reales del usuario: normalizador local primero y Claude solo como
-  // verificador de términos nuevos cuando el interruptor está activo.
+  // cuando la IA editorial principal era local. 0.3.22 respeta los ajustes
+  // reales: local primero y Claude solo para términos sin una propuesta local
+  // suficientemente confiable. Lo aprendido se reutiliza sin nuevas consultas.
   proto.normalize=async function(script,{smart=true}={}){
     const started=Date.now(),raw=String(script||''),settings=this.getSettings?.()||{};
     const maxMs=Math.max(5000,Math.min(30000,Number(settings?.tts?.pronunciationMaxSeconds)||15)*1000),deadline=started+maxMs;
@@ -58,10 +56,11 @@ function installPronunciationLearningRestore(){
       qwenAttempted=true;try{qwen=await this.smartMap(unknown,deadline);}catch(e){qwenError=e.message||String(e);this.onEvent({type:'pronunciation-warning',message:qwenError});}
     }
 
+    const claudeCandidates=unknown.filter(c=>{const local=qwen[c.term];return !local||Math.max(0,Math.min(1,Number(local.confidence)||0))<.88;});
     let claude={used:false,items:[]},claudeAttempted=false,claudeError='';
-    if(smart&&unknown.length&&typeof this.claudeVerify==='function'&&settings?.tts?.pronunciationClaudeVerify!==false&&Date.now()<deadline-1800){
+    if(smart&&claudeCandidates.length&&typeof this.claudeVerify==='function'&&settings?.tts?.pronunciationClaudeVerify!==false&&Date.now()<deadline-1800){
       claudeAttempted=true;
-      try{const remaining=Math.max(1500,deadline-Date.now()-300);claude=await this.claudeVerify(unknown,qwen,settings,remaining)||{used:false,items:[]};}
+      try{const remaining=Math.max(1500,deadline-Date.now()-300);claude=await this.claudeVerify(claudeCandidates,qwen,settings,remaining)||{used:false,items:[]};}
       catch(e){claudeError=e.message||String(e);this.onEvent({type:'pronunciation-warning',message:`Claude: ${claudeError}`});}
     }
 
