@@ -1,5 +1,6 @@
 'use strict';
 const electron=require('electron');
+require('./version0319SafetyPolicy').installVersion0319SafetyPolicy();
 
 function installVersion0319RendererLoader(){
   const app=electron?.app;if(!app?.on||app.__ec0319RendererLoaderInstalled)return;if(!Object.isExtensible(app))return;Object.defineProperty(app,'__ec0319RendererLoaderInstalled',{value:true});
