@@ -11,7 +11,10 @@ function installKokoroGpuSafety(){
     const before=this.queryNvidia?.()||{};const result=await baseBenchmarkGpu.call(this,options);if(!result?.ok)return result;const gpu=result.gpu||{},baseline={utilization:Number(before.utilization)||0,encoder:Number(before.encoder)||0,usedMb:Number(before.usedMb)||0,temperature:Number(before.temperature)||0};
     const measured={gpuDeltaAverage:Math.max(0,Number((Number(gpu.gpuAverage||0)-baseline.utilization).toFixed(1))),gpuDeltaPeak:Math.max(0,Number((Number(gpu.gpuPeak||0)-baseline.utilization).toFixed(1))),memoryDeltaMb:Math.max(0,Number((Number(gpu.memoryUsedMaxMb||0)-baseline.usedMb).toFixed(0))),encoderDeltaPeak:Math.max(0,Number((Number(gpu.encoderPeak||0)-baseline.encoder).toFixed(1)))};
     result.gpuBaseline=baseline;result.gpuDelta=measured;if(result.gpu){result.gpu={...result.gpu,...measured};}
-    try{const store=new SettingsStore(path.dirname(this.settingsFile)),s=store.load();s.tts=s.tts||{};s.tts.lastHardwareBenchmark={...(s.tts.lastHardwareBenchmark||{}),gpuBaseline:baseline,gpuDelta:measured};store.save(s);}catch{}
+    try{
+      const rec=global.__ec0318HardwareRecommendation,match=rec&&path.resolve(String(rec.settingsFile||''))===path.resolve(String(this.settingsFile||''));if(match)rec.summary={...(rec.summary||{}),gpuBaseline:baseline,gpuDelta:measured};
+      const store=new SettingsStore(path.dirname(this.settingsFile)),s=store.load();s.tts=s.tts||{};s.tts.lastHardwareBenchmark={...(s.tts.lastHardwareBenchmark||{}),gpuBaseline:baseline,gpuDelta:measured};store.save(s);
+    }catch{}
     return result;
   };
 
