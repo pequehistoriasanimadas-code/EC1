@@ -5,6 +5,7 @@ const path=require('path');
 const {AutomationEngine}=require('./automation');
 const {KokoroTTS,TTS_PROFILES}=require('./kokoro');
 const {PronunciationNormalizer}=require('./pronunciation');
+const {SettingsStore}=require('./settings');
 const {candidateThreads,selectEfficientCandidate}=require('./ttsOptimizer');
 
 const MIGRATION_VERSION=3;
@@ -13,13 +14,21 @@ const nowIso=()=>new Date().toISOString();
 const statusLabel=s=>({pending:'Pendiente',preparing:'Preparando',ready:'Lista',on_air:'Al aire',emitted:'Emitida',error:'Error'}[s]||'Pendiente');
 
 function atomicJson(file,value){
-  const tmp=`${file}.tmp`;fs.writeFileSync(tmp,JSON.stringify(value,null,2),'utf8');fs.renameSync(tmp,file);
+  const tmp=`${file}.tmp`;fs.writeFileSync(tmp,JSON.stringify(value,null,2),'utf8');try{fs.renameSync(tmp,file);}catch{fs.copyFileSync(tmp,file);try{fs.rmSync(tmp,{force:true});}catch{}}
+}
+
+function installSettingsPolicy(){
+  const proto=SettingsStore.prototype;if(proto.__ec0316TtsSaveInstalled)return;Object.defineProperty(proto,'__ec0316TtsSaveInstalled',{value:true});
+  const original=proto.save;proto.save=function(settings){
+    const rec=global.__ec0316TtsRecommendation,match=rec&&path.resolve(String(rec.settingsFile||''))===path.resolve(String(this.file||''));
+    if(match&&settings?.tts?.resourceMode==='performance'&&settings?.tts?.autoTuned===true){settings={...settings,tts:{...settings.tts,performanceThreads:Math.max(1,Number(rec.threads)||1)}};}
+    return original.call(this,settings);
+  };
 }
 
 function installKokoroPolicy(){
   const proto=KokoroTTS.prototype;if(proto.__ec0316KokoroInstalled)return;Object.defineProperty(proto,'__ec0316KokoroInstalled',{value:true});
-  // 0.3.15 todavía podía ser sobrescrito por documentAutoPolicy. Desde aquí
-  // Kokoro vuelve a tener una sola fuente de verdad y un único worker.
+  // Kokoro tiene una sola fuente de verdad y mantiene un único worker.
   proto.profile=function(){
     const s=this.settings(),name=this.profileName(s),base={name,...TTS_PROFILES[name]};if(name!=='performance')return base;
     const cap=this.performanceThreadCap(),saved=Number(s?.tts?.performanceThreads),fallback=Math.min(6,cap),intra=Math.max(1,Math.min(cap,Number.isFinite(saved)&&saved>0?Math.round(saved):fallback));
@@ -35,8 +44,10 @@ function installKokoroPolicy(){
       if(!recommended)return{ok:false,error:'No se encontró una configuración de Kokoro que completara la prueba dentro del margen de seguridad.',logicalCpus,maxSafeThreads,candidates,baselineCpu,results};
       const valid=results.filter(x=>x.safe!==false&&!x.error&&Number.isFinite(Number(x.realtimeFactor))),fastest=valid.length?Math.min(...valid.map(x=>Number(x.realtimeFactor))):Number(recommended.realtimeFactor);
       const answer={ok:true,recommended:'performance',recommendedThreads:Number(recommended.threads),bestRealtimeFactor:Number(recommended.realtimeFactor),fastestRealtimeFactor:Number(fastest.toFixed(3)),logicalCpus,maxSafeThreads,candidates,baselineCpu,efficiencyTolerancePct:3,results};
-      // Persistencia desde backend: si la ventana se cierra justo al acabar la
-      // prueba, la cantidad ganadora de hilos no se pierde.
+      // El backend conserva la recomendación incluso si la interfaz se cierra
+      // justo al terminar el benchmark. El guard de SettingsStore impide que un
+      // save con una copia vieja la vuelva a sobrescribir.
+      global.__ec0316TtsRecommendation={settingsFile:this.settingsFile,threads:answer.recommendedThreads,at:Date.now()};
       try{const s=this.settings();s.tts={...(s.tts||{}),resourceMode:'performance',performanceThreads:answer.recommendedThreads,autoTuned:true};atomicJson(this.settingsFile,s);}catch{}
       return answer;
     };
@@ -58,19 +69,26 @@ function installPronunciationPolicy(){
       const semantic=new Set(['us','fen','link','cpi-w']);
       for(const [k,entry] of Object.entries(this.learning?.entries||{})){
         const term=String(entry?.term||'').trim(),pron=String(entry?.pronunciation||'').trim(),manual=/manual/i.test(entry?.source||'');
-        // Conserva ajustes identificables que el usuario hizo en el JSON de la
-        // versión anterior. Los futuros cambios importados se detectan solos.
+        // Conserva los ajustes identificables que el usuario hizo en el JSON de
+        // la versión anterior. Los futuros cambios importados se detectan solos.
         if((k==='mx'&&keyOf(pron)==='mex')||(k==='pucp'&&keyOf(pron)==='puc')||(k==='danza pucp'&&/\bpuc\b/i.test(pron))){entry.source='manual';entry.confidence=1;entry.updatedAt=nowIso();report.manualProtected++;continue;}
         if(manual)continue;
-        // Nunca debe aprender una sustitución que atraviese el final de una
-        // oración ni una reescritura semántica global dependiente del contexto.
+        // No se permiten reglas que atraviesen una oración ni reescrituras
+        // semánticas globales dependientes del contexto.
         if(/[.!?;\r\n]/.test(term)||semantic.has(k)){delete this.learning.entries[k];report.removed++;}
       }
       if(report.removed||report.manualProtected)this.saveLearning();atomicJson(marker,report);this.__ec0316MigrationReport=report;
     }catch(e){this.__ec0316MigrationReport={...report,error:e.message||String(e)};}
   };
   proto.loadLearning=function(){const r=originalLoad.call(this);this.__ec0316Migration();return r;};
-  proto.candidates=function(text){return originalCandidates.call(this,text).filter(x=>{const term=String(x?.term||'');if(/[.!?;\r\n]/.test(term))return false;const words=term.trim().split(/\s+/).filter(Boolean);if(words.length===1&&Number(x?.score||0)<=2)return false;return true;});};
+  proto.candidates=function(text){return originalCandidates.call(this,text).filter(x=>{
+    const term=String(x?.term||'');if(/[.!?;\r\n]/.test(term))return false;const words=term.trim().split(/\s+/).filter(Boolean),whole=this.learning?.entries?.[keyOf(term)];
+    if(words.length===1&&Number(x?.score||0)<=2)return false;
+    // Si una parte ya tiene una regla aprendida (por ejemplo MX), no se manda
+    // una frase más larga desconocida como “Liga MX” a Qwen innecesariamente.
+    if(words.length>1&&!whole&&words.some(w=>this.learning?.entries?.[keyOf(w)]?.needsReplacement))return false;
+    return true;
+  });};
   proto.learn=function(term,pronunciation,needsReplacement,source,confidence){const current=this.learning?.entries?.[keyOf(term)];if(current&&/manual/i.test(current.source||''))return current;return originalLearn.call(this,term,pronunciation,needsReplacement,source,confidence);};
   proto.importLearning=function(data){
     const incoming=this.normalizeLearning(data);let manualChanges=0;
@@ -111,7 +129,7 @@ function installAutomationPolicy(){
     const at=nowIso();return documentRecord(this,doc,{completedAt:at,generatedAt:at,status:'ready',emittedAt:''});
   };
   proto.addEmissionHistory=function(type,title,status='EMITIDA',extra={}){
-    if(type==='generated'&&status==='EMITIDA'&&this.currentItem?.document?.fingerprint){const at=nowIso();documentRecord(this,this.currentItem.document,{status:'emitted',emittedAt:at,completedAt:this.currentItem?.document?.generatedAt||undefined});}
+    if(type==='generated'&&status==='EMITIDA'&&this.currentItem?.document?.fingerprint){documentRecord(this,this.currentItem.document,{status:'emitted',emittedAt:nowIso()});}
     return originalAddHistory.call(this,type,title,status,extra);
   };
 
@@ -151,6 +169,6 @@ function installIpcPolicy(){
   const original=ipcMain.handle.bind(ipcMain);ipcMain.handle=function(channel,listener){if(channel==='documents:list')return original(channel,async(...args)=>augmentDocumentList(await listener(...args)));return original(channel,listener);};
 }
 
-function installVersion0316Policy(){installKokoroPolicy();installPronunciationPolicy();installAutomationPolicy();installIpcPolicy();}
+function installVersion0316Policy(){installSettingsPolicy();installKokoroPolicy();installPronunciationPolicy();installAutomationPolicy();installIpcPolicy();}
 
 module.exports={installVersion0316Policy,augmentDocumentList,MIGRATION_VERSION};
