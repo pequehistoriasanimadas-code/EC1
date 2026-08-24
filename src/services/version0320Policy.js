@@ -5,6 +5,7 @@ const {Providers}=require('./providers');
 const {SettingsStore}=require('./settings');
 const {KokoroTTS}=require('./kokoro');
 const {parseEditorialJson,validateEditorialResult,correctivePrompt,STATUS_INSUFFICIENT}=require('./editorial');
+const {installVersion0319Policy}=require('./version0319Policy');
 const {installVersion0320LocalPolicy}=require('./version0320LocalPolicy');
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -73,5 +74,5 @@ function installLocalBenchmarkIpc(){
   });
 }
 
-function installVersion0320Policy(){installVersion0320LocalPolicy();installSettingsDefaults();installProviderPipeline();installOmissionDiagnostics();installKokoroHandle();installLocalBenchmarkIpc();}
+function installVersion0320Policy(){installVersion0319Policy();installVersion0320LocalPolicy();installSettingsDefaults();installProviderPipeline();installOmissionDiagnostics();installKokoroHandle();installLocalBenchmarkIpc();}
 module.exports={installVersion0320Policy,failureReason,conciseAttempt};
