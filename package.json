@@ -1,13 +1,13 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "EC Automatic News",
   "main": "src/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node scripts/check.js && node scripts/check-scheduler.js",
+    "check": "node scripts/check.js && node scripts/check-scheduler.js && node scripts/check-tts-optimizer.js",
     "dist:portable": "electron-builder --win portable --x64 --publish never"
   },
   "dependencies": {
