@@ -9,7 +9,7 @@ const appRoot=path.join(resourcesDir,'app.asar');
 const preload=path.join(appRoot,'src','preload.js');
 const controlHtml=path.join(appRoot,'src','control.html');
 const outputHtml=path.join(appRoot,'src','output.html');
-const tempDir=path.join(os.tmpdir(),`ec-0314-smoke-${process.pid}`);
+const tempDir=path.join(os.tmpdir(),`ec-0315-smoke-${process.pid}`);
 
 function assert(ok,message){if(!ok)throw new Error(message);}
 function handle(channel,fn){ipcMain.handle(channel,async(...args)=>fn(...args));}
@@ -58,7 +58,13 @@ app.whenReady().then(async()=>{
 
     const pron=new PronunciationNormalizer({resourcesDir,dataDir:tempDir,getSettings:()=>({tts:{pronunciationMaxSeconds:15,pronunciationClaudeVerify:false}})});const normalized=pron.basic('Apple TV informó un avance de 25% y S/900 millones.');assert(/ápol te uve/i.test(normalized)&&/25 por ciento/i.test(normalized)&&/900 millones de soles/i.test(normalized),'Normalizador empaquetado falló');assert(pron.candidates('Élysée recibió a Donald Trump.').some(x=>x.term==='Élysée'),'Detector Unicode empaquetado falló');
 
-    kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});assert(kokoro.ready(),'Kokoro empaquetado incompleto');const voices=await kokoro.listVoices();assert(voices.length>0,'Kokoro no listó voces reales');const selectedVoice=voices.includes('ef_dora')?'ef_dora':voices[0];const health=await kokoro.healthCheck(true);assert(health.ok&&health.esSupported,'Autodiagnóstico no confirmó idioma español en eSpeak');const sample1=await kokoro.generate('Prueba breve de voz número uno.',{voice:selectedVoice,speed:1});assert(sample1.path&&fs.existsSync(sample1.path)&&fs.statSync(sample1.path).size>1000,'Kokoro no generó el primer WAV real');assert(sample1.persistent===true,'Kokoro empaquetado no usó el trabajador persistente');const workerPid=kokoro.worker?.pid||0;const sample2=await kokoro.generate('Prueba breve de voz número dos.',{voice:selectedVoice,speed:1});assert(sample2.path&&fs.existsSync(sample2.path)&&fs.statSync(sample2.path).size>1000,'Kokoro no generó el segundo WAV real');assert(workerPid&&kokoro.worker?.pid===workerPid,'Kokoro recargó el trabajador entre notas');kokoro.cleanupAudio(sample1.path);kokoro.cleanupAudio(sample2.path);kokoro.stop('smoke-relocation');kokoro=null;
+    kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});assert(kokoro.ready(),'Kokoro empaquetado incompleto');const voices=await kokoro.listVoices();assert(voices.length>0,'Kokoro no listó voces reales');const selectedVoice=voices.includes('ef_dora')?'ef_dora':voices[0];const health=await kokoro.healthCheck(true);assert(health.ok&&health.esSupported,'Autodiagnóstico no confirmó idioma español en eSpeak');const sample1=await kokoro.generate('Prueba breve de voz número uno.',{voice:selectedVoice,speed:1});assert(sample1.path&&fs.existsSync(sample1.path)&&fs.statSync(sample1.path).size>1000,'Kokoro no generó el primer WAV real');assert(sample1.persistent===true,'Kokoro empaquetado no usó el trabajador persistente');const workerPid=kokoro.worker?.pid||0;const sample2=await kokoro.generate('Prueba breve de voz número dos.',{voice:selectedVoice,speed:1});assert(sample2.path&&fs.existsSync(sample2.path)&&fs.statSync(sample2.path).size>1000,'Kokoro no generó el segundo WAV real');assert(workerPid&&kokoro.worker?.pid===workerPid,'Kokoro recargó el trabajador entre notas');kokoro.cleanupAudio(sample1.path);kokoro.cleanupAudio(sample2.path);await kokoro.stopAndWait('smoke-tuning');kokoro=null;
+
+    // Comprueba el punto crítico de 0.3.15: el modo Rápido no está atado a
+    // seis hilos. Debe leer performanceThreads persistido y aplicar el límite
+    // seguro de la CPU real del equipo donde corre el Portable.
+    const tuned=settingsStore.load();tuned.tts.resourceMode='performance';tuned.tts.performanceThreads=12;settingsStore.save(tuned);
+    kokoro=new KokoroTTS({resourcesDir,dataDir:tempDir});const expectedTunedThreads=Math.min(12,kokoro.performanceThreadCap());assert(kokoro.profile().intra===expectedTunedThreads,`Rápido no respetó performanceThreads/límite seguro: esperaba ${expectedTunedThreads}, obtuvo ${kokoro.profile().intra}`);const tunedSample=await kokoro.generate('Prueba de la configuración rápida optimizada del motor de voz.',{voice:selectedVoice,speed:1});assert(tunedSample.path&&fs.existsSync(tunedSample.path)&&fs.statSync(tunedSample.path).size>1000,'Rápido optimizado no generó WAV real');assert(tunedSample.threads===expectedTunedThreads,`El worker real no usó los hilos persistidos: esperaba ${expectedTunedThreads}, obtuvo ${tunedSample.threads}`);kokoro.cleanupAudio(tunedSample.path);await kokoro.stopAndWait('smoke-relocation');kokoro=null;
 
     // Reproduce una condición cercana al Portable real: el paquete eSpeak se
     // mueve a una ruta larga, con espacios y Unicode. tts.py debe detectar esa
@@ -72,6 +78,6 @@ app.whenReady().then(async()=>{
 
     control.destroy();control=null;output.destroy();output=null;
     await delay(350);await cleanupTempBestEffort(tempDir);
-    console.log(`PACKAGED SMOKE 0.3.14 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · eSpeak español reubicable · voces=${voices.length}`);app.exit(0);
+    console.log(`PACKAGED SMOKE 0.3.15 OK · bridge · Generador TXT · Output · normalizador · Kokoro persistente · Rápido dinámico ${expectedTunedThreads} hilos · eSpeak español reubicable · voces=${voices.length}`);app.exit(0);
   }catch(e){console.error(e.stack||e);try{kokoro?.stop('smoke-error');}catch{}try{control?.destroy();output?.destroy();}catch{}if(oldPythonPath===undefined)delete process.env.PYTHONPATH;else process.env.PYTHONPATH=oldPythonPath;await delay(250);await cleanupTempBestEffort(tempDir);app.exit(1);}
 });
