@@ -1,30 +1,34 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.10",
-  "description": "EC Automatic News - escritorio portable para automatización visual de noticias",
-  "author": "EC Automatic News",
-  "main": "src/main-v0310.js",
+  "version": "0.3.24",
+  "description": "GEC Automatic News - escritorio portable para automatización visual de noticias",
+  "author": "Carls Mayo",
+  "main": "src/bootstrap-0324.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node scripts/check.js",
+    "check": "node --check src/bootstrap-0324.js && node --check src/main.js && node --check src/renderer-0323.js && node --check src/renderer-0324.js && node --check src/renderer-final-0324.js && node --check src/renderer-local-model-fix-0324.js && node --check src/renderer-image-hydration-0324.js && node --check src/output-0324.js && node --check src/services/article.js && node --check src/services/articleMetadata0324.js && node --check src/services/storyKey0324.js && node --check src/services/accessPolicy0324.js && node --check src/services/automation0324.js && node --check src/services/customVoices.js && node --check src/services/fonts.js && python -m py_compile src/voice_tools.py && node scripts/run-legacy-check.js && node scripts/check-scheduler.js && node scripts/check-tts-optimizer.js && node scripts/run-versioned-checks-0324.js && node scripts/check-0324.js && node scripts/check-image-resolver-0324.js && node scripts/check-access-policy-0324.js && node scripts/check-final-0324.js",
     "dist:portable": "electron-builder --win portable --x64 --publish never"
   },
   "dependencies": {
-    "cheerio": "^1.1.2",
-    "fast-xml-parser": "^5.2.5"
+    "cheerio": "1.1.2",
+    "fast-xml-parser": "5.10.1",
+    "mammoth": "1.12.1"
   },
   "devDependencies": {
-    "electron": "^37.2.6",
+    "electron": "43.4.0",
     "electron-builder": "26.15.7"
   },
   "build": {
     "appId": "pe.ec.automaticnews",
     "productName": "EC Automatic News",
-    "artifactName": "EC-Automatic-News-Portable-${version}.${ext}",
+    "artifactName": "GEC-Automatic-News-Portable-${version}.${ext}",
     "directories": { "output": "dist" },
     "files": ["src/**/*", "package.json"],
-    "extraResources": [{"from":"runtime","to":"runtime","filter":["**/*"]}],
+    "extraResources": [
+      {"from":"runtime","to":"runtime","filter":["**/*"]},
+      {"from":"src/voice_tools.py","to":"runtime/kokoro/voice_tools.py"}
+    ],
     "extraFiles": [{"from":"DIAGNOSTICO.cmd","to":"DIAGNOSTICO.cmd"}],
     "win": { "target": ["portable"] },
     "portable": { "requestExecutionLevel": "user" }
