@@ -31,7 +31,9 @@ function parseArticleMetadata(html,pageUrl=''){
     meta('meta[name="twitter:description"]')||
     jsonDescription
   ).slice(0,1600);
-  const visibleText=cleanText($('body').text()).slice(0,80000);
+  // Use HTML rather than .text() so adjacent block elements keep a separator;
+  // otherwise “suscriptores” + the next block can concatenate and hide a word boundary.
+  const visibleText=cleanText($('body').html()||$('body').text()).slice(0,80000);
   const strongLock=STRONG_LOCK_RE.test(visibleText);
   return{pubDate,description,publicPreview:description,strongLock,pageUrl:String(pageUrl||'')};
 }
