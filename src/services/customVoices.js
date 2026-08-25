@@ -31,7 +31,7 @@ class CustomVoiceManager{
   }
   async rename(id,name){const display=cleanName(name);if(!display)throw new Error('Escribe un nombre para la voz');const items=this.list(),item=items.find(x=>x.id===id);if(!item)throw new Error('Voz personalizada no encontrada');if(items.some(x=>x.id!==id&&x.name.toLowerCase()===display.toLowerCase()))throw new Error(`Ya existe una voz llamada “${display}”`);item.name=display;this.save(items);return item;}
   async remove(id){const items=this.list(),item=items.find(x=>x.id===id);if(!item)throw new Error('Voz personalizada no encontrada');this.save(items.filter(x=>x.id!==id));for(const p of [item.file,item.sourceFile])if(p)try{fs.rmSync(p,{force:true});}catch{}await this.rebuild();return item;}
-  exportFile(id,dest){const item=this.list().find(x=>x.id===id);if(!item)throw new Error('Voz personalizada no encontrada');const source=item.sourceFile&&fs.existsSync(item.sourceFile)?item.sourceFile:item.file;fs.copyFileSync(source,dest);return{ok:true,path:dest,name:item.name,format:path.extname(source).toLowerCase().replace('.','')};}
+  exportFile(id,dest){const item=this.list().find(x=>x.id===id);if(!item)throw new Error('Voz personalizada no encontrada');const requestedExt=path.extname(String(dest||'')).toLowerCase(),source=requestedExt==='.pt'&&item.sourceFile&&fs.existsSync(item.sourceFile)?item.sourceFile:item.file;if(!source||!fs.existsSync(source))throw new Error('Archivo de voz personalizada no encontrado');fs.copyFileSync(source,dest);return{ok:true,path:dest,name:item.name,format:path.extname(source).toLowerCase().replace('.','')};}
   has(id){return this.list().some(x=>x.id===id);}
 }
 
