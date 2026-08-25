@@ -6,6 +6,8 @@ let localDownloadActive=false,ttsStatusCache=null,ttsStatusPromise=null,localSta
 function cachedLocalStatus(){const now=Date.now(),ttl=localDownloadActive?1000:0;if(ttl&&localStatusCache&&now-localStatusAt<ttl)return Promise.resolve(localStatusCache);if(localStatusPromise)return localStatusPromise;const task=invoke('local:status').then(r=>{localStatusCache=r;localStatusAt=Date.now();return r;});localStatusPromise=task;return task.finally(()=>{if(localStatusPromise===task)localStatusPromise=null;});}
 function cachedTtsStatus(){if(localDownloadActive&&ttsStatusCache)return Promise.resolve(ttsStatusCache);if(ttsStatusPromise)return ttsStatusPromise;const task=invoke('tts:status').then(r=>{ttsStatusCache=r;return r;});ttsStatusPromise=task;return task.finally(()=>{if(ttsStatusPromise===task)ttsStatusPromise=null;});}
 function clearTtsCache(){ttsStatusCache=null;ttsStatusPromise=null;}
+function injectAsset(tag,attrs){try{const el=document.createElement(tag);for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);document.head.appendChild(el);}catch{}}
+window.addEventListener('DOMContentLoaded',()=>{const page=(location.pathname.split('/').pop()||'').toLowerCase();if(page==='control.html'){injectAsset('link',{rel:'stylesheet',href:'control-0324.css'});injectAsset('script',{src:'renderer-0324.js'});}else if(page==='output.html'){injectAsset('link',{rel:'stylesheet',href:'output-0324.css'});injectAsset('script',{src:'output-0324.js'});}}, {once:true});
 
 contextBridge.exposeInMainWorld('ECAPI',{
   getSettings:()=>invoke('settings:get'),saveSettings:s=>invoke('settings:save',s),
