@@ -25,7 +25,10 @@
     "artifactName": "GEC-Automatic-News-Portable-${version}.${ext}",
     "directories": { "output": "dist" },
     "files": ["src/**/*", "package.json"],
-    "extraResources": [{"from":"runtime","to":"runtime","filter":["**/*"]}],
+    "extraResources": [
+      {"from":"runtime","to":"runtime","filter":["**/*"]},
+      {"from":"src/voice_tools.py","to":"runtime/kokoro/voice_tools.py"}
+    ],
     "extraFiles": [{"from":"DIAGNOSTICO.cmd","to":"DIAGNOSTICO.cmd"}],
     "win": { "target": ["portable"] },
     "portable": { "requestExecutionLevel": "user" }
