@@ -60,6 +60,8 @@ jobs:
           if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'No existe app.asar empaquetado' }
           npx electron scripts/packaged-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-0324-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-pronunciation-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-onnx-smoke.js $resources
