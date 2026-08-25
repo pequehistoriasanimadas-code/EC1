@@ -9,7 +9,9 @@ const packageRaw=fs.readFileSync(packageFile,'utf8');
 const rssRaw=fs.readFileSync(rssFile,'utf8');
 let exit=1;
 try{
-  const legacy={...JSON.parse(packageRaw),version:'0.3.15'};
+  // check.js is intentionally the frozen 0.3.15 regression suite. Recreate
+  // its package metadata while it runs, then restore the real 0.3.24 entry.
+  const legacy={...JSON.parse(packageRaw),version:'0.3.15',main:'src/main.js'};
   fs.writeFileSync(packageFile,JSON.stringify(legacy,null,2)+'\n','utf8');
   const legacyRss=rssRaw.replace(/EC-Automatic-News\/0\.3\.\d+/g,'EC-Automatic-News/0.3.15');
   fs.writeFileSync(rssFile,legacyRss,'utf8');
