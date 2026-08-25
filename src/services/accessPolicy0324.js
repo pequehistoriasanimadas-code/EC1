@@ -1,6 +1,6 @@
 'use strict';
 
-const STRONG_LOCK_RE=/(?:solo|exclusiv[oa])\s+(?:para\s+)?suscriptores?|contenido\s+(?:exclusivo|premium)\s+(?:para\s+)?suscriptores?|suscr[ií]bete\s+(?:para|y)\s+(?:continuar|leer)|inicia\s+sesi[oó]n\s+para\s+leer|subscriber\s+only|premium\s+content\s+(?:for\s+)?(?:subscribers?|members?)|members?\s+only/i;
+const STRONG_LOCK_RE=/(?:solo|exclusiv[oa])\s+(?:para\s+)?suscriptores?|contenido\s+(?:exclusivo|premium)\s+(?:para\s+)?suscriptores?|suscr[ií]bete\s+(?:para|y)\s+(?:continuar|seguir|leer)(?:\s+leyendo)?|inicia\s+sesi[oó]n\s+para\s+(?:continuar|leer)(?:\s+leyendo)?|subscriber\s+only|premium\s+content\s+(?:for\s+)?(?:subscribers?|members?)|members?\s+only/i;
 const PREMIUM_PATH_RE=/(?:\/premium\/|\/suscriptores?\/|\/exclusive\/|\/exclusivo\/|\/plusg\/)/i;
 const READABLE_PUBLIC_MIN=350;
 
@@ -11,18 +11,22 @@ function correctAccess(result={},pageUrl=''){
   const readableText=[result.title,result.description,result.body].map(x=>String(x||'')).join(' ');
   const chars=Number(result.sourceChars)||String(result.body||'').length;
   const state=String(result.contentState||'');
-  const explicitLock=STRONG_LOCK_RE.test(readableText);
+  const explicitLock=signals.strongLock===true||STRONG_LOCK_RE.test(readableText);
   const schemaLocked=signals.schemaLocked===true;
   const urlHint=signals.urlHint===true||PREMIUM_PATH_RE.test(String(pageUrl||result.finalUrl||''));
   const readableEnough=state==='COMPLETE'||chars>=READABLE_PUBLIC_MIN;
 
-  // For EC's use case, EXCLUSIVO must mean that the current article is actually
-  // blocked. Generic subscription widgets, generic editorial phrases and even
-  // contradictory metadata must not override a substantial readable body.
-  // A visible lock message still wins, as does structural/premium evidence when
-  // the article body is only a teaser or is otherwise insufficient.
-  if(explicitLock)return result;
+  // A strong, current-page subscriber message always wins. Being technically
+  // able to extract a long body does not make a paywalled article public.
+  if(explicitLock)return{
+    ...result,
+    access:{...access,status:'SUBSCRIBER_ONLY',confidence:'high',signals:{...signals,strongLock:true}},
+    isExclusive:true
+  };
 
+  // EC pages may include generic subscriber widgets, generic editorial uses of
+  // “contenido exclusivo”, or contradictory schema. A substantial readable
+  // article without a strong lock remains public to avoid false positives.
   if(readableEnough){
     return{
       ...result,
@@ -43,8 +47,6 @@ function correctAccess(result={},pageUrl=''){
 
   if(schemaLocked||urlHint)return result;
 
-  // No readable body and no strong current-page evidence: do not invent an
-  // exclusive classification from a generic/dormant subscription component.
   return{
     ...result,
     access:{
