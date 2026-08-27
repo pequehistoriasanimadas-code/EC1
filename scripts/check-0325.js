@@ -1,5 +1,7 @@
 'use strict';
 const assert=require('assert');
+const fs=require('fs');
+const path=require('path');
 const {AutomationEngine}=require('../src/services/automation0325');
 const {mergeSourceItems}=require('../src/services/sourceMerge0325');
 function makeEngine(){const e=Object.create(AutomationEngine.prototype);Object.assign(e,{queue:[],selectionRecent:[],urlFailures:new Map(),feedFailures:new Map(),liveBaseCooldown:new Map(),omittedSources:new Map(),queuedUrls:new Set(),newsSinceExclusive:0,exclusiveHasEmitted:false,newsStatuses:new Map(),emissionHistory:[],currentKind:'none',currentCanned:null,history:{has:()=>false},getSettings:()=>({automation:{exclusiveEveryNews:4,maxAgeHours:6,avoidRepeats:true},rssFeeds:[],canned:{enabled:false}}),isFeedActive:()=>true,addEmissionHistory:()=>{}});return e;}
@@ -21,5 +23,8 @@ const now=new Date().toISOString(),ago=min=>new Date(Date.now()-min*60000).toISO
 }
 {
  const e=makeEngine();e.plannedMediaRows=()=>[];e.queue=[{id:'h',sourceType:'rss',story:{link:'https://x.test/h',title:'H',feedId:'x'},status:'PROCESANDO',stage:'article',uiVisible:false},{id:'v',sourceType:'rss',story:{link:'https://x.test/v',title:'V',feedId:'x',feedName:'X',category:'Actualidad'},status:'PROCESANDO',stage:'ai',uiVisible:true}];const rows=e.displayQueue({automation:{},canned:{enabled:false},rssFeeds:[]});assert(!rows.some(x=>x.id==='h'));assert(rows.some(x=>x.id==='v'));
+}
+{
+ const src=fs.readFileSync(path.join(__dirname,'../src/services/localRuntime.js'),'utf8');assert(src.includes('DOWNLOAD_RETRIES=3'));assert(src.includes("headers.range=`bytes=${existing}-`"));assert(src.includes("setDownloadPhase('verifying'"));assert(src.includes("setDownloadPhase('retrying'"));assert(src.includes("flags:append?'a':'w'"));assert(src.includes("partBytes" )===false);assert(!src.includes("if(fs.existsSync(tmp))fs.rmSync(tmp,{force:true});}catch{}\n      try{const res"));
 }
 (async()=>{const e=makeEngine();e.aiStageTail=Promise.resolve();e.voiceStageTail=Promise.resolve();e.aiStageBusy=false;e.voiceStageBusy=false;e.localHeavyRunning=false;e.state=()=>{};let ai=0,voice=0,maxAI=0,maxVoice=0;const job=(kind,ms)=>e.runStage(kind,async()=>{if(kind==='ai'){ai++;maxAI=Math.max(maxAI,ai);}else{voice++;maxVoice=Math.max(maxVoice,voice);}await new Promise(r=>setTimeout(r,ms));if(kind==='ai')ai--;else voice--;});await Promise.all([job('ai',20),job('ai',20),job('voice',20),job('voice',20)]);assert.equal(maxAI,1);assert.equal(maxVoice,1);console.log('EC 0.3.25 regression checks: OK');})().catch(e=>{console.error(e);process.exit(1);});
