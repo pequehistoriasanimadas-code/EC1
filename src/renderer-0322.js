@@ -35,6 +35,10 @@
   }
 
   async function refreshPronunciation0322(){
+    // 0.3.23+ owns the pronunciation summary/count UI. Once it is installed,
+    // the legacy 0.3.22 writer must stop or both async refreshers alternate
+    // different text in the same nodes and produce visible flicker.
+    if(window.__ec0323UiInstalled||window.__ec0325Installed)return;
     try{
       const p=await window.ECAPI.pronunciationStatus(),count=Number(p?.learningEntries||0),local=p?.model?'mejora local disponible ✓':'mejora local no descargada',toggle=$('#pronunciationClaudeVerify')?.checked!==false,hasKey=!!settings?.ai?.hasClaudeKey,claude=!toggle?'Claude verificador desactivado':hasKey?'Claude verificador activo ✓':'Claude verificador sin API Key';
       const info=$('#pronunciationInfo');if(info)info.textContent=`Pronunciación automática activa ✓ · ${count} términos aprendidos · ${local} · ${claude}`;
