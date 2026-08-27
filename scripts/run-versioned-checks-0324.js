@@ -12,4 +12,6 @@ try{
   if(!failed)run('check-0323.js','0.3.23');
 }finally{fs.writeFileSync(pkgFile,originalText,'utf8');}
 if(failed)process.exit(1);
-const current=JSON.parse(fs.readFileSync(pkgFile,'utf8'));if(current.version!=='0.3.24'){console.error('No se restauró package.json 0.3.24 después de checks compatibles');process.exit(1);}console.log('Checks históricos 0.3.16–0.3.23 ejecutados en modo compatible y package 0.3.24 restaurado.');
+const current=JSON.parse(fs.readFileSync(pkgFile,'utf8'));
+if(current.version!==original.version){console.error(`No se restauró package.json ${original.version} después de checks compatibles`);process.exit(1);}
+console.log(`Checks históricos 0.3.16–0.3.23 ejecutados en modo compatible y package ${original.version} restaurado.`);
