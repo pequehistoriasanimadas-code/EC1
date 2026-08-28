@@ -64,6 +64,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-0325-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.25 smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-0326-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.26 smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-pronunciation-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-onnx-smoke.js $resources
