@@ -18,7 +18,7 @@ function backupBefore0326(store){
     fs.writeFileSync(marker,new Date().toISOString(),'utf8');
   }catch{}
 }
-function normName(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/^ec custom\s*[·.-]?\s*/,'').replace(/\b(regular|medium|semibold|semi bold|bold|extra bold|extrabold|black|italic|bold italic|variablefont|variable font)\b/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
+function normName(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/^ec custom\s*[·.-]?\s*/,'').replace(/\b(regular|medium|semibold|semi bold|bold|extra bold|extrabold|black|italic|bold italic|variablefont|variable font)\b/g,'').replace(/[^a-z0-9]+/g,'');}
 function migrateLegacyFontFamily(value,faces){
   const current=String(value||'Arial');if(!/^EC Custom\s*·/i.test(current))return current;
   const needle=normName(current);let best='';for(const f of faces||[]){const fam=String(f?.family||'').trim();if(!fam)continue;const n=normName(fam);if(n&&needle&&(needle===n||needle.includes(n)||n.includes(needle))){if(n.length>normName(best).length)best=fam;}}
