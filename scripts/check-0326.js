@@ -1,0 +1,65 @@
+'use strict';
+const assert=require('assert');
+const fs=require('fs');
+const path=require('path');
+const {normalizeSpeech,validateSpeech,numberWords}=require('../src/services/speechNormalizer0326');
+let checks=0;
+const eq=(input,expected)=>{const out=normalizeSpeech(input).text;assert.strictEqual(out,expected,`\nIN: ${input}\nOUT: ${out}\nEXP: ${expected}`);checks++;};
+const same=input=>{const out=normalizeSpeech(input).text;assert.strictEqual(out,input,`\nIN: ${input}\nOUT: ${out}`);checks++;};
+const idem=input=>{const a=normalizeSpeech(input).text,b=normalizeSpeech(a).text;assert.strictEqual(b,a,`No idempotente: ${input}\nA=${a}\nB=${b}`);checks++;};
+
+eq('3.600','tres mil seiscientos');
+eq('3.600 millones','tres mil seiscientos millones');
+eq('21 millones','veintiún millones');
+eq('21 personas','veintiuna personas');
+eq('3,77%','tres coma setenta y siete por ciento');
+eq('3.77%','tres coma setenta y siete por ciento');
+eq('3,05%','tres coma cero cinco por ciento');
+eq('0,25%','cero coma veinticinco por ciento');
+eq('-3,77%','menos tres coma setenta y siete por ciento');
+eq('+2,5%','más dos coma cinco por ciento');
+eq('S/ 3.600 millones','tres mil seiscientos millones de soles');
+eq('S/ 250','doscientos cincuenta soles');
+eq('S/ 1','un sol');
+eq('US$ 2,5 millones','dos coma cinco millones de dólares');
+eq('USD 850.000','ochocientos cincuenta mil dólares');
+eq('$ 125','ciento veinticinco dólares');
+eq('S/ 3,50','tres soles con cincuenta céntimos');
+eq('13:00 horas','una de la tarde');
+eq('14:30 horas','dos y treinta de la tarde');
+eq('08:00','ocho de la mañana');
+eq('00:00','medianoche');
+eq('12:00','mediodía');
+eq('13:05','una y cinco de la tarde');
+eq('1:00 p. m.','una de la tarde.');
+eq('1:00 a. m.','una de la madrugada.');
+eq('28/08/2026','veintiocho de agosto de dos mil veintiséis');
+eq('97° aniversario','nonagésimo séptimo aniversario');
+eq('3.er lugar','tercer lugar');
+eq('21.º puesto','vigésimo primer puesto');
+eq('1.ª edición','primera edición');
+eq('32°C','treinta y dos grados Celsius');
+eq('90°','noventa grados');
+eq('Perú ganó 2-1','Perú ganó dos a uno');
+eq('10-15 años','diez a quince años');
+eq('Piura: la inversión llegó a 3,77% a las 13:00 horas.','Piura. La inversión llegó a tres coma setenta y siete por ciento a la una de la tarde.');
+eq('1.250,75','mil doscientos cincuenta coma setenta y cinco');
+same('F-16');same('COVID-19');same('G20');same('COP30');same('iPhone 17');same('Windows 11');same('https://elcomercio.pe/politica/nota-2026');same('v0.3.26');same('Inversión privada aumentará.');same('Eclipse solar será visible.');
+for(let i=0;i<=120;i++){const raw=String(i),out=normalizeSpeech(raw).text;assert.strictEqual(out,numberWords(raw));checks++;}
+for(let h=0;h<24;h++){const raw=`${String(h).padStart(2,'0')}:00`,out=normalizeSpeech(raw).text;assert(!/\d/.test(out),`Hora quedó con dígitos: ${raw} -> ${out}`);checks++;}
+for(let i=0;i<50;i++){const raw=`${i},25%`,out=normalizeSpeech(raw).text;assert(out.endsWith('por ciento'));assert(!out.includes('%'));checks++;}
+for(const input of ['3,77%','S/ 3.600 millones','13:00 horas','97° aniversario','Piura: la inflación llegó a 3,77%.','Perú ganó 2-1','28/08/2026','F-16','COVID-19','1:00 p. m.','3.er lugar'])idem(input);
+for(const input of ['🚨 Último minuto','📊 La inflación llegó a 3,5%','• Uno • Dos','Piura: información oficial']){const out=normalizeSpeech(input);assert(validateSpeech(input,out.text).ok);checks++;}
+const root=path.join(__dirname,'..');
+const bootstrap=fs.readFileSync(path.join(root,'src','bootstrap-0326.js'),'utf8');
+const output=fs.readFileSync(path.join(root,'src','output-0326.js'),'utf8');
+const renderer=fs.readFileSync(path.join(root,'src','renderer-0326.js'),'utf8');
+const fontFix=fs.readFileSync(path.join(root,'src','renderer-font-fix-0325.js'),'utf8');
+const fonts=fs.readFileSync(path.join(root,'src','services','fonts.js'),'utf8');
+assert(bootstrap.includes('protectMutilatedFirstWord')&&bootstrap.includes('initialAttackPaddingMs')&&bootstrap.includes('prosodicGuard'));checks+=3;
+assert(output.includes('waitAudioReady')&&output.includes('ecSerial')&&output.includes('lastEndedSerial'));checks+=3;
+assert(renderer.includes('speechNormalizerEnabled')&&renderer.includes('initialAttackProtection')&&renderer.includes('refreshSpeechDiagnostic'));checks+=3;
+assert(fontFix.includes("BASE_FONTS=['Arial','Segoe UI','Verdana','Georgia','Impact']")&&!fontFix.includes('MutationObserver')&&!fontFix.includes('customCache'));checks+=3;
+assert(fonts.includes('parseFont')&&fonts.includes('fvar')&&fonts.includes('fileHash')&&fonts.includes('duplicate:true'));checks+=4;
+assert(checks>=200,`Solo ${checks} checks`);
+console.log(`EC 0.3.26 speech regression checks: OK · ${checks} casos`);
