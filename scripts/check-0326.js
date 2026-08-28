@@ -34,7 +34,6 @@ async function run(){
   for(const input of ['1.924','3,77%','S/ 3.600 millones','S/ 3,50','13:00 horas','97° aniversario','Harald V','siglo XXI','Piura: la inflación llegó a 3,77%.','Perú ganó 2-1','28/08/2026','28/08/1999','F-16','COVID-19','1:00 p. m.','3.er lugar'])idem(input);
   for(const input of ['🚨 Último minuto','📊 La inflación llegó a 3,5%','• Uno • Dos','Piura: información oficial']){const out=normalizeSpeech(input);assert(validateSpeech(input,out.text).ok);checks++;}
 
-  // Flujo real previo a Kokoro: protege estructuras -> PronunciationNormalizer -> restaura -> SpeechNormalizer.
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'ec-0326-e2e-'));
   const pron=new PronunciationNormalizer({resourcesDir:temp,dataDir:temp,getSettings:()=>({tts:{pronunciationMaxSeconds:5,pronunciationClaudeVerify:false}})});
   const e2e=async(input,expected)=>{
@@ -46,7 +45,7 @@ async function run(){
   await e2e('La inflación llegó a 3,77%.','La inflación llegó a tres coma setenta y siete por ciento.');
   await e2e('La inversión fue de S/ 3,50.','La inversión fue de tres soles con cincuenta céntimos.');
   await e2e('Perú ganó 2-1 el partido.','Perú ganó dos a uno el partido.');
-  await e2e('Piura: la reunión será a las 13:30 horas.','Piura. La reunión será a las catorce horas con treinta minutos.');
+  await e2e('Piura: la reunión será a las 13:30 horas.','Piura. La reunión será a las trece horas con treinta minutos.');
   fs.rmSync(temp,{recursive:true,force:true});
 
   const root=path.join(__dirname,'..');
