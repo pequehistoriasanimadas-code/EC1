@@ -77,9 +77,9 @@ function normalizeSpeech(input,{enabled=true}={}){
   protect(/\b(?:https?:\/\/|www\.)[^\s,;!?]+/gi,m=>m,'URL protegida');
   protect(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g,m=>m,'correo protegido');
   protect(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/g,(m,d,mo,y)=>{const di=Number(d),mi=Number(mo);if(mi<1||mi>12||di<1||di>31)return m;return`${integerWords(BigInt(di))} de ${MONTHS[mi-1]} de ${integerWords(BigInt(y))}`;},'fecha');
+  protect(/\b(\d{1,2}):([0-5]\d)\s*([ap])\.?\s*m\.?\b/gi,(m,h,mi,ap)=>{let hh=Number(h)%12;if(ap.toLowerCase()==='p')hh+=12;return hourWords(hh,Number(mi));},'hora');
   protect(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)?\b/gi,(m,h,mi)=>hourWords(h,mi),'hora');
   protect(/\b([01]?\d|2[0-3])\.([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)\b/gi,(m,h,mi)=>hourWords(h,mi),'hora');
-  protect(/\b(\d{1,2}):([0-5]\d)\s*([ap])\.?\s*m\.?\b/gi,(m,h,mi,ap)=>{let hh=Number(h)%12;if(ap.toLowerCase()==='p')hh+=12;return hourWords(hh,Number(mi));},'hora');
   const moneyScale='(?:millones|mill[oó]n|billones|bill[oó]n|miles|mil)?';
   protect(new RegExp(`(?:S\\/\\.?|PEN)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('PEN',n,s),'moneda');
   protect(new RegExp(`(?:US\\$|USD|\\$)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('USD',n,s),'moneda');
@@ -88,8 +88,8 @@ function normalizeSpeech(input,{enabled=true}={}){
   protect(/([+-]?\d[\d.,]*)\s*%/g,(m,n)=>`${numberWords(n,{dotDecimal:/\.\d{1,2}$/.test(n)&&!n.includes(',')})} por ciento`,'porcentaje');
   protect(/([+-]?\d[\d.,]*)\s+por ciento\b/gi,(m,n)=>`${numberWords(n,{dotDecimal:/\.\d{1,2}$/.test(n)&&!n.includes(',')})} por ciento`,'porcentaje');
   protect(/(\d[\d.,]*)\s*°\s*C\b/gi,(m,n)=>`${numberWords(n)} grados Celsius`,'temperatura');
-  protect(/\b(\d{1,3})(?:\.|º|°)\s*(?:er|o)?\s+(aniversario|puesto|lugar|edici[oó]n|fecha|jornada|congreso|campeonato|festival|premio)\b/gi,(m,n,noun)=>`${ordinalWords(Number(n),{apocopated:/lugar|puesto/.test(noun.toLowerCase())})} ${noun}`,'ordinal');
-  protect(/\b(\d{1,3})(?:\.|ª)\s+(edici[oó]n|fecha|jornada)\b/gi,(m,n,noun)=>`${ordinalWords(Number(n),{female:true})} ${noun}`,'ordinal');
+  protect(/\b(\d{1,3})(?:°|º|\.\s*(?:º|o|er)?)\s+(aniversario|puesto|lugar|congreso|campeonato|festival|premio)\b/gi,(m,n,noun)=>`${ordinalWords(Number(n),{apocopated:/lugar|puesto/.test(noun.toLowerCase())})} ${noun}`,'ordinal');
+  protect(/\b(\d{1,3})(?:ª|\.\s*ª?)\s+(edici[oó]n|fecha|jornada)\b/gi,(m,n,noun)=>`${ordinalWords(Number(n),{female:true})} ${noun}`,'ordinal');
   protect(/\b(\d{1,3})\s*°/g,(m,n)=>`${integerWords(BigInt(n))} grados`,'grados');
   protect(/\b(?:DNI|de ene i)\s*(?:N\.?\s*[°º]?\s*)?(\d{7,9})\b/gi,(m,n)=>`de ene i ${spokenDigits(n)}`,'DNI');
   protect(/\b(?:RUC|erre u ce)\s*(?:N\.?\s*[°º]?\s*)?(\d{10,12})\b/gi,(m,n)=>`erre u ce ${spokenDigits(n)}`,'RUC');
