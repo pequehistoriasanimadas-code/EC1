@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION='1.1.2-es-PE';
+const VERSION='1.1.3-es-PE';
 const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const SMALL=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
 const TENS=['','','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
@@ -9,7 +9,8 @@ const ORD_UNITS=['','primero','segundo','tercero','cuarto','quinto','sexto','sé
 const ORD_TENS=['','décimo','vigésimo','trigésimo','cuadragésimo','quincuagésimo','sexagésimo','septuagésimo','octogésimo','nonagésimo'];
 const HTML_ENTITIES={nbsp:' ',amp:' y ',quot:'"',apos:"'",lt:' menor que ',gt:' mayor que '};
 const SPORTS_HINT=/(partido|gol(?:es)?|marcador|resultado|gan[oó]|perdi[oó]|empat[oó]|venci[oó]|derrot[oó]|termin[oó]|finaliz[oó]|qued[oó]|cay[oó]|penales|global|copa|liga|torneo|selecci[oó]n|f[uú]tbol|tenis|v[oó]ley|b[aá]squet|vs\.?|contra)/i;
-const MODEL_HINT=/(?:\b(?:F|G|COP|COVID|iPhone|iOS|Windows|Android|PlayStation|PS|Xbox|RTX|GTX|USB|HDMI|A)\s*[-.]?\s*\d[\w.-]*\b)|(?:\bv\d+\.\d+(?:\.\d+)+\b)|(?:\bS&P\s*\d+\b)/gi;
+const MODEL_HINT=/(?:\b(?:F|G|COP|COVID|iPhone|iOS|Windows|Android|PlayStation|PS|Xbox|RTX|GTX|USB|HDMI)\s*[-.]?\s*\d[\w.-]*\b)|(?:\bv\d+\.\d+(?:\.\d+)+\b)|(?:\bS&P\s*\d+\b)/gi;
+const AIRCRAFT_HINT=/\bA(?:220|300|310|318|319|320|321|330|340|350|380)\b/g;
 const FEMALE_ROMAN_NAMES=new Set(['isabel','margarita','maría','maria','victoria','juana','ana','catalina']);
 const ROMAN_NAME_EXCLUSIONS=new Set(['canal','vitamina','grupo','clase','plan','modelo','ruta','fase','zona']);
 const UNITS={
@@ -47,7 +48,7 @@ function normalizeSpeech(input,{enabled=true}={}){
   const original=String(input||'');if(!enabled)return{text:original,version:VERSION,transforms:[],changed:false};
   const transforms=[];let text=applyAbbreviations(normalizeUnicode(original));if(text!==original)transforms.push('unicode/abreviaturas');
   const stash=[];const protect=(rx,fn,label)=>{text=text.replace(rx,(...args)=>{let value;try{value=fn(...args);}catch{return args[0];}const token=`\uE000${alphaToken(stash.length)}\uE001`;stash.push(String(value));if(label)transforms.push(label);return token;});};const restore=()=>{text=text.replace(/\uE000([A-Z]+)\uE001/g,(m,k)=>{const i=alphaIndex(k);return i>=0&&i<stash.length?stash[i]:m;});};
-  protect(MODEL_HINT,m=>m,'identificador protegido');protect(/\b(?:https?:\/\/|www\.)[^\s,;!?]+/gi,m=>m,'URL protegida');protect(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g,m=>m,'correo protegido');
+  protect(AIRCRAFT_HINT,m=>m,'identificador protegido');protect(MODEL_HINT,m=>m,'identificador protegido');protect(/\b(?:https?:\/\/|www\.)[^\s,;!?]+/gi,m=>m,'URL protegida');protect(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g,m=>m,'correo protegido');
   protect(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/g,(m,d,mo,y)=>{if(!validDateParts(d,mo,y))return m;return`${integerWords(BigInt(d))} de ${MONTHS[Number(mo)-1]} de ${integerWords(BigInt(y))}`;},'fecha');protect(/\b((?:1\d{3}|20\d{2}))\s*[-–]\s*((?:1\d{3}|20\d{2}))\b/g,(m,a,b)=>`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))}`,'rango de años');
   protect(/\b(\d{1,2}):([0-5]\d)\s*([ap])\.?\s*m\.?\b/gi,(m,h,mi,ap)=>{let hh=Number(h)%12;if(ap.toLowerCase()==='p')hh+=12;return hour12Words(hh,mi);},'hora 12h');protect(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)?\b/gi,(m,h,mi)=>hour24Words(h,mi),'hora 24h');
   const moneyScale='(?:millones|mill[oó]n|billones|bill[oó]n|miles|mil)?';
