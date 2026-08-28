@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION='1.1.1-es-PE';
+const VERSION='1.1.2-es-PE';
 const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const SMALL=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
 const TENS=['','','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
@@ -40,11 +40,13 @@ function romanToInt(raw){const s=String(raw||'').toUpperCase();if(!/^[IVXLCDM]+$
 function romanNameWords(roman,{female=false}={}){const n=romanToInt(roman);if(!n)return roman;if(n<=10)return ordinalWords(n,{female});return integerWords(BigInt(n));}
 function applyAbbreviations(text){let out=String(text||'');for(const [rx,to] of ABBREVIATIONS)out=out.replace(rx,to);out=out.replace(/\bN\.?\s*[°º]\s*/giu,'número ');return out;}
 function conservativeProsody(text){let out='',quote=null;const openMap={'“':'”','«':'»','"':'"'};for(let i=0;i<text.length;i++){const ch=text[i];if(quote){out+=ch;if(ch===quote)quote=null;continue;}if(openMap[ch]){quote=openMap[ch];out+=ch;continue;}if(ch===';'){out+=', ';while(text[i+1]===' ')i++;continue;}if(ch==='…'){out+='. ';while(text[i+1]==='…'||text[i+1]===' ')i++;continue;}if((ch==='—'||ch==='–')&&/\s/.test(text[i-1]||'')&&/\s/.test(text[i+1]||'')){out+=', ';while(text[i+1]===' ')i++;continue;}out+=ch;}return out;}
+function alphaToken(index){let n=index+1,out='';while(n>0){n--;out=String.fromCharCode(65+n%26)+out;n=Math.floor(n/26);}return out;}
+function alphaIndex(code){let n=0;for(const ch of String(code||'')){const v=ch.charCodeAt(0)-64;if(v<1||v>26)return-1;n=n*26+v;}return n-1;}
 
 function normalizeSpeech(input,{enabled=true}={}){
   const original=String(input||'');if(!enabled)return{text:original,version:VERSION,transforms:[],changed:false};
   const transforms=[];let text=applyAbbreviations(normalizeUnicode(original));if(text!==original)transforms.push('unicode/abreviaturas');
-  const stash=[];const protect=(rx,fn,label)=>{text=text.replace(rx,(...args)=>{let value;try{value=fn(...args);}catch{return args[0];}const token=`\uE000${(stash.length+1).toString(36)}\uE001`;stash.push(String(value));if(label)transforms.push(label);return token;});};const restore=()=>{text=text.replace(/\uE000([0-9a-z]+)\uE001/gi,(m,k)=>{const i=parseInt(k,36)-1;return i>=0&&i<stash.length?stash[i]:m;});};
+  const stash=[];const protect=(rx,fn,label)=>{text=text.replace(rx,(...args)=>{let value;try{value=fn(...args);}catch{return args[0];}const token=`\uE000${alphaToken(stash.length)}\uE001`;stash.push(String(value));if(label)transforms.push(label);return token;});};const restore=()=>{text=text.replace(/\uE000([A-Z]+)\uE001/g,(m,k)=>{const i=alphaIndex(k);return i>=0&&i<stash.length?stash[i]:m;});};
   protect(MODEL_HINT,m=>m,'identificador protegido');protect(/\b(?:https?:\/\/|www\.)[^\s,;!?]+/gi,m=>m,'URL protegida');protect(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g,m=>m,'correo protegido');
   protect(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/g,(m,d,mo,y)=>{if(!validDateParts(d,mo,y))return m;return`${integerWords(BigInt(d))} de ${MONTHS[Number(mo)-1]} de ${integerWords(BigInt(y))}`;},'fecha');protect(/\b((?:1\d{3}|20\d{2}))\s*[-–]\s*((?:1\d{3}|20\d{2}))\b/g,(m,a,b)=>`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))}`,'rango de años');
   protect(/\b(\d{1,2}):([0-5]\d)\s*([ap])\.?\s*m\.?\b/gi,(m,h,mi,ap)=>{let hh=Number(h)%12;if(ap.toLowerCase()==='p')hh+=12;return hour12Words(hh,mi);},'hora 12h');protect(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)?\b/gi,(m,h,mi)=>hour24Words(h,mi),'hora 24h');
