@@ -1,20 +1,34 @@
 'use strict';
 
-const VERSION='1.0.0-es-PE';
+const VERSION='1.1.0-es-PE';
 const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-const UNITS={
-  'km/h':['kilómetro por hora','kilómetros por hora'],km:['kilómetro','kilómetros'],kg:['kilogramo','kilogramos'],
-  'm²':['metro cuadrado','metros cuadrados'],m2:['metro cuadrado','metros cuadrados'],cm:['centímetro','centímetros'],mm:['milímetro','milímetros'],
-  gb:['gigabyte','gigabytes'],mb:['megabyte','megabytes'],tb:['terabyte','terabytes'],mw:['megavatio','megavatios'],kw:['kilovatio','kilovatios'],ha:['hectárea','hectáreas']
-};
 const SMALL=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
 const TENS=['','','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
 const HUNDREDS=['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
 const ORD_UNITS=['','primero','segundo','tercero','cuarto','quinto','sexto','séptimo','octavo','noveno'];
 const ORD_TENS=['','décimo','vigésimo','trigésimo','cuadragésimo','quincuagésimo','sexagésimo','septuagésimo','octogésimo','nonagésimo'];
 const HTML_ENTITIES={nbsp:' ',amp:' y ',quot:'"',apos:"'",lt:' menor que ',gt:' mayor que '};
-const SPORTS_HINT=/(partido|gol(?:es)?|marcador|resultado|gan[oó]|perdi[oó]|empat[oó]|venci[oó]|derrot[oó]|copa|liga|torneo|selecci[oó]n|f[uú]tbol|vs\.?|contra)/i;
-const MODEL_HINT=/(?:\b(?:F|G|COP|COVID|iPhone|iOS|Windows|Android|PlayStation|PS|Xbox|RTX|GTX|USB|HDMI)[- .]?\d[\w.-]*\b)|(?:\bv?\d+\.\d+(?:\.\d+)+\b)/gi;
+const SPORTS_HINT=/(partido|gol(?:es)?|marcador|resultado|gan[oó]|perdi[oó]|empat[oó]|venci[oó]|derrot[oó]|termin[oó]|finaliz[oó]|qued[oó]|cay[oó]|penales|global|copa|liga|torneo|selecci[oó]n|f[uú]tbol|tenis|v[oó]ley|b[aá]squet|vs\.?|contra)/i;
+const MODEL_HINT=/(?:\b(?:F|G|COP|COVID|iPhone|iOS|Windows|Android|PlayStation|PS|Xbox|RTX|GTX|USB|HDMI|A)\s*[-.]?\s*\d[\w.-]*\b)|(?:\bv?\d+\.\d+(?:\.\d+)+\b)|(?:\bS&P\s*\d+\b)/gi;
+const FEMALE_ROMAN_NAMES=new Set(['isabel','margarita','maría','maria','victoria','juana','ana','catalina']);
+const ROMAN_NAME_EXCLUSIONS=new Set(['canal','vitamina','grupo','clase','plan','modelo','ruta','fase','zona']);
+const UNITS={
+  'km/h':['kilómetro por hora','kilómetros por hora'],
+  'm/s':['metro por segundo','metros por segundo'],
+  'GB/s':['gigabyte por segundo','gigabytes por segundo'],
+  'Mbps':['megabit por segundo','megabits por segundo'],
+  'km²':['kilómetro cuadrado','kilómetros cuadrados'],
+  'm²':['metro cuadrado','metros cuadrados'],
+  'm³':['metro cúbico','metros cúbicos'],
+  km:['kilómetro','kilómetros'],m:['metro','metros'],cm:['centímetro','centímetros'],mm:['milímetro','milímetros'],
+  kg:['kilogramo','kilogramos'],g:['gramo','gramos'],mg:['miligramo','miligramos'],t:['tonelada','toneladas'],
+  l:['litro','litros'],ml:['mililitro','mililitros'],
+  gb:['gigabyte','gigabytes'],mb:['megabyte','megabytes'],tb:['terabyte','terabytes'],mw:['megavatio','megavatios'],kw:['kilovatio','kilovatios'],ha:['hectárea','hectáreas']
+};
+const ABBREVIATIONS=[
+  [/\bDra\./giu,'doctora'],[/\bDr\./giu,'doctor'],[/\bSra\./giu,'señora'],[/\bSr\./giu,'señor'],
+  [/\bAv\./giu,'avenida'],[/\bJr\./giu,'jirón'],[/\baprox\./giu,'aproximadamente'],[/\bart\./giu,'artículo']
+];
 
 function cleanSpaces(s){return String(s||'').replace(/[ \t]+/g,' ').replace(/ *\n */g,'\n').replace(/\n{3,}/g,'\n\n').trim();}
 function normalizeUnicode(text){
@@ -31,15 +45,11 @@ function integerWords(value){
   let n=typeof value==='bigint'?value:BigInt(Math.trunc(Number(value)));
   if(n===0n)return'cero';if(n<0n)return`menos ${integerWords(-n)}`;
   if(n>999999999999999n)return String(n).split('').map(d=>SMALL[Number(d)]).join(' ');
-  const parts=[];
-  const billones=n/1000000000000n;n%=1000000000000n;
-  if(billones){parts.push(billones===1n?'un billón':`${apocope(integerWords(billones))} billones`);}
-  const millones=n/1000000n;n%=1000000n;
-  if(millones){parts.push(millones===1n?'un millón':`${apocope(integerWords(millones))} millones`);}
-  const miles=n/1000n;n%=1000n;
-  if(miles){parts.push(miles===1n?'mil':`${apocope(under1000(Number(miles)))} mil`);}
-  if(n)parts.push(under1000(Number(n)));
-  return parts.join(' ');
+  const parts=[];const billones=n/1000000000000n;n%=1000000000000n;
+  if(billones)parts.push(billones===1n?'un billón':`${apocope(integerWords(billones))} billones`);
+  const millones=n/1000000n;n%=1000000n;if(millones)parts.push(millones===1n?'un millón':`${apocope(integerWords(millones))} millones`);
+  const miles=n/1000n;n%=1000n;if(miles)parts.push(miles===1n?'mil':`${apocope(under1000(Number(miles)))} mil`);
+  if(n)parts.push(under1000(Number(n)));return parts.join(' ');
 }
 function parseNumber(raw,{dotDecimal=false}={}){
   let s=String(raw||'').trim().replace(/\s/g,''),sign='';if(/^[+-]/.test(s)){sign=s[0];s=s.slice(1);}if(!/^\d[\d.,]*$/.test(s))return null;
@@ -47,8 +57,8 @@ function parseNumber(raw,{dotDecimal=false}={}){
   if(dots&&commas){const lastDot=s.lastIndexOf('.'),lastComma=s.lastIndexOf(','),decSep=lastComma>lastDot?',':'.',thSep=decSep===','?'.':',';const idx=s.lastIndexOf(decSep);intPart=s.slice(0,idx).split(thSep).join('').split(decSep).join('');decPart=s.slice(idx+1).replace(/[.,]/g,'');}
   else if(commas){const idx=s.lastIndexOf(',');intPart=s.slice(0,idx).replace(/,/g,'');decPart=s.slice(idx+1);}
   else if(dots){
-    if(dots>1&&s.split('.').slice(1).every(x=>x.length===3)){intPart=s.replace(/\./g,'');}
-    else if(dots===1){const [a,b]=s.split('.');if(dotDecimal||b.length<3){intPart=a;decPart=b;}else if(b.length===3){intPart=a+b;}else{intPart=a;decPart=b;}}
+    if(dots>1&&s.split('.').slice(1).every(x=>x.length===3))intPart=s.replace(/\./g,'');
+    else if(dots===1){const [a,b]=s.split('.');if(dotDecimal||b.length<3){intPart=a;decPart=b;}else if(b.length===3)intPart=a+b;else{intPart=a;decPart=b;}}
     else intPart=s.replace(/\./g,'');
   }
   intPart=intPart.replace(/^0+(?=\d)/,'')||'0';
@@ -57,60 +67,103 @@ function parseNumber(raw,{dotDecimal=false}={}){
 function decimalWords(dec){if(!dec)return'';if(dec.length<=2&&!/^0/.test(dec))return integerWords(BigInt(dec));return dec.split('').map(d=>SMALL[Number(d)]).join(' ');}
 function numberWords(raw,opts={}){const p=parseNumber(raw,opts);if(!p)return String(raw);let out=integerWords(p.integer);if(p.decimal)out+=` coma ${decimalWords(p.decimal)}`;if(p.negative)out=`menos ${out}`;else if(p.positive)out=`más ${out}`;return out;}
 function ordinalWords(n,{female=false,apocopated=false}={}){n=Number(n);if(!Number.isInteger(n)||n<1||n>100)return integerWords(BigInt(Math.max(0,Math.trunc(n))));if(n===100)return female?'centésima':'centésimo';const t=Math.trunc(n/10),u=n%10;let parts=[];if(t)parts.push(ORD_TENS[t]);if(u)parts.push(ORD_UNITS[u]);let out=parts.join(' ');if(female)out=out.replace(/o\b/g,'a');if(apocopated)out=out.replace(/primero$/,'primer').replace(/tercero$/,'tercer');return out;}
-function hourWords(h,m){h=Number(h);m=Number(m);if(h===0&&m===0)return'medianoche';if(h===12&&m===0)return'mediodía';const h12=h%12||12;let hw=integerWords(BigInt(h12));if(h12===1)hw='una';let part=h<6?'de la madrugada':h<12?'de la mañana':h<20?'de la tarde':'de la noche';if(m===0)return`${hw} ${part}`;return`${hw} y ${integerWords(BigInt(m))} ${part}`;}
+function hour12Words(h,m){h=Number(h);m=Number(m);if(h===0&&m===0)return'medianoche';if(h===12&&m===0)return'mediodía';const h12=h%12||12;let hw=integerWords(BigInt(h12));if(h12===1)hw='una';const part=h<6?'de la madrugada':h<12?'de la mañana':h<20?'de la tarde':'de la noche';return m===0?`${hw} ${part}`:`${hw} y ${integerWords(BigInt(m))} ${part}`;}
+function hour24Words(h,m){h=Number(h);m=Number(m);const hw=integerWords(BigInt(h));if(m===0)return`${hw} horas`;return`${hw} horas con ${integerWords(BigInt(m))} ${m===1?'minuto':'minutos'}`;}
+function hourWords(h,m){return hour12Words(h,m);}
 function spokenDigits(raw){return String(raw).replace(/\D/g,'').split('').map(d=>SMALL[Number(d)]).join(' ');}
 function nounNumber(raw,noun,{femaleNoun=false,dotDecimal=false}={}){const p=parseNumber(raw,{dotDecimal});if(!p)return`${raw} ${noun}`;let w=numberWords(raw,{dotDecimal});if(!p.decimal){if(femaleNoun)w=feminine(w);else w=apocope(w);}return`${w} ${noun}`;}
 function currencyText(code,raw,scale=''){
-  const p=parseNumber(raw,{dotDecimal:false});if(!p)return`${raw} ${scale} ${code}`.trim();const scaled=String(scale||'').trim().toLowerCase();const info={PEN:['sol','soles','céntimo','céntimos'],USD:['dólar','dólares','centavo','centavos'],EUR:['euro','euros','céntimo','céntimos'],GBP:['libra','libras','penique','peniques'],JPY:['yen','yenes','sen','sen']}[code]||['unidad','unidades','centavo','centavos'];
-  if(scaled){const amount=numberWords(raw);const amountAdj=!p.decimal?apocope(amount):amount;const scaleOut=/^mill[oó]n$/i.test(scaled)?'millón':/^millones$/i.test(scaled)?'millones':/^bill[oó]n$/i.test(scaled)?'billón':/^billones$/i.test(scaled)?'billones':/^mil(?:es)?$/i.test(scaled)?'mil':scaled;const de=/^(millón|millones|billón|billones)$/i.test(scaleOut)?' de':'';return`${amountAdj} ${scaleOut}${de} ${info[1]}`;}
+  const p=parseNumber(raw,{dotDecimal:false});if(!p)return`${raw} ${scale} ${code}`.trim();const scaled=String(scale||'').trim().toLowerCase();
+  const info={PEN:['sol','soles','céntimo','céntimos'],USD:['dólar','dólares','centavo','centavos'],EUR:['euro','euros','céntimo','céntimos'],GBP:['libra','libras','penique','peniques'],JPY:['yen','yenes','sen','sen'],CNY:['yuan','yuanes','fen','fen']}[code]||['unidad','unidades','centavo','centavos'];
+  if(scaled){const amount=numberWords(raw),amountAdj=!p.decimal?apocope(amount):amount;const scaleOut=/^mill[oó]n$/i.test(scaled)?'millón':/^millones$/i.test(scaled)?'millones':/^bill[oó]n$/i.test(scaled)?'billón':/^billones$/i.test(scaled)?'billones':/^mil(?:es)?$/i.test(scaled)?'mil':scaled;const de=/^(millón|millones|billón|billones)$/i.test(scaleOut)?' de':'';return`${amountAdj} ${scaleOut}${de} ${info[1]}`;}
   if(p.decimal&&p.decimal.length===2){const major=p.integer===1n?info[0]:info[1],minorN=BigInt(p.decimal),minor=minorN===1n?info[2]:info[3];return`${apocope(integerWords(p.integer))} ${major} con ${apocope(integerWords(minorN))} ${minor}`;}
   const major=p.integer===1n&&!p.decimal?info[0]:info[1];return`${p.decimal?numberWords(raw):apocope(integerWords(p.integer))} ${major}`;
+}
+function validDateParts(d,m,y){const dt=new Date(Date.UTC(Number(y),Number(m)-1,Number(d)));return dt.getUTCFullYear()===Number(y)&&dt.getUTCMonth()===Number(m)-1&&dt.getUTCDate()===Number(d);}
+function romanToInt(raw){const s=String(raw||'').toUpperCase();if(!/^[IVXLCDM]+$/.test(s))return null;const vals={I:1,V:5,X:10,L:50,C:100,D:500,M:1000};let total=0,prev=0;for(let i=s.length-1;i>=0;i--){const v=vals[s[i]];if(v<prev)total-=v;else{total+=v;prev=v;}}const encode=n=>{const pairs=[[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];let out='';for(const [v,r] of pairs)while(n>=v){out+=r;n-=v;}return out;};return total>0&&total<=3999&&encode(total)===s?total:null;}
+function romanNameWords(roman,{female=false}={}){const n=romanToInt(roman);if(!n)return roman;if(n<=10)return ordinalWords(n,{female});return integerWords(BigInt(n));}
+function applyAbbreviations(text){let out=String(text||'');for(const [rx,to] of ABBREVIATIONS)out=out.replace(rx,to);out=out.replace(/\bN\.?\s*[°º]\s*/giu,'número ');return out;}
+function conservativeProsody(text){
+  let out='',quote=null;const openMap={'“':'”','«':'»','"':'"'};
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(quote){out+=ch;if(ch===quote)quote=null;continue;}
+    if(openMap[ch]){quote=openMap[ch];out+=ch;continue;}
+    if(ch===';'){out+=', ';while(text[i+1]===' ')i++;continue;}
+    if(ch==='…'){out+='. ';while(text[i+1]==='…'||text[i+1]===' ')i++;continue;}
+    if((ch==='—'||ch==='–')&&/\s/.test(text[i-1]||'')&&/\s/.test(text[i+1]||'')){out+=', ';while(text[i+1]===' ')i++;continue;}
+    out+=ch;
+  }
+  return out;
 }
 
 function normalizeSpeech(input,{enabled=true}={}){
   const original=String(input||'');if(!enabled)return{text:original,version:VERSION,transforms:[],changed:false};
-  const transforms=[];let text=normalizeUnicode(original);if(text!==original)transforms.push('unicode/limpieza');
-  const stash=[];const protect=(rx,fn,label)=>{text=text.replace(rx,(...args)=>{let value;try{value=fn(...args);}catch{return args[0];}const alpha=(n)=>{let x=n+1,r='';while(x){x--;r=String.fromCharCode(65+(x%26))+r;x=Math.floor(x/26);}return r;};const token=`\uE000${alpha(stash.length)}\uE001`;stash.push(String(value));if(label)transforms.push(label);return token;});};
-  const restore=()=>{const index=(letters)=>{let n=0;for(const ch of letters)n=n*26+(ch.charCodeAt(0)-64);return n-1;};text=text.replace(/\uE000([A-Z]+)\uE001/g,(m,k)=>stash[index(k)]??m);};
+  const transforms=[];let text=applyAbbreviations(normalizeUnicode(original));if(text!==original)transforms.push('unicode/abreviaturas');
+  const stash=[];
+  const protect=(rx,fn,label)=>{text=text.replace(rx,(...args)=>{let value;try{value=fn(...args);}catch{return args[0];}const token=`\uE000${(stash.length+1).toString(36)}\uE001`;stash.push(String(value));if(label)transforms.push(label);return token;});};
+  const restore=()=>{text=text.replace(/\uE000([0-9a-z]+)\uE001/gi,(m,k)=>{const i=parseInt(k,36)-1;return i>=0&&i<stash.length?stash[i]:m;});};
 
   protect(MODEL_HINT,m=>m,'identificador protegido');
   protect(/\b(?:https?:\/\/|www\.)[^\s,;!?]+/gi,m=>m,'URL protegida');
   protect(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g,m=>m,'correo protegido');
-  protect(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/g,(m,d,mo,y)=>{const di=Number(d),mi=Number(mo);if(mi<1||mi>12||di<1||di>31)return m;return`${integerWords(BigInt(di))} de ${MONTHS[mi-1]} de ${integerWords(BigInt(y))}`;},'fecha');
-  protect(/\b(\d{1,2}):([0-5]\d)\s*([ap])\.?\s*m\.?\b/gi,(m,h,mi,ap)=>{let hh=Number(h)%12;if(ap.toLowerCase()==='p')hh+=12;return hourWords(hh,Number(mi));},'hora');
-  protect(/\b([01]?\d|2[0-3]):([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)?\b/gi,(m,h,mi)=>hourWords(h,mi),'hora');
-  protect(/\b([01]?\d|2[0-3])\.([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)\b/gi,(m,h,mi)=>hourWords(h,mi),'hora');
+
+  protect(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/g,(m,d,mo,y)=>{if(!validDateParts(d,mo,y))return m;return`${integerWords(BigInt(d))} de ${MONTHS[Number(mo)-1]} de ${integerWords(BigInt(y))}`;},'fecha');
+  protect(/\b((?:1\d{3}|20\d{2}))\s*[-–]\s*((?:1\d{3}|20\d{2}))\b/g,(m,a,b)=>`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))}`,'rango de años');
+
+  protect(/\b(\d{1,2}):([0-5]\d)\s*([ap])\.?\s*m\.?\b/gi,(m,h,mi,ap)=>{let hh=Number(h)%12;if(ap.toLowerCase()==='p')hh+=12;return hour12Words(hh,mi);},'hora 12h');
+  protect(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\s*(?:h(?:oras?)?|hrs?\.?|horas?)?\b/gi,(m,h,mi)=>hour24Words(h,mi),'hora 24h');
+
   const moneyScale='(?:millones|mill[oó]n|billones|bill[oó]n|miles|mil)?';
   protect(new RegExp(`(?:S\\/\\.?|PEN)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('PEN',n,s),'moneda');
   protect(new RegExp(`(?:US\\$|USD|\\$)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('USD',n,s),'moneda');
   protect(new RegExp(`(?:€|EUR)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('EUR',n,s),'moneda');
   protect(new RegExp(`(?:£|GBP)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('GBP',n,s),'moneda');
+  protect(new RegExp(`(?:JPY|¥)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('JPY',n,s),'moneda');
+  protect(new RegExp(`(?:CNY|RMB)\\s*([+-]?\\d[\\d.,]*)\\s*(${moneyScale})`,'gi'),(m,n,s)=>currencyText('CNY',n,s),'moneda');
+
   protect(/([+-]?\d[\d.,]*)\s*%/g,(m,n)=>`${numberWords(n,{dotDecimal:/\.\d{1,2}$/.test(n)&&!n.includes(',')})} por ciento`,'porcentaje');
   protect(/([+-]?\d[\d.,]*)\s+por ciento\b/gi,(m,n)=>`${numberWords(n,{dotDecimal:/\.\d{1,2}$/.test(n)&&!n.includes(',')})} por ciento`,'porcentaje');
   protect(/(\d[\d.,]*)\s*°\s*C\b/gi,(m,n)=>`${numberWords(n)} grados Celsius`,'temperatura');
+  protect(/(\d[\d.,]*)\s*°\s*F\b/gi,(m,n)=>`${numberWords(n)} grados Fahrenheit`,'temperatura');
+
   protect(/\b(\d{1,3})(?:°|º|\.\s*(?:º|o|er)?)\s+(aniversario|puesto|lugar|congreso|campeonato|festival|premio)\b/gi,(m,n,noun)=>`${ordinalWords(Number(n),{apocopated:/lugar|puesto/.test(noun.toLowerCase())})} ${noun}`,'ordinal');
   protect(/\b(\d{1,3})(?:ª|\.\s*ª?)\s+(edici[oó]n|fecha|jornada)\b/gi,(m,n,noun)=>`${ordinalWords(Number(n),{female:true})} ${noun}`,'ordinal');
+  protect(/\b(\d{1,3})(?:ro|do|to|mo|vo|no)\b/gi,(m,n)=>ordinalWords(Number(n)),'ordinal abreviado');
+  protect(/\b(\d{1,3})(?:ra|da|ta|ma|va|na)\b/gi,(m,n)=>ordinalWords(Number(n),{female:true}),'ordinal abreviado');
   protect(/\b(\d{1,3})\s*°/g,(m,n)=>`${integerWords(BigInt(n))} grados`,'grados');
+
+  protect(/\b(siglos?)\s+([IVXLCDM]{1,10})\b/gi,(m,label,r)=>{const n=romanToInt(r);return n?`${label} ${integerWords(BigInt(n))}`:m;},'romano');
+  protect(/\b(cap[ií]tulo|tomo|volumen|parte|acto)\s+([IVXLCDM]{1,10})\b/gi,(m,label,r)=>{const n=romanToInt(r);return n?`${label} ${integerWords(BigInt(n))}`:m;},'romano');
+  protect(/\bSuper\s+Bowl\s+([IVXLCDM]{1,10})\b/g,(m,r)=>{const n=romanToInt(r);return n?`Super Bowl ${integerWords(BigInt(n))}`:m;},'romano');
+  protect(/\b([A-ZÁÉÍÓÚÜÑ][\p{L}\p{M}'’.-]+(?:\s+[A-ZÁÉÍÓÚÜÑ][\p{L}\p{M}'’.-]+){0,2})\s+([IVXLCDM]{1,10})\b/gu,(m,name,r)=>{const last=name.trim().split(/\s+/).at(-1).toLocaleLowerCase('es');if(ROMAN_NAME_EXCLUSIONS.has(last))return m;const n=romanToInt(r);if(!n)return m;const first=name.trim().split(/\s+/)[0].toLocaleLowerCase('es');return`${name} ${romanNameWords(r,{female:FEMALE_ROMAN_NAMES.has(first)})}`;},'romano de nombre');
+
   protect(/\b(?:DNI|de ene i)\s*(?:N\.?\s*[°º]?\s*)?(\d{7,9})\b/gi,(m,n)=>`de ene i ${spokenDigits(n)}`,'DNI');
   protect(/\b(?:RUC|erre u ce)\s*(?:N\.?\s*[°º]?\s*)?(\d{10,12})\b/gi,(m,n)=>`erre u ce ${spokenDigits(n)}`,'RUC');
   protect(/\b(?:tel[eé]fono|celular)\s*[:Nn°º.]*\s*(\+?\d[\d -]{6,16})\b/gi,(m,n)=>`${m.split(/[:Nn°º.]/)[0].trim()} ${spokenDigits(n)}`,'teléfono');
-  protect(/\b(Ley|Decreto|Resoluci[oó]n)\s+N\.?\s*[°º]?\s*(\d{1,7})\b/gi,(m,t,n)=>`${t} número ${integerWords(BigInt(n))}`,'documento');
+  protect(/\b(Ley)\s+(?:N\.?\s*[°º]?|número)\s*(\d{1,7})\b/gi,(m,t,n)=>`${t} número ${integerWords(BigInt(n))}`,'documento');
+  protect(/\b(Decreto(?:\s+Supremo)?|Resoluci[oó]n)\s+(?:N\.?\s*[°º]?|número)\s*(\d{1,4})\s*[-–]\s*(\d{4})\b/gi,(m,t,a,b)=>`${t} número ${spokenDigits(a)} guion ${integerWords(BigInt(b))}`,'documento');
+  protect(/\b(art[ií]culo)\s+(\d{1,4})(?:-([A-Z]))?\b/gi,(m,t,n,l)=>`${t} ${integerWords(BigInt(n))}${l?` ${l}`:''}`,'artículo');
+
   for(const [unit,[sg,pl]] of Object.entries(UNITS)){
     const escaped=unit.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    protect(new RegExp(`\\b(\\d[\\d.,]*)\\s*${escaped}\\b`,'gi'),(m,n)=>{const p=parseNumber(n);const noun=p&&!p.decimal&&p.integer===1n?sg:pl;return nounNumber(n,noun);},'unidad');
+    protect(new RegExp(`(?<![\\p{L}\\p{N}_])(\\d[\\d.,]*)\\s*${escaped}(?![\\p{L}\\p{N}_])`,'giu'),(m,n)=>{const p=parseNumber(n);const noun=p&&!p.decimal&&p.integer===1n?sg:pl;return nounNumber(n,noun);},'unidad');
   }
+
   protect(/\b(\d{1,5})\s*[-–]\s*(\d{1,5})\s+(años?|d[ií]as?|meses?|personas?|kil[oó]metros?|metros?)\b/gi,(m,a,b,noun)=>`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))} ${noun}`,'rango');
-  protect(/\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/g,(m,a,b,offset,whole)=>{const ctx=whole.slice(Math.max(0,offset-45),Math.min(whole.length,offset+m.length+45));if(SPORTS_HINT.test(ctx))return`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))}`;return m;},'marcador');
+  protect(/\b(\d{1,3})\s*[-–]\s*(\d{1,3})\b/g,(m,a,b,offset,whole)=>{const ctx=whole.slice(Math.max(0,offset-60),Math.min(whole.length,offset+m.length+60));if(SPORTS_HINT.test(ctx))return`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))}`;return m;},'marcador');
+  protect(/\b(\d{1,3})\s*:\s*(\d{1,3})\b/g,(m,a,b,offset,whole)=>{const ctx=whole.slice(Math.max(0,offset-50),Math.min(whole.length,offset+m.length+50));if(/proporci[oó]n|relaci[oó]n|raz[oó]n/i.test(ctx))return`${integerWords(BigInt(a))} a ${integerWords(BigInt(b))}`;return m;},'proporción');
   protect(/\b(1)\/(2|3|4)\b/g,(m,a,b)=>({2:'un medio',3:'un tercio',4:'un cuarto'}[b]),'fracción');
   protect(/\b(\d+)\/(\d+)\b/g,(m,a,b)=>`${integerWords(BigInt(a))} sobre ${integerWords(BigInt(b))}`,'fracción');
+
   protect(/(?<![\p{L}\p{N}_])([+-]?\d{1,9}(?:[.,]\d+)?)\s+(millones|mill[oó]n|billones|bill[oó]n|miles|mil)\b/giu,(m,n,scale)=>{const p=parseNumber(n);let w=numberWords(n);if(p&&!p.decimal)w=apocope(w);return`${w} ${scale}`;},'escala');
   protect(/(?<![\p{L}\p{N}_])(\d{1,4})\s+(personas|mujeres|candidatas|empresas|familias|viviendas)\b/giu,(m,n,noun)=>`${feminine(integerWords(BigInt(n)))} ${noun}`,'concordancia');
-  protect(/\b(20\d{2})\b/g,(m,y)=>integerWords(BigInt(y)),'año');
+  protect(/\b((?:1\d{3}|20\d{2}))\b/g,(m,y)=>integerWords(BigInt(y)),'año');
   protect(/(?<![\p{L}\p{N}_])([+-]?\d(?:[\d.,]*\d)?)(?![\p{L}\p{N}_])/gu,(m,n)=>numberWords(n),'número');
+
   const beforeProsody=text;
   text=text.replace(/^([A-ZÁÉÍÓÚÑ][\p{L}\p{M} .'’\-]{0,28}):\s+(\p{L})/u,(m,p,c)=>`${p}. ${c.toLocaleUpperCase('es')}`);
-  text=text.replace(/;\s+/g,'. ').replace(/\s+[—–]\s+/g,', ').replace(/…+/g,'. ');
-  text=text.replace(/\s*\.\s*\./g,'. ').replace(/\s+,/g,',').replace(/\s+\./g,'.').replace(/([.!?])(?=\p{L})/gu,'$1 ');
+  text=conservativeProsody(text).replace(/\s*\.\s*\./g,'. ').replace(/\s+,/g,',').replace(/\s+\./g,'.').replace(/([.!?])(?=\p{L})/gu,'$1 ');
   restore();
   text=text.replace(/\ba las una de la\b/gi,'a la una de la');
   text=cleanSpaces(text);
@@ -118,6 +171,6 @@ function normalizeSpeech(input,{enabled=true}={}){
   return{text,version:VERSION,transforms:[...new Set(transforms)],changed:text!==original};
 }
 
-function validateSpeech(original,candidate){const o=String(original||''),c=String(candidate||'');if(!c.trim())return{ok:false,reason:'texto vacío'};if(/[\uE000\uE001]|__EC_|\b(?:undefined|NaN|null)\b/.test(c))return{ok:false,reason:'marcador interno residual'};if(c.length>Math.max(120,o.length*5+80))return{ok:false,reason:'expansión excesiva'};return{ok:true,reason:''};}
+function validateSpeech(original,candidate){const o=String(original||''),c=String(candidate||'');if(!c.trim())return{ok:false,reason:'texto vacío'};if(/[\uE000\uE001\uE210\uE211]|__EC_|\b(?:undefined|NaN|null)\b/.test(c))return{ok:false,reason:'marcador interno residual'};if(c.length>Math.max(160,o.length*6+120))return{ok:false,reason:'expansión excesiva'};return{ok:true,reason:''};}
 
-module.exports={VERSION,normalizeSpeech,validateSpeech,numberWords,integerWords,parseNumber,ordinalWords,hourWords,currencyText};
+module.exports={VERSION,normalizeSpeech,validateSpeech,numberWords,integerWords,parseNumber,ordinalWords,hourWords,hour12Words,hour24Words,currencyText,romanToInt,romanNameWords};
