@@ -107,12 +107,12 @@ function normalizeSpeech(input,{enabled=true}={}){
   protect(/(?<![\p{L}\p{N}_])(\d{1,4})\s+(personas|mujeres|candidatas|empresas|familias|viviendas)\b/giu,(m,n,noun)=>`${feminine(integerWords(BigInt(n)))} ${noun}`,'concordancia');
   protect(/\b(20\d{2})\b/g,(m,y)=>integerWords(BigInt(y)),'año');
   protect(/(?<![\p{L}\p{N}_])([+-]?\d(?:[\d.,]*\d)?)(?![\p{L}\p{N}_])/gu,(m,n)=>numberWords(n),'número');
-  restore();
   const beforeProsody=text;
   text=text.replace(/^([A-ZÁÉÍÓÚÑ][\p{L}\p{M} .'’\-]{0,28}):\s+(\p{L})/u,(m,p,c)=>`${p}. ${c.toLocaleUpperCase('es')}`);
   text=text.replace(/;\s+/g,'. ').replace(/\s+[—–]\s+/g,', ').replace(/…+/g,'. ');
-  text=text.replace(/\ba las una de la\b/gi,'a la una de la');
   text=text.replace(/\s*\.\s*\./g,'. ').replace(/\s+,/g,',').replace(/\s+\./g,'.').replace(/([.!?])(?=\p{L})/gu,'$1 ');
+  restore();
+  text=text.replace(/\ba las una de la\b/gi,'a la una de la');
   text=cleanSpaces(text);
   if(text!==beforeProsody)transforms.push('prosodia');
   return{text,version:VERSION,transforms:[...new Set(transforms)],changed:text!==original};
