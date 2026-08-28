@@ -7,15 +7,26 @@ const {FontManager}=require('./services/fonts');
 const {PronunciationNormalizer}=require('./services/pronunciation');
 const {KokoroTTS}=require('./services/kokoro');
 const {VERSION:SPEECH_VERSION,normalizeSpeech,validateSpeech}=require('./services/speechNormalizer0326');
+const {protectStructuredText}=require('./services/speechPipeline0326');
 
-function safeCopy(src,dst){try{if(!fs.existsSync(src))return;fs.mkdirSync(path.dirname(dst),{recursive:true});if(fs.statSync(src).isDirectory())fs.cpSync(src,dst,{recursive:true,force:false,errorOnExist:false});else fs.copyFileSync(src,dst);}catch{}}
+function safeCopy(src,dst){
+  try{
+    if(!fs.existsSync(src))return{ok:true,skipped:true};
+    fs.mkdirSync(path.dirname(dst),{recursive:true});
+    if(fs.statSync(src).isDirectory())fs.cpSync(src,dst,{recursive:true,force:false,errorOnExist:false});else fs.copyFileSync(src,dst);
+    return{ok:fs.existsSync(dst),skipped:false};
+  }catch(e){return{ok:false,skipped:false,error:e?.message||String(e)};}
+}
 function backupBefore0326(store){
   try{
     const root=store?.baseDir;if(!root)return;const marker=path.join(root,'.ec-0326-backup-done');if(fs.existsSync(marker))return;
-    const backup=path.join(root,'backups','pre-0.3.26');fs.mkdirSync(backup,{recursive:true});
-    for(const name of ['settings.json','settings.json.bak','pronunciation-learning.json','pronunciation-cache.json'])safeCopy(path.join(root,name),path.join(backup,name));
-    safeCopy(path.join(root,'fonts'),path.join(backup,'fonts'));
-    fs.writeFileSync(marker,new Date().toISOString(),'utf8');
+    const backup=path.join(root,'backups','pre-0.3.26');fs.mkdirSync(backup,{recursive:true});const results=[];
+    for(const name of ['settings.json','settings.json.bak','pronunciation-learning.json','pronunciation-cache.json'])results.push(safeCopy(path.join(root,name),path.join(backup,name)));
+    results.push(safeCopy(path.join(root,'fonts'),path.join(backup,'fonts')));
+    if(results.some(x=>!x.ok))return;
+    const existing=['settings.json','pronunciation-learning.json','fonts'].filter(name=>fs.existsSync(path.join(root,name)));
+    if(existing.some(name=>!fs.existsSync(path.join(backup,name))))return;
+    fs.writeFileSync(marker,JSON.stringify({at:new Date().toISOString(),files:existing},null,2),'utf8');
   }catch{}
 }
 function normName(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/^ec custom\s*[·.-]?\s*/,'').replace(/\b(regular|medium|semibold|semi bold|bold|extra bold|extrabold|black|italic|bold italic|variablefont|variable font)\b/g,'').replace(/[^a-z0-9]+/g,'');}
@@ -68,14 +79,16 @@ if(!PronunciationNormalizer.prototype.__ec0326SpeechPatched){
   const baseNormalize=PronunciationNormalizer.prototype.normalize;
   PronunciationNormalizer.prototype.normalize=async function(script,options={}){
     const raw=String(script||''),started=Date.now();let base;
-    try{base=await baseNormalize.call(this,raw,options);}catch(e){throw e;}
-    const afterPronunciation=protectMutilatedFirstWord(raw,String(base?.text??raw));const settings=this.getSettings?.()||{},enabled=settings?.tts?.speechNormalizerEnabled!==false;
+    const protectedInput=protectStructuredText(raw);
+    try{base=await baseNormalize.call(this,protectedInput.text,options);}catch(e){throw e;}
+    const restoredPronunciation=protectedInput.restore(String(base?.text??protectedInput.text));
+    const afterPronunciation=protectMutilatedFirstWord(raw,restoredPronunciation);const settings=this.getSettings?.()||{},enabled=settings?.tts?.speechNormalizerEnabled!==false;
     let finalText=afterPronunciation,transforms=[],fallbackReason='',normalizerVersion=SPEECH_VERSION;
     if(enabled){
       try{const normalized=normalizeSpeech(afterPronunciation,{enabled:true});normalizerVersion=normalized.version;const check=validateSpeech(afterPronunciation,normalized.text);if(check.ok){finalText=normalized.text;transforms=normalized.transforms||[];}else fallbackReason=check.reason||'validación';}
       catch(e){fallbackReason=String(e?.message||e||'fallo del normalizador').slice(0,180);finalText=afterPronunciation;}
     }
-    const diag={at:new Date().toISOString(),original:raw.slice(0,700),afterPronunciation:afterPronunciation.slice(0,700),normalized:finalText.slice(0,900),transforms:[...new Set(transforms)],version:normalizerVersion,fallbackReason,elapsedMs:Date.now()-started};
+    const diag={at:new Date().toISOString(),original:raw.slice(0,700),afterPronunciation:afterPronunciation.slice(0,700),normalized:finalText.slice(0,900),transforms:[...new Set(transforms)],version:normalizerVersion,fallbackReason,elapsedMs:Date.now()-started,structuredProtected:protectedInput.stash.length};
     this._speechDiagnostics=this._speechDiagnostics||[];this._speechDiagnostics.push(diag);if(this._speechDiagnostics.length>20)this._speechDiagnostics.splice(0,this._speechDiagnostics.length-20);
     return{...base,text:finalText,speechNormalizerVersion:normalizerVersion,speechTransforms:diag.transforms,speechFallbackReason:fallbackReason,speechDiagnostic:diag};
   };
