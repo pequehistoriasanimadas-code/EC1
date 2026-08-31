@@ -50,7 +50,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows packaged UI, Output, Kokoro, pronunciation, ONNX and NVIDIA fallback smoke tests
+      - name: Windows packaged UI, Output, normalizer, Kokoro, pronunciation, ONNX and NVIDIA fallback smoke tests
         shell: powershell
         timeout-minutes: 15
         run: |
@@ -62,10 +62,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-0324-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test falló con código $LASTEXITCODE" }
-          npx electron scripts/packaged-0325-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.25 smoke test falló con código $LASTEXITCODE" }
-          npx electron scripts/packaged-0326-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.26 smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-0327-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.27 smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-pronunciation-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-onnx-smoke.js $resources
