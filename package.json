@@ -1,13 +1,13 @@
 {
   "name": "ec-automatic-news",
-  "version": "0.3.26",
+  "version": "0.3.27",
   "description": "GEC Automatic News - escritorio portable para automatización visual de noticias",
   "author": "Carls Mayo",
-  "main": "src/bootstrap-0326.js",
+  "main": "src/bootstrap-0327.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check": "node --check src/bootstrap-0326.js && node --check src/bootstrap-0325.js && node --check src/bootstrap-0324.js && node --check src/main.js && node --check src/renderer-0323.js && node --check src/renderer-0324.js && node --check src/renderer-0325.js && node --check src/renderer-0326.js && node --check src/renderer-font-fix-0325.js && node --check src/renderer-final-0324.js && node --check src/renderer-local-model-fix-0324.js && node --check src/renderer-image-hydration-0324.js && node --check src/output-0324.js && node --check src/output-0325.js && node --check src/output-0326.js && node --check src/services/article.js && node --check src/services/articleMetadata0324.js && node --check src/services/storyKey0324.js && node --check src/services/accessPolicy0324.js && node --check src/services/automation0324.js && node --check src/services/automation0325.js && node --check src/services/sourceMerge0325.js && node --check src/services/speechPipeline0326.js && node --check src/services/speechNormalizer0326.js && node --check src/services/customVoices.js && node --check src/services/fonts.js && python -m py_compile src/voice_tools.py && node scripts/run-legacy-check.js && node scripts/check-scheduler.js && node scripts/check-tts-optimizer.js && node scripts/run-versioned-checks-0324.js && node scripts/check-0324.js && node scripts/check-image-resolver-0324.js && node scripts/check-access-policy-0324.js && node scripts/check-final-0324.js && node scripts/check-0325.js && node scripts/check-0326.js",
+    "check": "node --check src/bootstrap-0327.js && node --check src/bootstrap-0326.js && node --check src/bootstrap-0325.js && node --check src/bootstrap-0324.js && node --check src/main.js && node --check src/renderer-0323.js && node --check src/renderer-0324.js && node --check src/renderer-0325.js && node --check src/renderer-0326.js && node --check src/renderer-0327.js && node --check src/renderer-font-fix-0325.js && node --check src/renderer-final-0324.js && node --check src/renderer-local-model-fix-0324.js && node --check src/renderer-image-hydration-0324.js && node --check src/output-0324.js && node --check src/output-0325.js && node --check src/output-0326.js && node --check src/services/article.js && node --check src/services/articleMetadata0324.js && node --check src/services/storyKey0324.js && node --check src/services/accessPolicy0324.js && node --check src/services/automation0324.js && node --check src/services/automation0325.js && node --check src/services/sourceMerge0325.js && node --check src/services/speechPipeline0326.js && node --check src/services/speechNormalizer0326.js && node --check src/services/speechRules0327.js && node --check src/services/normalizerPack0327.js && node --check src/services/version0327Policy.js && node --check src/services/customVoices.js && node --check src/services/fonts.js && python -m py_compile src/voice_tools.py && node scripts/run-legacy-check.js && node scripts/check-scheduler.js && node scripts/check-tts-optimizer.js && node scripts/run-versioned-checks-0324.js && node scripts/check-0324.js && node scripts/check-image-resolver-0324.js && node scripts/check-access-policy-0324.js && node scripts/check-final-0324.js && node scripts/check-0325.js && node scripts/check-0326.js && node scripts/check-0327.js",
     "dist:portable": "electron-builder --win portable --x64 --publish never"
   },
   "dependencies": {
@@ -23,14 +23,42 @@
     "appId": "pe.ec.automaticnews",
     "productName": "EC Automatic News",
     "artifactName": "GEC-Automatic-News-Portable-${version}.${ext}",
-    "directories": { "output": "dist" },
-    "files": ["src/**/*", "scripts/check-0325.js", "scripts/check-0326.js", "package.json"],
-    "extraResources": [
-      {"from":"runtime","to":"runtime","filter":["**/*"]},
-      {"from":"src/voice_tools.py","to":"runtime/kokoro/voice_tools.py"}
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "scripts/check-0325.js",
+      "scripts/check-0326.js",
+      "scripts/check-0327.js",
+      "package.json"
     ],
-    "extraFiles": [{"from":"DIAGNOSTICO.cmd","to":"DIAGNOSTICO.cmd"}],
-    "win": { "target": ["portable"] },
-    "portable": { "requestExecutionLevel": "user" }
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "src/voice_tools.py",
+        "to": "runtime/kokoro/voice_tools.py"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "DIAGNOSTICO.cmd",
+        "to": "DIAGNOSTICO.cmd"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    }
   }
 }
