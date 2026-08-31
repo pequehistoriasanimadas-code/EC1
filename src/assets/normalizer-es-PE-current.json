@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "rulesVersion": "2026.08.31.1",
+  "minimumEngine": "2.0.0",
+  "description": "Canal estable de reglas ES-PE para GEC Automatic News.",
+  "rules": [
+    {"id":"stream-vocabulary-do-not-handle","enabled":false,"phase":"pre","literal":"streaming","replacement":"streaming"},
+    {"id":"versus-spaced","phase":"post","pattern":"\\bversus\\s+\\.","replacement":"versus","flags":"giu"}
+  ],
+  "tests": [
+    {"input":"7,8%","expected":"siete coma ocho por ciento"},
+    {"input":"18,43%","expected":"dieciocho coma cuarenta y tres por ciento"},
+    {"input":"-3,7%","expected":"menos tres coma siete por ciento"},
+    {"input":"13:00 horas","expected":"trece horas"},
+    {"input":"13:05 horas","expected":"trece horas con cinco minutos"},
+    {"input":"1.924 desaparecidos","expected":"mil novecientos veinticuatro desaparecidos"},
+    {"input":"Perú vs. Chile","expected":"Perú versus Chile"},
+    {"input":"Harald V","expected":"Harald quinto"},
+    {"input":"Isabel II","expected":"Isabel segunda"},
+    {"input":"siglo XXI","expected":"siglo veintiuno"},
+    {"input":"2026-08-31","expected":"treinta y uno de agosto de dos mil veintiséis"},
+    {"input":"temporada 2025/26","expected":"temporada dos mil veinticinco, dos mil veintiséis"},
+    {"input":"Mw 6.1","expected":"magnitud seis coma uno"},
+    {"input":"km 105","expected":"kilómetro ciento cinco"},
+    {"input":"EE. UU.","expected":"Estados Unidos"},
+    {"input":"FF. AA.","expected":"Fuerzas Armadas"},
+    {"input":"https://elcomercio.pe/politica/nota-2026","expected":"https://elcomercio.pe/politica/nota-2026"},
+    {"input":"v0.3.27","expected":"v0.3.27"}
+  ]
+}
