@@ -2,12 +2,13 @@
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');let n=0;
 function ok(v,m){n++;assert.ok(v,m);}
-const preload=read('src/preload.js'),guard=read('src/renderer-startup-guard-0329.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js'),workflow=read('.github/workflows/build-windows.yml');
-ok(legacy.includes('Aprendizaje de pronunciación actualizado.')&&legacy.includes('alert(parts.join'), 'la prueba reproduce la fuente real del popup legado');
-ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard'),'preload no ejecuta JavaScript invasivo con webFrame antes de cargar la página');
-ok(preload.includes("contextBridge.exposeInMainWorld('__ec0316MigrationNoticeShown',true)")&&!preload.includes('ttsStatusStatusCache'),'preload marca la migración como manejada mediante contextBridge sin romper la caché TTS');
-ok(guard.includes('window.__ec0316MigrationNoticeShown=true')&&!guard.includes('window.alert=function'),'guard legado no sustituye window.alert');
-ok(!preload.includes('renderer-startup-guard-0329.js'),'preload no depende de una carrera de carga del guard externo');
+const preload=read('src/preload.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js'),workflow=read('.github/workflows/build-windows.yml'),pronunciationGuard=read('src/services/pronunciationStartupNotice0329.js'),pronunciationUi=read('src/renderer-pronunciation-notice-0329.js'),bootstrap=read('src/bootstrap-0329.js'),uiSmoke=read('scripts/packaged-ui-0329-smoke.js');
+ok(legacy.includes('Aprendizaje de pronunciación actualizado.')&&legacy.includes('alert(parts.join'), 'la auditoría reproduce la fuente histórica del popup legado');
+ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard')&&!preload.includes("exposeInMainWorld('__ec0316MigrationNoticeShown'"),'preload no inyecta hacks tempranos ni flags para tapar alertas');
+ok(pronunciationGuard.includes('out.migrationInfo')&&pronunciationGuard.includes('delete out.migrationReport'),'backend cambia migrationReport bloqueante por migrationInfo no bloqueante');
+ok(bootstrap.includes('installPronunciationStartupNotice0329'),'bootstrap instala la protección de pronunciación después de las capas 0.3.29');
+ok(pronunciationUi.includes('migrationInfo')&&pronunciationUi.includes('__ec0329PronunciationMigrationInfo')&&!pronunciationUi.includes('alert('),'información de migración se publica en UI sin alert');
+ok(preload.includes('renderer-pronunciation-notice-0329.js'),'preload carga la vista no bloqueante de pronunciación');
 ok(preload.indexOf('renderer-release-ux-0329.js')>preload.indexOf("renderer-0329.js"),'el polish final se carga después de perfiles 0.3.29');
 ok(preload.includes("contextBridge.exposeInMainWorld('ECAPI'"),'ECAPI sigue expuesta al renderer en el arranque normal');
 ok(ux.includes('if(!window.ECAPI')&&ux.includes('setTimeout(installReleaseUx0329,120)'),'la capa UX espera a que perfiles y renderer estén listos en vez de fallar durante startup');
@@ -24,4 +25,5 @@ ok(health.includes("status:'unset'")&&health.includes("if(!v)return checks.push"
 ok(release.includes('MAX_PROFILES=30')&&release.includes('PROFILE_LIMIT'),'límite de 30 perfiles sigue aplicado en backend');
 ok(release.includes('AI_PROVIDER_OUTAGE')&&release.includes('generationBlockStatus'),'protección contra bucle de errores IA sigue presente');
 ok(workflow.includes('Packaged 0.3.29 real UI startup test')&&workflow.includes('packaged-ui-0329-smoke.js'),'CI abre la UI empaquetada y comprueba el primer inicio');
+ok(uiSmoke.includes('loadFile timeout')&&uiSmoke.includes('15000')&&uiSmoke.includes('migrationInfo'),'smoke de UI falla rápido y usa el contrato no bloqueante real');
 console.log(`GEC 0.3.29 manual-regression audit OK · ${n} verificaciones`);
