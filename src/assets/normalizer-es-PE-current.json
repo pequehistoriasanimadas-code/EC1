@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "rulesVersion": "2026.08.31.1",
-  "minimumEngine": "2.0.0",
-  "description": "Canal estable de reglas ES-PE para GEC Automatic News.",
+  "rulesVersion": "2026.08.31.2",
+  "minimumEngine": "2.1.0",
+  "description": "Reglas declarativas actualizables para el Normalizador ES-PE de GEC.",
   "rules": [
     {"id":"stream-vocabulary-do-not-handle","enabled":false,"phase":"pre","literal":"streaming","replacement":"streaming"},
     {"id":"versus-spaced","phase":"post","pattern":"\\bversus\\s+\\.","replacement":"versus","flags":"giu"}
@@ -10,21 +10,35 @@
   "tests": [
     {"input":"7,8%","expected":"siete coma ocho por ciento"},
     {"input":"18,43%","expected":"dieciocho coma cuarenta y tres por ciento"},
+    {"input":"0,25%","expected":"cero coma veinticinco por ciento"},
     {"input":"-3,7%","expected":"menos tres coma siete por ciento"},
+    {"input":"+2,5%","expected":"más dos coma cinco por ciento"},
+    {"input":"7.8%","expected":"siete coma ocho por ciento"},
+    {"input":"7.000%","expected":"siete mil por ciento"},
+    {"input":"01:00 horas","expected":"una hora"},
+    {"input":"01:01 horas","expected":"una hora con un minuto"},
     {"input":"13:00 horas","expected":"trece horas"},
     {"input":"13:05 horas","expected":"trece horas con cinco minutos"},
+    {"input":"21:21 horas","expected":"veintiuna horas con veintiún minutos"},
     {"input":"1.924 desaparecidos","expected":"mil novecientos veinticuatro desaparecidos"},
+    {"input":"25.600 casos","expected":"veinticinco mil seiscientos casos"},
     {"input":"Perú vs. Chile","expected":"Perú versus Chile"},
     {"input":"Harald V","expected":"Harald quinto"},
+    {"input":"Felipe VI","expected":"Felipe sexto"},
     {"input":"Isabel II","expected":"Isabel segunda"},
     {"input":"siglo XXI","expected":"siglo veintiuno"},
+    {"input":"II Guerra Mundial","expected":"segunda Guerra Mundial"},
     {"input":"2026-08-31","expected":"treinta y uno de agosto de dos mil veintiséis"},
     {"input":"temporada 2025/26","expected":"temporada dos mil veinticinco, dos mil veintiséis"},
+    {"input":"temporada 1999/00","expected":"temporada mil novecientos noventa y nueve, dos mil"},
     {"input":"Mw 6.1","expected":"magnitud seis coma uno"},
     {"input":"km 105","expected":"kilómetro ciento cinco"},
     {"input":"EE. UU.","expected":"Estados Unidos"},
     {"input":"FF. AA.","expected":"Fuerzas Armadas"},
+    {"input":"RR. HH.","expected":"Recursos Humanos"},
+    {"input":"Perú ganó 2-1 el partido","expected":"Perú ganó dos a uno el partido"},
+    {"input":"El partido acabó 1:1","expected":"El partido acabó uno a uno"},
     {"input":"https://elcomercio.pe/politica/nota-2026","expected":"https://elcomercio.pe/politica/nota-2026"},
-    {"input":"v0.3.27","expected":"v0.3.27"}
+    {"input":"v0.3.28","expected":"v0.3.28"}
   ]
 }
