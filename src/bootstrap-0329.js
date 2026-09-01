@@ -20,4 +20,5 @@ if(!locked){app.quit();}else{
   require('./services/profileDocumentStatesFinal0329').installProfileDocumentStatesFinal0329();
   require('./services/profileWatcherFinal0329').installProfileWatcherFinal0329();
   require('./services/releaseStability0329').installReleaseStability0329();
+  require('./services/releaseAuditFinal0329').installReleaseAuditFinal0329();
 }
