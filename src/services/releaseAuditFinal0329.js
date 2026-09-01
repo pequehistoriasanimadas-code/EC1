@@ -1,7 +1,7 @@
 'use strict';
 const {ProfilePackage0329}=require('./profilePackage0329');
 const {Providers}=require('./providers');
-const {safeName}=require('./profileManager0329');
+const {safeName,atomicJson}=require('./profileManager0329');
 
 const FINAL_FAILURE_THRESHOLD=3;
 const FINAL_FAILURE_COOLDOWN_MS=15000;
@@ -37,6 +37,10 @@ function scrubPackageSettings(payload){
   if(Array.isArray(payload.profiles))for(const row of payload.profiles)if(row?.settings)row.settings=scrubSecrets(row.settings);
   return payload;
 }
+function sanitizeImportedState(manager,ids,preserved={}){
+  for(const id of ids||[]){const clean=scrubSecrets(manager.readProfileSettings(id));manager.writeProfileSettings(id,clean);}
+  const globalClean=scrubSecrets(manager.globalSettings({}));globalClean.ai={...(globalClean.ai||{}),claudeKeyEnc:String(preserved.claudeKeyEnc||''),geminiKeyEnc:String(preserved.geminiKeyEnc||'')};atomicJson(manager.globalSettingsFile,globalClean);return true;
+}
 function installExportSecretGuard(){
   const p=ProfilePackage0329.prototype;if(p.__ec0329ExportSecretGuard)return;Object.defineProperty(p,'__ec0329ExportSecretGuard',{value:true});
   const profilePayload=p.profilePayload,allPayload=p.allPayload;
@@ -45,7 +49,7 @@ function installExportSecretGuard(){
 }
 function installImportNameGuard(){
   const p=ProfilePackage0329.prototype;if(p.__ec0329UniqueImportedNames)return;Object.defineProperty(p,'__ec0329UniqueImportedNames',{value:true});
-  const base=p.importFile;p.importFile=function(...args){const result=base.apply(this,args);const renamed=normalizeImportedNames(this.manager,result?.imported||[]);if(renamed.length)result.renamed=renamed;return result;};
+  const base=p.importFile;p.importFile=function(...args){const before=this.manager.globalSettings({}),preserved={claudeKeyEnc:before.ai?.claudeKeyEnc||'',geminiKeyEnc:before.ai?.geminiKeyEnc||''},result=base.apply(this,args);sanitizeImportedState(this.manager,result?.imported||[],preserved);const renamed=normalizeImportedNames(this.manager,result?.imported||[]);if(renamed.length)result.renamed=renamed;result.secretsSanitized=true;return result;};
 }
 function installMixedFailureCircuit(){
   const p=Providers.prototype;if(p.__ec0329FinalFailureCircuit)return;Object.defineProperty(p,'__ec0329FinalFailureCircuit',{value:true});
@@ -65,4 +69,4 @@ function installMixedFailureCircuit(){
   const cancel=p.cancelActiveRequests;if(typeof cancel==='function')p.cancelActiveRequests=function(...args){this.__ec0329FinalFailureStreak=0;return cancel.apply(this,args);};
 }
 function installReleaseAuditFinal0329(){installExportSecretGuard();installImportNameGuard();installMixedFailureCircuit();}
-module.exports={installReleaseAuditFinal0329,normalizeImportedNames,importedCandidate,scrubSecrets,scrubPackageSettings,secretLike,FINAL_FAILURE_THRESHOLD,FINAL_FAILURE_COOLDOWN_MS};
+module.exports={installReleaseAuditFinal0329,normalizeImportedNames,importedCandidate,scrubSecrets,scrubPackageSettings,sanitizeImportedState,secretLike,FINAL_FAILURE_THRESHOLD,FINAL_FAILURE_COOLDOWN_MS};
