@@ -38,38 +38,74 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
-      - name: Prepare bundled local runtimes
-        shell: powershell
-        run: ./scripts/prepare-windows-runtime.ps1
-
       - name: Static and regression checks
         run: npm run check
+
+      - name: Prepare bundled local runtimes
+        shell: pwsh
+        run: ./scripts/prepare-windows-runtime.ps1
 
       - name: Build portable EXE
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows packaged UI, Output, normalizer, Kokoro, pronunciation, ONNX and NVIDIA fallback smoke tests
-        shell: powershell
-        timeout-minutes: 15
+      - name: Packaged 0.3.28 smoke test
+        shell: pwsh
+        timeout-minutes: 3
         run: |
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
           if (-not (Test-Path $exe)) { throw "Missing executable: $exe" }
           if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'Missing packaged app.asar' }
-          npx electron scripts/packaged-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test failed with code $LASTEXITCODE" }
-          npx electron scripts/packaged-0324-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test failed with code $LASTEXITCODE" }
           npx electron scripts/packaged-0328-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.28 smoke test failed with code $LASTEXITCODE" }
+
+      - name: Packaged 0.3.25-0.3.27 compatibility test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           npx electron scripts/packaged-compat-0328.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.25-0.3.27 compatibility test failed with code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "Packaged compatibility test failed with code $LASTEXITCODE" }
+
+      - name: Packaged base UI Output and Kokoro smoke test
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged base smoke test failed with code $LASTEXITCODE" }
+
+      - name: Packaged 0.3.24 regression smoke test
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-0324-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test failed with code $LASTEXITCODE" }
+
+      - name: Packaged pronunciation smoke test
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           npx electron scripts/packaged-pronunciation-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test failed with code $LASTEXITCODE" }
+
+      - name: Packaged ONNX smoke test
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           npx electron scripts/packaged-onnx-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged ONNX smoke test failed with code $LASTEXITCODE" }
+
+      - name: Packaged NVIDIA fallback smoke test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           npx electron scripts/packaged-gpu-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged NVIDIA fallback smoke test failed with code $LASTEXITCODE" }
 
@@ -88,5 +124,3 @@ jobs:
           path: dist/*.exe
           if-no-files-found: error
           retention-days: 14
-
-# CI trigger after Windows PowerShell encoding fix
