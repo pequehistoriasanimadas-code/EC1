@@ -12,4 +12,5 @@ if(!locked){app.quit();}else{
   require('./services/profileAuditFixes0329').installProfileAuditFixes0329();
   require('./services/profileFinalSafety0329').installProfileFinalSafety0329();
   require('./services/profileSettingsValidation0329').installProfileSettingsValidation0329();
+  require('./services/profileHealthFinal0329').installProfileHealthFinal0329();
 }
