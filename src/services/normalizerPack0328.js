@@ -1,0 +1,31 @@
+'use strict';
+
+const fs=require('fs');
+const path=require('path');
+const {app,dialog}=require('electron');
+const {VERSION:ENGINE_VERSION,SCHEMA,structuralPreNormalize,validateRulePack}=require('./speechRules0328');
+const REMOTE_URL='https://raw.githubusercontent.com/pequehistoriasanimadas-code/EC1/normalizer-rules/src/assets/normalizer-es-PE-current.json';
+const MAX_BYTES=256*1024;
+
+function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function atomicWrite(file,text){fs.mkdirSync(path.dirname(file),{recursive:true});const tmp=`${file}.tmp`;fs.writeFileSync(tmp,text,'utf8');try{fs.renameSync(tmp,file);}catch{fs.copyFileSync(tmp,file);try{fs.rmSync(tmp,{force:true});}catch{}}}
+function versionParts(v){return String(v||'0').match(/\d+/g)?.map(Number)||[0];}
+function compareVersion(a,b){const x=versionParts(a),y=versionParts(b),n=Math.max(x.length,y.length);for(let i=0;i<n;i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;}
+function engineCompatible(min){return compareVersion(ENGINE_VERSION,min||'0')>=0;}
+
+class NormalizerPack0328{
+  constructor(){this.root=path.join(dataRoot(),'normalizer');this.active=path.join(this.root,'rules.json');this.previous=path.join(this.root,'rules.previous.json');this.bundled=path.join(__dirname,'..','assets','normalizer-es-PE-0328.json');this.cache=null;this.cacheMtime=0;this.ensure();}
+  ensure(){fs.mkdirSync(this.root,{recursive:true});if(!fs.existsSync(this.active)&&fs.existsSync(this.bundled))atomicWrite(this.active,fs.readFileSync(this.bundled,'utf8'));}
+  readFile(file){try{const st=fs.statSync(file);if(st.size>MAX_BYTES)throw new Error('El paquete supera 256 KB');return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}}
+  validate(pack){const basic=validateRulePack(pack);if(!basic.ok)return basic;if(!engineCompatible(pack.minimumEngine||'0'))return{ok:false,error:`Este paquete requiere motor ${pack.minimumEngine}`};const tests=Array.isArray(pack.tests)?pack.tests:[];for(const t of tests){const input=String(t?.input??''),expected=String(t?.expected??''),got=structuralPreNormalize(input,{rules:pack.rules||[]}).text;if(got!==expected)return{ok:false,error:`Prueba falló: ${input} → ${got}; esperado: ${expected}`};}return{ok:true,tests:tests.length};}
+  load(){this.ensure();try{const st=fs.statSync(this.active);if(this.cache&&st.mtimeMs===this.cacheMtime)return this.cache;const pack=this.readFile(this.active)||this.readFile(this.bundled)||{schema:SCHEMA,rules:[],rulesVersion:'integrada'};const check=this.validate(pack);if(!check.ok)throw new Error(check.error);this.cache=pack;this.cacheMtime=st.mtimeMs;return pack;}catch{return this.readFile(this.bundled)||{schema:SCHEMA,rules:[],rulesVersion:'integrada'};}}
+  status(){const pack=this.load();return{ok:true,engineVersion:ENGINE_VERSION,schema:SCHEMA,rulesVersion:String(pack.rulesVersion||'integrada'),ruleCount:Array.isArray(pack.rules)?pack.rules.length:0,testCount:Array.isArray(pack.tests)?pack.tests.length:0,hasPrevious:fs.existsSync(this.previous),activeFile:this.active,updateMode:'remote+import'};}
+  activate(pack,{allowDowngrade=false}={}){const check=this.validate(pack);if(!check.ok)throw new Error(check.error);const current=this.load(),cmp=compareVersion(pack.rulesVersion,current.rulesVersion);if(cmp<0&&!allowDowngrade)throw new Error(`Se bloqueó un downgrade: ${pack.rulesVersion} es anterior a ${current.rulesVersion}`);if(fs.existsSync(this.active))try{fs.copyFileSync(this.active,this.previous);}catch{}atomicWrite(this.active,JSON.stringify(pack,null,2));this.cache=null;this.cacheMtime=0;return{...this.status(),validatedTests:check.tests||0};}
+  async importDialog(){const result=await dialog.showOpenDialog({title:'Importar reglas del Normalizador ES-PE',properties:['openFile'],filters:[{name:'Paquete JSON',extensions:['json']}]});if(result.canceled||!result.filePaths?.[0])return{cancelled:true,...this.status()};const st=fs.statSync(result.filePaths[0]);if(st.size>MAX_BYTES)throw new Error('El paquete supera 256 KB');const pack=this.readFile(result.filePaths[0]);if(!pack)throw new Error('El archivo no contiene un paquete JSON válido');return{cancelled:false,...this.activate(pack)};}
+  async remotePack(){const r=await fetch(REMOTE_URL,{headers:{'cache-control':'no-cache'},signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error(`Actualización HTTP ${r.status}`);const text=await r.text();if(Buffer.byteLength(text,'utf8')>MAX_BYTES)throw new Error('El paquete remoto supera 256 KB');const pack=JSON.parse(text),check=this.validate(pack);if(!check.ok)throw new Error(check.error);return pack;}
+  async checkRemote(){try{const remote=await this.remotePack(),local=this.load(),cmp=compareVersion(remote.rulesVersion,local.rulesVersion);return{ok:true,available:cmp>0,downgrade:cmp<0,currentVersion:String(local.rulesVersion||''),remoteVersion:String(remote.rulesVersion||''),remoteTests:Array.isArray(remote.tests)?remote.tests.length:0};}catch(e){return{ok:false,available:false,error:e.message||String(e),currentVersion:String(this.load().rulesVersion||'')};}}
+  async updateRemote(){const remote=await this.remotePack(),local=this.load(),cmp=compareVersion(remote.rulesVersion,local.rulesVersion);if(cmp===0)return{ok:true,updated:false,...this.status()};if(cmp<0)throw new Error(`Actualización rechazada: ${remote.rulesVersion} es anterior a ${local.rulesVersion}`);return{ok:true,updated:true,...this.activate(remote)};}
+  restore(){if(!fs.existsSync(this.previous))return{ok:false,error:'No hay una versión anterior guardada',...this.status()};const pack=this.readFile(this.previous);const check=this.validate(pack);if(!check.ok)throw new Error(`La copia anterior no es válida: ${check.error}`);const current=fs.existsSync(this.active)?fs.readFileSync(this.active,'utf8'):'';atomicWrite(this.active,JSON.stringify(pack,null,2));if(current)atomicWrite(this.previous,current);this.cache=null;this.cacheMtime=0;return{ok:true,...this.status()};}
+}
+
+module.exports={NormalizerPack0328,dataRoot,compareVersion,REMOTE_URL,MAX_BYTES};
