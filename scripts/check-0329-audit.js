@@ -3,12 +3,13 @@ const fs=require('fs'),path=require('path'),os=require('os'),assert=require('ass
 let checks=0;const ok=(v,m)=>{checks++;assert.ok(v,m);};
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 for(const [file,tokens] of Object.entries({
-  'src/bootstrap-0329.js':['profilePerformance0329','profileAuditHardening0329','profileAuditFixes0329','profileFinalSafety0329','profileSettingsValidation0329'],
-  'src/services/profilePerformance0329.js':['media-index-0329.json','__ec0329PersistentMediaIndex'],
+  'src/bootstrap-0329.js':['profilePerformance0329','profileAuditHardening0329','profileAuditFixes0329','profileFinalSafety0329','profileSettingsValidation0329','profileHealthFinal0329'],
+  'src/services/profilePerformance0329.js':['media-index-0329.json','__ec0329PersistentMediaIndex','__ec0329FontMetadataCache'],
   'src/services/profileAuditHardening0329.js':['installKokoroHardening','cancelActiveRequests','installCannedHardening','DOCUMENT_PROFILE_SWITCH','installRssConcurrency','installImportCoordinator','settingsRoot'],
   'src/services/profileAuditFixes0329.js':['STALE_PROFILE_SETTINGS','installCompletedCyclePreview','installAsyncAssets','installAsyncProfileCrud','PROFILE_REQUIRED','__ecProfileId'],
   'src/services/profileFinalSafety0329.js':['installRegistrySanitizer','installImportDiskSafety','cleanupBackups'],
   'src/services/profileSettingsValidation0329.js':['fullNormalize','rssPartialClose','generatedEveryRss','exclusiveFontWeight'],
+  'src/services/profileHealthFinal0329.js':['await new FontManager','provider','countRecursive','CustomVoiceManager'],
   'src/services/profileSwitchSafety0329.js':['switchPromise','cancelActiveRequests','__ec0329DiscardSessionDocuments','PROFILE_SWITCH_BUSY'],
   'src/services/profileCompatibility0329.js':['document-hash-index-0329.json','streamHashSync','cachedFingerprint'],
   'src/services/profilePackage0329.js':['maxOutputLength','recoverPendingImport','restoreBackup','voiceIdMap','NormalizerPack0328','MAX_UNCOMPRESSED_BYTES','__proto__'],
