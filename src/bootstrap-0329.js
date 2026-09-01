@@ -10,4 +10,5 @@ if(!locked){app.quit();}else{
   require('./services/profileSwitchSafety0329').installProfileSwitchSafety0329();
   require('./services/profileAuditHardening0329').installProfileAuditHardening0329();
   require('./services/profileAuditFixes0329').installProfileAuditFixes0329();
+  require('./services/profileFinalSafety0329').installProfileFinalSafety0329();
 }
