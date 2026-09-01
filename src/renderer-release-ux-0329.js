@@ -3,7 +3,7 @@
   if(window.__ec0329ReleaseUxInstalled)return;
   window.__ec0329ReleaseUxInstalled=true;
   const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   function profileColor(el){return el?.style?.color||getComputedStyle(el||document.documentElement).color||'#aaa';}
   function polishDock(){
@@ -18,7 +18,7 @@
     const profileButtons=[...pop.querySelectorAll('[data-profile]')];
     profileButtons.forEach(btn=>{
       const oldName=btn.querySelector('span:first-child'),oldCheck=btn.querySelector('.ec29-check'),name=oldName?.textContent?.trim()||'Perfil',color=profileColor(oldName),active=String(oldCheck?.textContent||'').includes('✓');
-      btn.classList.add('ec29-profile-option');btn.classList.toggle('active',active);btn.innerHTML=`<span class="ec29-option-dot" style="background:${color}"></span><span class="ec29-option-copy"><b style="color:${color}">${name}</b><small>${active?'Perfil activo':'Perfil disponible'}</small></span>${active?'<span class="ec29-active-pill">ACTIVO</span>':'<span class="ec29-option-chevron">›</span>'}`;
+      btn.classList.add('ec29-profile-option');btn.classList.toggle('active',active);btn.style.setProperty('--profile-color',color);btn.innerHTML=`<span class="ec29-option-dot" style="background:${color}"></span><span class="ec29-option-copy"><b style="color:${color}">${name}</b><small>${active?'Perfil activo':'Perfil disponible'}</small></span>${active?'<span class="ec29-active-pill">ACTIVO</span>':'<span class="ec29-option-chevron">›</span>'}`;
     });
     const manage=pop.querySelector('[data-action="manage"]');if(manage){const counter=document.createElement('div');counter.className='ec29-profile-count';counter.textContent=`${profileButtons.length} perfil${profileButtons.length===1?'':'es'}`;manage.parentNode.insertBefore(counter,manage);manage.innerHTML='<span class="ec29-menu-icon">⚙</span><span class="ec29-menu-copy"><b>Administrar perfiles</b><small>Editar, duplicar, exportar o eliminar</small></span><span class="ec29-option-chevron">›</span>';}
   }
@@ -26,7 +26,7 @@
     if(!modal||modal.dataset.adminPolished==='1'||!modal.querySelector('.ec29-admin-list'))return;modal.dataset.adminPolished='1';
     const heading=modal.querySelector('h2');if(heading){const match=heading.textContent.match(/(\d+)\/(\d+)/);heading.textContent='Administrar perfiles';if(match){const meta=document.createElement('div');meta.className='ec29-admin-summary';meta.textContent=`${match[1]} de ${match[2]} perfiles utilizados`;heading.insertAdjacentElement('afterend',meta);}}
     qa('.ec29-admin-row').filter(row=>modal.contains(row)).forEach(row=>{
-      const main=row.querySelector('.ec29-admin-main'),title=row.querySelector('.ec29-admin-title'),meta=row.querySelector('.ec29-admin-meta');if(!main||!title||main.dataset.polished==='1')return;main.dataset.polished='1';const active=/ACTIVO/i.test(meta?.textContent||''),color=profileColor(title);row.classList.toggle('active',active);const dot=document.createElement('span');dot.className='ec29-admin-dot';dot.style.background=color;main.insertBefore(dot,main.firstChild);const copy=document.createElement('div');copy.className='ec29-admin-copy';while(dot.nextSibling)copy.appendChild(dot.nextSibling);main.appendChild(copy);if(meta){meta.textContent=active?'Perfil activo':'Perfil disponible';meta.classList.toggle('active',active);}if(active){const pill=document.createElement('span');pill.className='ec29-admin-active-pill';pill.textContent='ACTIVO';main.appendChild(pill);}
+      const main=row.querySelector('.ec29-admin-main'),title=row.querySelector('.ec29-admin-title'),meta=row.querySelector('.ec29-admin-meta');if(!main||!title||main.dataset.polished==='1')return;main.dataset.polished='1';const active=/ACTIVO/i.test(meta?.textContent||''),color=profileColor(title);row.classList.toggle('active',active);row.style.setProperty('--profile-color',color);const dot=document.createElement('span');dot.className='ec29-admin-dot';dot.style.background=color;main.insertBefore(dot,main.firstChild);const copy=document.createElement('div');copy.className='ec29-admin-copy';while(dot.nextSibling)copy.appendChild(dot.nextSibling);main.appendChild(copy);if(meta){meta.textContent=active?'Perfil activo':'Perfil disponible';meta.classList.toggle('active',active);}if(active){const pill=document.createElement('span');pill.className='ec29-admin-active-pill';pill.textContent='ACTIVO';main.appendChild(pill);}
     });
   }
 
