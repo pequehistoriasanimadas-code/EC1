@@ -4,6 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -29,11 +35,14 @@ jobs:
       - name: Install Node dependencies
         run: npm install
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Prepare bundled local runtimes
         shell: powershell
         run: ./scripts/prepare-windows-runtime.ps1
 
-      - name: Static checks
+      - name: Static and regression checks
         run: npm run check
 
       - name: Build portable EXE
@@ -41,17 +50,29 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Windows self-test
+      - name: Windows packaged UI, Output, normalizer, Kokoro, pronunciation, ONNX and NVIDIA fallback smoke tests
         shell: powershell
+        timeout-minutes: 15
         run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
           if (-not (Test-Path $exe)) { throw "No existe $exe" }
-          $p = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Self-test falló con código $($p.ExitCode)" }
-          Write-Host 'SELF-TEST OK'
+          if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'No existe app.asar empaquetado' }
+          npx electron scripts/packaged-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-0324-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-0327-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.27 smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-pronunciation-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-onnx-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged ONNX smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-gpu-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged NVIDIA fallback smoke test falló con código $LASTEXITCODE" }
 
       - name: Upload portable folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: EC-Automatic-News-Portable-Folder
           path: dist/win-unpacked/**
@@ -59,7 +80,7 @@ jobs:
           retention-days: 14
 
       - name: Upload portable EXE
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: EC-Automatic-News-Windows-Portable-EXE
           path: dist/*.exe
