@@ -2,14 +2,16 @@
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');let n=0;
 function ok(v,m){n++;assert.ok(v,m);}
-const preload=read('src/preload.js'),guard=read('src/renderer-startup-guard-0329.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js');
+const preload=read('src/preload.js'),guard=read('src/renderer-startup-guard-0329.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js'),workflow=read('.github/workflows/build-windows.yml');
 ok(legacy.includes('Aprendizaje de pronunciación actualizado.')&&legacy.includes('alert(parts.join'), 'la prueba reproduce la fuente real del popup legado');
-ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard'),'preload no ejecuta JavaScript invasivo antes de cargar la página');
-ok(guard.includes('window.alert=function')&&guard.includes('pronunciationMigration.test(text)'),'el aviso legado se convierte en información no bloqueante');
-ok(preload.indexOf('renderer-startup-guard-0329.js')<preload.indexOf("renderer-0324.js"),'el guard visual se carga antes de los renderers versionados');
+ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard'),'preload no ejecuta JavaScript invasivo con webFrame antes de cargar la página');
+ok(preload.includes("window.__ec0316MigrationNoticeShown=true")&&!preload.includes('ttsStatusStatusCache'),'preload marca la migración como manejada sin romper la caché TTS');
+ok(guard.includes('window.__ec0316MigrationNoticeShown=true')&&!guard.includes('window.alert=function'),'guard legado no sustituye window.alert');
+ok(!preload.includes('renderer-startup-guard-0329.js'),'preload no depende de una carrera de carga del guard externo');
 ok(preload.indexOf('renderer-release-ux-0329.js')>preload.indexOf("renderer-0329.js"),'el polish final se carga después de perfiles 0.3.29');
 ok(preload.includes("contextBridge.exposeInMainWorld('ECAPI'"),'ECAPI sigue expuesta al renderer en el arranque normal');
 ok(ux.includes('if(!window.ECAPI')&&ux.includes('setTimeout(installReleaseUx0329,120)'),'la capa UX espera a que perfiles y renderer estén listos en vez de fallar durante startup');
+ok(ux.includes('optimizerApplying')&&ux.includes('box.textContent!==missingOptimizerText'),'observer de optimización no se autoalimenta infinitamente');
 ok(ux.includes('ec29-active-pill')&&ux.includes('Perfil activo')&&ux.includes('Perfil disponible'),'selector distingue visualmente perfil activo y disponibles');
 ok(css.includes('.ec29-profile-option.active')&&css.includes('.ec29-active-pill')&&css.includes('max-height:min(560px,60vh)'),'popover tiene jerarquía visual, píldora ACTIVO y scroll responsive');
 ok(css.includes('.ec29-admin-row.active')&&css.includes('.ec29-admin-active-pill'),'Administrar perfiles distingue claramente el activo');
@@ -18,7 +20,8 @@ ok(ux.includes('Este perfil no tiene fuentes de noticias configuradas.')&&ux.inc
 ok(ux.includes('IA LOCAL NO INSTALADA')&&ux.includes('IA local no instalada todavía.'),'optimización muestra estado neutral antes de instalar Qwen');
 ok(profiles.includes('El perfil que estabas usando sigue activo.')&&!profiles.includes('await requestSwitch(created.id);'),'crear un perfil adicional no cambia automáticamente el activo');
 ok(profiles.includes('restoreControlFocus')&&preload.includes("focusControl:()=>invoke('ui:focusControl')"),'recuperación de foco permanece conectada');
-ok(health.includes("status:'unset'")&&health.includes("if(!v)return checks.push"),'rutas sin configurar no se cuentan como desaparecidas');
+ok(health.includes("status:'unset'")&&health.includes("if(!v)return checks.push"),'rutas sin configurar no se cuentan como desaparecidas en la capa health declarada');
 ok(release.includes('MAX_PROFILES=30')&&release.includes('PROFILE_LIMIT'),'límite de 30 perfiles sigue aplicado en backend');
 ok(release.includes('AI_PROVIDER_OUTAGE')&&release.includes('generationBlockStatus'),'protección contra bucle de errores IA sigue presente');
+ok(workflow.includes('Packaged 0.3.29 real UI startup test')&&workflow.includes('packaged-ui-0329-smoke.js'),'CI abre la UI empaquetada y comprueba el primer inicio');
 console.log(`GEC 0.3.29 manual-regression audit OK · ${n} verificaciones`);
