@@ -5,7 +5,7 @@ function ok(v,m){n++;assert.ok(v,m);}
 const preload=read('src/preload.js'),guard=read('src/renderer-startup-guard-0329.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js'),workflow=read('.github/workflows/build-windows.yml');
 ok(legacy.includes('Aprendizaje de pronunciación actualizado.')&&legacy.includes('alert(parts.join'), 'la prueba reproduce la fuente real del popup legado');
 ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard'),'preload no ejecuta JavaScript invasivo con webFrame antes de cargar la página');
-ok(preload.includes("window.__ec0316MigrationNoticeShown=true")&&!preload.includes('ttsStatusStatusCache'),'preload marca la migración como manejada sin romper la caché TTS');
+ok(preload.includes("contextBridge.exposeInMainWorld('__ec0316MigrationNoticeShown',true)")&&!preload.includes('ttsStatusStatusCache'),'preload marca la migración como manejada mediante contextBridge sin romper la caché TTS');
 ok(guard.includes('window.__ec0316MigrationNoticeShown=true')&&!guard.includes('window.alert=function'),'guard legado no sustituye window.alert');
 ok(!preload.includes('renderer-startup-guard-0329.js'),'preload no depende de una carrera de carga del guard externo');
 ok(preload.indexOf('renderer-release-ux-0329.js')>preload.indexOf("renderer-0329.js"),'el polish final se carga después de perfiles 0.3.29');
