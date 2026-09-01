@@ -61,6 +61,14 @@ jobs:
           npx electron scripts/packaged-0329-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.29 smoke test failed with code $LASTEXITCODE" }
 
+      - name: Packaged 0.3.29 real UI startup test
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-ui-0329-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged real UI startup test failed with code $LASTEXITCODE" }
+
       - name: Packaged 0.3.25-0.3.28 compatibility test
         shell: pwsh
         timeout-minutes: 3
