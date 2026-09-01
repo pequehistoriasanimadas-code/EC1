@@ -29,7 +29,7 @@ function registerIpc(){
   bind('settings:save',()=>({ok:true,hasClaudeKey:false,hasGeminiKey:false,claudeModel:'claude-haiku-4-5-20251001'}));
   bind('rss:load',()=>({items:[],feedStatus:[],errors:[]}));bind('rss:test',()=>({ok:true,count:1,sourceType:'RSS'}));
   bind('local:status',()=>({model:false,running:false,downloading:false}));bind('tts:status',()=>({ready:true,voices:['ef_dora'],workerRunning:false,threads:4}));
-  bind('pronunciation:status',()=>({model:false,learningEntries:0,migrationReport:{found:0,manualProtected:0,removed:0,backup:false}}));
+  bind('pronunciation:status',()=>({model:false,learningEntries:0,migrationInfo:{found:0,manualProtected:0,removed:0,backup:false}}));
   bind('canned:list',()=>({ok:false,count:0,files:[],folder:'',message:'Sin carpeta seleccionada.'}));bind('canned:listAds',()=>({ok:false,count:0,files:[],folder:'',message:'Sin carpeta seleccionada.'}));
   bind('documents:list',()=>({ok:false,count:0,files:[],folder:'',message:'Sin carpeta seleccionada.'}));
   bind('automation:status',()=>({processing:{running:false,paused:false},emission:{running:false,paused:false,currentTitle:'',currentKind:'none'},counts:{processing:0,ready:0,pending:0,onAir:0,emitted:0,error:0},buffer:{autonomyMin:0,health:'critical'},queue:[],session:{newsEmitted:0,cannedEmitted:0,adsEmitted:0}}));
@@ -42,13 +42,24 @@ function registerIpc(){
 }
 
 async function until(win,expression,timeout=9000){const end=Date.now()+timeout;let last;while(Date.now()<end){try{last=await win.webContents.executeJavaScript(expression,true);if(last)return last;}catch{}await wait(100);}throw new Error(`UI timeout: ${expression} · last=${String(last)}`);}
-async function makeWindow(){const win=new BrowserWindow({show:false,width:1280,height:820,webPreferences:{preload,contextIsolation:true,nodeIntegration:false,sandbox:true}});win.webContents.on('console-message',(_,level,message)=>{if(level>=3)console.error('renderer:',message);});await win.loadFile(control,{query:{selftest:'1'}});return win;}
+async function makeWindow(){
+  const win=new BrowserWindow({show:false,width:1280,height:820,webPreferences:{preload,contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  win.webContents.on('console-message',(_,level,message)=>{if(level>=3)console.error('renderer:',message);});
+  win.webContents.on('did-fail-load',(_,code,desc,url)=>console.error(`did-fail-load ${code} ${desc} ${url}`));
+  win.webContents.on('render-process-gone',(_,details)=>console.error(`render-process-gone ${JSON.stringify(details)}`));
+  await Promise.race([
+    win.loadFile(control,{query:{selftest:'1'}}),
+    wait(15000).then(()=>{throw new Error(`loadFile timeout · url=${win.webContents.getURL()||'sin-url'}`);})
+  ]);
+  return win;
+}
 
 app.whenReady().then(async()=>{registerIpc();let win=null;try{
   profileMode='empty';win=await makeWindow();
   await until(win,"document.body.innerText.includes('Bienvenido a GEC Automatic News')");
-  const first=await win.webContents.executeJavaScript(`({bridgeError:document.body.classList.contains('bridge-error'),brand:document.body.innerText.includes('EC Automatic News'),create:document.body.innerText.includes('Crear perfil nuevo'),load:document.body.innerText.includes('Cargar perfiles'),profileInstalled:!!window.__ec0329Installed,migrationHandled:window.__ec0316MigrationNoticeShown===true})`,true);
-  assert(!first.bridgeError,'La UI arrancó en estado bridge-error');assert(first.brand,'La UI principal no se renderizó');assert(first.create&&first.load,'No apareció el onboarding de primer inicio');assert(first.profileInstalled,'renderer-0329 no terminó de instalarse');assert(first.migrationHandled,'El aviso legado de pronunciación no quedó marcado como manejado');
+  await until(win,"typeof window.__ec0329PronunciationMigrationInfo==='string'");
+  const first=await win.webContents.executeJavaScript(`({bridgeError:document.body.classList.contains('bridge-error'),brand:document.body.innerText.includes('EC Automatic News'),create:document.body.innerText.includes('Crear perfil nuevo'),load:document.body.innerText.includes('Cargar perfiles'),profileInstalled:!!window.__ec0329Installed,pronunciationInfo:window.__ec0329PronunciationMigrationInfo||''})`,true);
+  assert(!first.bridgeError,'La UI arrancó en estado bridge-error');assert(first.brand,'La UI principal no se renderizó');assert(first.create&&first.load,'No apareció el onboarding de primer inicio');assert(first.profileInstalled,'renderer-0329 no terminó de instalarse');assert(/Aprendizaje de pronunciación actualizado/i.test(first.pronunciationInfo),'La migración de pronunciación no se publicó como información no bloqueante');
   await win.webContents.executeJavaScript(`document.querySelector('#ec29CreateFirst')?.click();`,true);await until(win,"!!document.querySelector('#ec29ProfileInput')");await until(win,"!!document.querySelector('.ec29-color-warning')");
   const input=await win.webContents.executeJavaScript(`(()=>{const x=document.querySelector('#ec29ProfileInput');x.focus();x.value='Prueba';x.dispatchEvent(new Event('input',{bubbles:true}));return {disabled:x.disabled,focused:document.activeElement===x,value:x.value,preview:document.querySelector('#ec29ProfilePreview')?.textContent||''};})()`,true);assert(!input.disabled&&input.focused&&input.value==='Prueba','El campo Nombre del perfil no queda enfocable/editable');assert(/PRUEBA/i.test(input.preview),'La vista previa del nombre no responde al input');
   const dark=await win.webContents.executeJavaScript(`(()=>{const c=document.querySelector('#ec29CustomColor');c.value='#000000';c.dispatchEvent(new Event('input',{bubbles:true}));return new Promise(r=>setTimeout(()=>r({disabled:document.querySelector('#ec29Save')?.disabled===true,warning:document.querySelector('.ec29-color-warning')?.classList.contains('visible')===true}),40));})()`,true);assert(dark.disabled&&dark.warning,'Un color demasiado oscuro no bloquea Guardar o no muestra advertencia');
@@ -59,5 +70,5 @@ app.whenReady().then(async()=>{registerIpc();let win=null;try{
   await win.webContents.executeJavaScript(`document.querySelector('#ec29ProfileButton').click();`,true);await until(win,"!!document.querySelector('.ec29-popover .ec29-active-pill')");
   const selector=await win.webContents.executeJavaScript(`({active:document.querySelector('.ec29-popover .ec29-active-pill')?.textContent||'',dots:document.querySelectorAll('.ec29-popover .ec29-option-dot').length,options:document.querySelectorAll('.ec29-popover [data-profile]').length,available:[...document.querySelectorAll('.ec29-popover .ec29-option-copy small')].some(x=>/Perfil disponible/i.test(x.textContent)),hasActivate:[...document.querySelectorAll('.ec29-popover button')].some(x=>/^Activar$/i.test(x.textContent.trim()))})`,true);
   assert(selector.active==='ACTIVO','El selector no identifica el perfil activo');assert(selector.dots===3&&selector.options===3,'El selector rediseñado no muestra indicadores para los perfiles');assert(selector.available,'El selector no distingue perfiles disponibles');assert(!selector.hasActivate,'El selector conserva una acción Activar redundante');
-  win.destroy();win=null;console.log('PACKAGED REAL UI 0.3.29 OK · sandbox real · startup visible · onboarding · input enfocable · contraste perfil · selector ACTIVO');app.exit(0);
+  win.destroy();win=null;console.log('PACKAGED REAL UI 0.3.29 OK · sandbox real · startup visible · pronunciación no bloqueante · onboarding · input enfocable · contraste perfil · selector ACTIVO');app.exit(0);
 }catch(e){console.error(e.stack||e);try{win?.destroy();}catch{}app.exit(1);}});
