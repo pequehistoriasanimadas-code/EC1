@@ -11,6 +11,8 @@ try{
   const {ProfileManager0329}=require('../src/services/profileManager0329');const m=new ProfileManager0329(path.join(tmp,'data'));
   const defaults={rssFeeds:[],ai:{primary:'local',backup1:'claude',backup2:'gemini'},tts:{voice:'ef_dora',speed:1},visual:{queueColors:{},output:{}},canned:{},documents:{processed:{}},automation:{}};
   for(let i=1;i<=30;i++)m.create({name:`Perfil ${i}`,color:'#F7C600',defaults});
+  eq(release.profileGeneration(),0,'crear perfiles adicionales no invalida trabajos del perfil activo');
+  const second=m.list()[1].id;m.activate(second);eq(release.profileGeneration(),1,'cambiar realmente de perfil invalida trabajos asíncronos');m.activate(second);eq(release.profileGeneration(),1,'activar el mismo perfil no invalida trabajos');
   eq(m.status().profileCount,30,'status expone 30 perfiles');eq(m.status().canCreate,false,'status bloquea altas al llegar a 30');
   assert.throws(()=>m.create({name:'Perfil 31',color:'#22C55E',defaults}),e=>e?.code==='PROFILE_LIMIT');checks++;
   assert.throws(()=>m.duplicate(m.list()[0].id,{name:'Copia',color:'#22C55E'}),e=>e?.code==='PROFILE_LIMIT');checks++;
@@ -31,6 +33,7 @@ try{
     ok(releaseSrc.includes("removeAllListeners('notify')")&&releaseSrc.includes('palabras procesadas'),'notificación de pronunciación de startup queda filtrada');
     ok(releaseSrc.includes('AI_PROVIDER_OUTAGE')&&releaseSrc.includes('45000'),'notificaciones de caída de IA se deduplican');
     ok(releaseSrc.includes('__ec0329SessionSeq')&&releaseSrc.includes('sessionSeq'),'numeración visible de sesión se asigna de forma estable');
+    ok(releaseSrc.includes('startGeneration=profileGeneration()')&&!releaseSrc.includes('startGeneration=String(m?.registry?.updatedAt'),'trabajos asíncronos solo se invalidan al cambiar el contexto activo');
     ok(bootstrap.includes("require('./services/releaseStability0329').installReleaseStability0329()"),'capa release se instala al final');
     console.log(`GEC 0.3.29 release checks OK · ${checks} verificaciones`);
   }).finally(()=>{Module._load=originalLoad;fs.rmSync(tmp,{recursive:true,force:true});});
