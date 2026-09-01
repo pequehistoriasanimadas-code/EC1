@@ -1,5 +1,5 @@
 'use strict';
-const assert=require('assert');
+const assert=require('assert'),fs=require('fs'),path=require('path'),os=require('os');
 const {Providers}=require('../src/services/providers');
 let checks=0;const ok=(v,m)=>{checks++;assert.ok(v,m);},eq=(a,b,m)=>{checks++;assert.deepStrictEqual(a,b,m);};
 
@@ -31,5 +31,14 @@ final.installReleaseAuditFinal0329();
   const dirty={ai:{primary:'local',claudeKey:'PLAINTEXT',claudeKeyEnc:'ENCRYPTED',geminiKey:'GEMINI',geminiKeyEnc:'ENC2',hasClaudeKey:true,editorialPrompt:'ok'},nested:{apiKey:'SECRET_API',accessToken:'SECRET_TOKEN',safe:'keep'},visual:{output:{tokenLabel:'normal-ui-label'}}};
   const clean=final.scrubSecrets(dirty),serialized=JSON.stringify(clean);ok(!/PLAINTEXT|ENCRYPTED|GEMINI|ENC2|SECRET_API|SECRET_TOKEN/.test(serialized),'scrubber elimina secretos legacy, cifrados y tokens');eq(clean.ai.primary,'local','scrubber conserva configuración no secreta');eq(clean.ai.editorialPrompt,'ok','scrubber conserva prompt editorial');eq(clean.nested.safe,'keep','scrubber conserva campos normales');
   const payload=final.scrubPackageSettings({globalSettings:{ai:{claudeKeyEnc:'GLOBAL_SECRET',primary:'local'}},profiles:[{settings:{ai:{geminiKey:'PROFILE_SECRET',backup1:'gemini'}}}],resources:[{path:'asset.bin',data:'UNCHANGED_RESOURCE'}]});const ptxt=JSON.stringify(payload);ok(!ptxt.includes('GLOBAL_SECRET')&&!ptxt.includes('PROFILE_SECRET'),'gecprofile/gecpack no contienen claves aunque un JSON antiguo las tenga');eq(payload.resources[0].data,'UNCHANGED_RESOURCE','scrubber no procesa ni altera recursos binarios/base64');
+
+  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-final-audit-'));
+  try{
+    const {ProfileManager0329}=require('../src/services/profileManager0329'),{ProfilePackage0329,readPackage}=require('../src/services/profilePackage0329');
+    const dataDir=path.join(tmp,'data'),m=new ProfileManager0329(dataDir),defaults={rssFeeds:[],ai:{primary:'local',backup1:'claude',backup2:'gemini'},tts:{voice:'ef_dora',speed:1},visual:{queueColors:{},output:{}},canned:{},documents:{processed:{}},automation:{}};
+    const original=m.create({name:'El Comercio',color:'#F7C600',defaults});m.writeProfileSettings(original.id,{...m.readProfileSettings(original.id),ai:{primary:'local',backup1:'claude',backup2:'gemini',claudeKey:'LEGACY_PLAIN',claudeKeyEnc:'LEGACY_ENCRYPTED'},tts:{voice:'ef_dora',speed:1}});
+    const pkg=new ProfilePackage0329({manager:m,dataDir}),file=path.join(tmp,'ec.gecprofile');pkg.exportProfile(original.id,file);const exported=readPackage(file),exportText=JSON.stringify(exported);ok(!exportText.includes('LEGACY_PLAIN')&&!exportText.includes('LEGACY_ENCRYPTED'),'exportProfile real elimina secretos legacy del perfil');
+    const one=pkg.importFile(file,'keep'),two=pkg.importFile(file,'keep');ok(one.imported.length===1&&two.imported.length===1,'dos Keep Both reales importan dos perfiles independientes');const names=m.list().map(x=>x.name);eq(new Set(names.map(x=>x.toLocaleLowerCase('es'))).size,names.length,'registro real mantiene todos los nombres visibles únicos');ok(names.includes('El Comercio (importado)')&&names.includes('El Comercio (importado 2)'),'Keep Both real escala sufijos importados de forma predecible');
+  }finally{fs.rmSync(tmp,{recursive:true,force:true});}
   console.log(`GEC 0.3.29 final audit OK · ${checks} verificaciones`);
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
