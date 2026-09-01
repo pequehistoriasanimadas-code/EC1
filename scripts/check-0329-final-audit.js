@@ -3,7 +3,6 @@ const assert=require('assert');
 const {Providers}=require('../src/services/providers');
 let checks=0;const ok=(v,m)=>{checks++;assert.ok(v,m);},eq=(a,b,m)=>{checks++;assert.deepStrictEqual(a,b,m);};
 
-// Install the final wrapper over a deterministic provider failure implementation.
 let physicalCancels=0;
 Providers.prototype.generateBuilt=async function(){const e=new Error('mixed final failure');e.code='ALL_PROVIDERS_FAILED';throw e;};
 Providers.prototype.cancelActiveRequests=function(){physicalCancels++;return{ok:true};};
@@ -28,5 +27,9 @@ final.installReleaseAuditFinal0329();
   };
   const changed=final.normalizeImportedNames(manager,['c']);eq(changed.length,1,'Keep Both repetido renombra el perfil recién importado');eq(rows.find(x=>x.id==='c').name,'El Comercio (importado 2)','Keep Both genera nombre visible único y estable');
   const candidate=final.importedCandidate('Un nombre extremadamente largo '.repeat(5),24);ok(candidate.length<=80,'nombre importado respeta máximo de 80 caracteres');ok(/\(importado 24\)$/.test(candidate),'nombre truncado conserva sufijo de conflicto');
+
+  const dirty={ai:{primary:'local',claudeKey:'PLAINTEXT',claudeKeyEnc:'ENCRYPTED',geminiKey:'GEMINI',geminiKeyEnc:'ENC2',hasClaudeKey:true,editorialPrompt:'ok'},nested:{apiKey:'SECRET_API',accessToken:'SECRET_TOKEN',safe:'keep'},visual:{output:{tokenLabel:'normal-ui-label'}}};
+  const clean=final.scrubSecrets(dirty),serialized=JSON.stringify(clean);ok(!/PLAINTEXT|ENCRYPTED|GEMINI|ENC2|SECRET_API|SECRET_TOKEN/.test(serialized),'scrubber elimina secretos legacy, cifrados y tokens');eq(clean.ai.primary,'local','scrubber conserva configuración no secreta');eq(clean.ai.editorialPrompt,'ok','scrubber conserva prompt editorial');eq(clean.nested.safe,'keep','scrubber conserva campos normales');
+  const payload=final.scrubPackageSettings({globalSettings:{ai:{claudeKeyEnc:'GLOBAL_SECRET',primary:'local'}},profiles:[{settings:{ai:{geminiKey:'PROFILE_SECRET',backup1:'gemini'}}}],resources:[{path:'asset.bin',data:'UNCHANGED_RESOURCE'}]});const ptxt=JSON.stringify(payload);ok(!ptxt.includes('GLOBAL_SECRET')&&!ptxt.includes('PROFILE_SECRET'),'gecprofile/gecpack no contienen claves aunque un JSON antiguo las tenga');eq(payload.resources[0].data,'UNCHANGED_RESOURCE','scrubber no procesa ni altera recursos binarios/base64');
   console.log(`GEC 0.3.29 final audit OK · ${checks} verificaciones`);
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
