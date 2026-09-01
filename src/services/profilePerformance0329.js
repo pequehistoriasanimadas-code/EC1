@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const {pathToFileURL}=require('url');
+const {app}=require('electron');
+const {CannedManager,VIDEO_EXTENSIONS}=require('./canned');
+
+let loaded=false,dirty=false,timer=null;const cache={folders:{}};
+function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function file(){return path.join(dataRoot(),'media-index-0329.json');}
+function load(){if(loaded)return;loaded=true;try{const x=JSON.parse(fs.readFileSync(file(),'utf8'));if(x?.folders&&typeof x.folders==='object')cache.folders=x.folders;}catch{}}
+function saveLater(){dirty=true;if(timer)return;timer=setTimeout(()=>{timer=null;if(!dirty)return;dirty=false;try{const keys=Object.keys(cache.folders);if(keys.length>120)for(const k of keys.slice(0,keys.length-120))delete cache.folders[k];const out=file(),tmp=`${out}.tmp`;fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(tmp,JSON.stringify({schemaVersion:1,updatedAt:new Date().toISOString(),folders:cache.folders}),'utf8');try{fs.renameSync(tmp,out);}catch{fs.copyFileSync(tmp,out);fs.rmSync(tmp,{force:true});}}catch{}},900);}
+function quickScan(folder){const dir=String(folder||'').trim();if(!dir||!fs.existsSync(dir))return null;let entries=[];try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch{return null;}const rows=[];for(const e of entries){if(!e.isFile())continue;const ext=path.extname(e.name).toLowerCase();if(!VIDEO_EXTENSIONS.has(ext))continue;const full=path.join(dir,e.name);try{const st=fs.statSync(full);rows.push({name:e.name,path:full,sizeBytes:st.size,sizeMB:Number((st.size/1048576).toFixed(1)),mtimeMs:st.mtimeMs,ext});}catch{}}rows.sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));return{dir,rows,signature:rows.map(x=>`${x.name}|${x.sizeBytes}|${Math.round(x.mtimeMs)}`).join('||')};}
+function installMediaIndex(){const p=CannedManager.prototype;if(p.__ec0329PersistentMediaIndex)return;Object.defineProperty(p,'__ec0329PersistentMediaIndex',{value:true});const base=p.list;p.list=function(folder){load();const q=quickScan(folder);if(!q)return base.call(this,folder);const key=path.resolve(q.dir).toLocaleLowerCase('es'),stored=cache.folders[key];if(stored?.signature===q.signature&&stored.durations&&typeof stored.durations==='object'){const files=q.rows.map(x=>({...x,url:pathToFileURL(x.path).href,durationSec:Number(stored.durations[x.name])||0}));const signature=files.map(x=>`${x.path}|${x.sizeBytes}|${Math.round(x.mtimeMs)}`).join('||');if(signature!==this.signature){this.signature=signature;this.bag=[];}return{ok:true,folder:q.dir,count:files.length,files,message:files.length?'':'No se encontraron videos compatibles'};}const result=base.call(this,folder);if(result?.ok){const durations={};for(const x of result.files||[])durations[x.name]=Number(x.durationSec)||0;cache.folders[key]={signature:q.signature,durations,updatedAt:Date.now()};saveLater();}return result;};}
+function installProfilePerformance0329(){installMediaIndex();}
+module.exports={installProfilePerformance0329};
