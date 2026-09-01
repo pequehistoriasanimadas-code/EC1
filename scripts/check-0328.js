@@ -1,0 +1,14 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const root=path.resolve(__dirname,'..'),rules=require(path.join(root,'src','services','speechRules0328.js')),pack=JSON.parse(fs.readFileSync(path.join(root,'src','assets','normalizer-es-PE-0328.json'),'utf8'));
+let checks=0;const eq=(a,b,m)=>{checks++;assert.strictEqual(a,b,m);},ok=(v,m)=>{checks++;assert.ok(v,m);},n=i=>rules.structuralPreNormalize(i,{rules:pack.rules}).text;
+for(const t of pack.tests||[])eq(n(t.input),t.expected,`pack ${t.input}`);
+for(let a=0;a<=25;a++)for(const b of [1,5,8,25,43,99]){const raw=`${a},${b}%`,out=n(raw);ok(out.includes(' coma ')&&out.endsWith(' por ciento'),`porcentaje ${raw} -> ${out}`);}
+eq(n('7.000%'),'siete mil por ciento','punto de miles en porcentaje');eq(n('01:00 horas'),'una hora','hora femenina singular');eq(n('01:01 horas'),'una hora con un minuto','minuto apocopado');eq(n('21:21 horas'),'veintiuna horas con veintiún minutos','veintiuna / veintiún');eq(n('temporada 1999/00'),'temporada mil novecientos noventa y nueve, dos mil','temporada cruza siglo');
+ok(rules.safeExternalPattern('\\bversus\\s+\\.'),'regex declarativa segura');ok(!rules.safeExternalPattern('(a+)+$'),'bloquea cuantificador anidado');ok(!rules.safeExternalPattern('.*foo'),'bloquea wildcard no acotado');ok(rules.validateRulePack(pack).ok,'pack integrado válido');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8'),pkg=JSON.parse(read('package.json')),policy=read('src/services/version0328Policy.js'),renderer=read('src/renderer-0328.js'),preload=read('src/preload.js'),css=read('src/control-0328.css'),output=read('src/output-0328.js'),bootstrap=read('src/bootstrap-0328.js');
+eq(pkg.version,'0.3.28','package 0.3.28');eq(pkg.main,'src/bootstrap-0328.js','bootstrap 0328');ok(bootstrap.includes('baseNormalize0326')&&bootstrap.includes('installVersion0328Policy'),'captura base 0326 antes del hardening');
+for(const token of ['speechNormalizerEnabled','reservePath','cycleStatus','crypto.randomInt','automation:emissionNext',"result==='skipped'",'targetAutonomyMin','global.__ec0328AutomationRef'])ok(policy.includes(token),`policy: ${token}`);
+for(const token of ['Control de emisión','ec28EmissionNext','drafts=new Map','repairFontControls','Audio y locución guardados correctamente','Ciclo aleatorio','runtime faltante'])ok(renderer.includes(token),`renderer: ${token}`);
+ok(preload.includes('renderer-0328.js')&&preload.includes('control-0328.css')&&preload.includes('output-0328.js')&&preload.includes('emissionNext'),'preload 0328 completo');ok(css.includes('@media(max-width:1500px)')&&css.includes('#tab-emission>.cols'),'Diseño responsive');ok(output.includes("type:'progress'")&&output.includes('timeupdate'),'progreso real de Output');
+console.log(`GEC 0.3.28 checks OK · ${checks} verificaciones`);
