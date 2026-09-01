@@ -21,4 +21,5 @@ if(!locked){app.quit();}else{
   require('./services/profileWatcherFinal0329').installProfileWatcherFinal0329();
   require('./services/releaseStability0329').installReleaseStability0329();
   require('./services/releaseAuditFinal0329').installReleaseAuditFinal0329();
+  require('./services/pronunciationStartupNotice0329').installPronunciationStartupNotice0329();
 }
