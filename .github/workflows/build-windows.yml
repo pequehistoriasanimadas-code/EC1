@@ -62,8 +62,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-0324-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.24 smoke test falló con código $LASTEXITCODE" }
-          npx electron scripts/packaged-0327-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.27 smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-0328-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.28 smoke test falló con código $LASTEXITCODE" }
+          npx electron scripts/packaged-compat-0328.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.25–0.3.27 compatibility test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-pronunciation-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged pronunciation smoke test falló con código $LASTEXITCODE" }
           npx electron scripts/packaged-onnx-smoke.js $resources
