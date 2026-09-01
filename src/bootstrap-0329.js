@@ -2,7 +2,7 @@
 const {app,BrowserWindow}=require('electron');
 const locked=app.requestSingleInstanceLock();
 if(!locked){app.quit();}else{
-  app.on('second-instance',()=>{try{const w=BrowserWindow.getAllWindows().find(x=>!x.isDestroyed()&&!/OUTPUT/i.test(x.getTitle?.()||''));if(w){if(w.isMinimized())w.restore();w.show();w.focus();}}catch{}});
+  app.on('second-instance',()=>{try{const w=BrowserWindow.getAllWindows().find(x=>!x.isDestroyed()&&!/OUTPUT/i.test(x.getTitle?.()||''));if(w){if(w.isMinimized())w.restore();w.show();w.focus();w.webContents?.focus?.();}}catch{}});
   const stability=require('./services/profileStability0329');
   stability.installLegacyWatcherSuppression();
   require('./bootstrap-0328');
@@ -19,4 +19,5 @@ if(!locked){app.quit();}else{
   stability.installProfileStability0329();
   require('./services/profileDocumentStatesFinal0329').installProfileDocumentStatesFinal0329();
   require('./services/profileWatcherFinal0329').installProfileWatcherFinal0329();
+  require('./services/releaseStability0329').installReleaseStability0329();
 }
