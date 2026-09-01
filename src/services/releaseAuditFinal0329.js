@@ -6,6 +6,7 @@ const {safeName}=require('./profileManager0329');
 const FINAL_FAILURE_THRESHOLD=3;
 const FINAL_FAILURE_COOLDOWN_MS=15000;
 const nameKey=v=>safeName(v).toLocaleLowerCase('es');
+const SECRET_KEYS=new Set(['claudekey','geminikey','claudekeyenc','geminikeyenc','apikey','api_key','accesskey','access_key','accesstoken','access_token','refreshtoken','refresh_token','secret','token','hasclaudekey','hasgeminikey']);
 
 function importedCandidate(base,n){
   const clean=safeName(base).replace(/\s*\(importado(?:\s+\d+)?\)$/i,'').trim()||'Perfil';
@@ -23,6 +24,24 @@ function normalizeImportedNames(manager,ids=[]){
     manager.update(id,{name:next,color:row.color});changed.push({id,from:row.name,to:next});
   }
   return changed;
+}
+function secretLike(key){const k=String(key||'').replace(/[-\s]/g,'_').toLowerCase();return SECRET_KEYS.has(k)||/api_?key(?:enc)?$/.test(k)||/(?:^|_)secret$/.test(k)||/(?:^|_)token$/.test(k);}
+function scrubSecrets(value){
+  if(Array.isArray(value))return value.map(scrubSecrets);
+  if(!value||typeof value!=='object')return value;
+  const out={};for(const[k,v]of Object.entries(value)){if(secretLike(k))continue;out[k]=scrubSecrets(v);}return out;
+}
+function scrubPackageSettings(payload){
+  if(!payload||typeof payload!=='object')return payload;
+  if(payload.globalSettings)payload.globalSettings=scrubSecrets(payload.globalSettings);
+  if(Array.isArray(payload.profiles))for(const row of payload.profiles)if(row?.settings)row.settings=scrubSecrets(row.settings);
+  return payload;
+}
+function installExportSecretGuard(){
+  const p=ProfilePackage0329.prototype;if(p.__ec0329ExportSecretGuard)return;Object.defineProperty(p,'__ec0329ExportSecretGuard',{value:true});
+  const profilePayload=p.profilePayload,allPayload=p.allPayload;
+  p.profilePayload=function(...args){return scrubPackageSettings(profilePayload.apply(this,args));};
+  p.allPayload=function(...args){return scrubPackageSettings(allPayload.apply(this,args));};
 }
 function installImportNameGuard(){
   const p=ProfilePackage0329.prototype;if(p.__ec0329UniqueImportedNames)return;Object.defineProperty(p,'__ec0329UniqueImportedNames',{value:true});
@@ -45,5 +64,5 @@ function installMixedFailureCircuit(){
   };
   const cancel=p.cancelActiveRequests;if(typeof cancel==='function')p.cancelActiveRequests=function(...args){this.__ec0329FinalFailureStreak=0;return cancel.apply(this,args);};
 }
-function installReleaseAuditFinal0329(){installImportNameGuard();installMixedFailureCircuit();}
-module.exports={installReleaseAuditFinal0329,normalizeImportedNames,importedCandidate,FINAL_FAILURE_THRESHOLD,FINAL_FAILURE_COOLDOWN_MS};
+function installReleaseAuditFinal0329(){installExportSecretGuard();installImportNameGuard();installMixedFailureCircuit();}
+module.exports={installReleaseAuditFinal0329,normalizeImportedNames,importedCandidate,scrubSecrets,scrubPackageSettings,secretLike,FINAL_FAILURE_THRESHOLD,FINAL_FAILURE_COOLDOWN_MS};
