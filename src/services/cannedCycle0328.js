@@ -3,11 +3,18 @@
 const fs=require('fs');
 const path=require('path');
 const {CannedManager}=require('./canned');
-const {dataRoot}=require('./normalizerPack0328');
 
 function keyPath(value){
   try{return path.resolve(String(value||'')).normalize('NFKC').toLocaleLowerCase('es');}
   catch{return String(value||'').normalize('NFKC').toLocaleLowerCase('es');}
+}
+
+function dataRoot(){
+  const portable=process.env.PORTABLE_EXECUTABLE_DIR;
+  if(portable)return path.join(portable,'EC Automatic News Data');
+  const {app}=require('electron');
+  if(app?.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');
+  return path.join(app.getPath('userData'),'EC Automatic News Data');
 }
 
 function readJson(file){
@@ -61,9 +68,8 @@ function installCycleStatusFix(){
     const scan=this.list(folder);
     if(!scan.ok||!scan.files.length)return{ok:false,total:0,emitted:0,remaining:0,recent:[],cycleNumber:0,complete:false};
     const snapshot=snapshotFromState(folder,scan);
-    // The first status read may initialize the persistent cycle. That is safe;
-    // once a state exists, status becomes strictly read-only and never advances
-    // a completed cycle. The next actual pick is responsible for opening it.
+    // First read may initialize a missing state. Once it exists, status is
+    // strictly read-only and a completed cycle is advanced only by a real pick.
     if(snapshot)return snapshot;
     if(typeof previousStatus==='function')return previousStatus.call(this,folder);
     return{ok:true,total:scan.files.length,emitted:0,remaining:scan.files.length,recent:[],last:'',cycleNumber:1,cycleStartedAt:'',complete:false};
