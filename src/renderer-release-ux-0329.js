@@ -42,13 +42,17 @@
     refreshDirtyUi();
   }
 
-  let localMissing=false;
+  let localMissing=false,optimizerApplying=false;
+  const missingOptimizerText='IA local no instalada todavía. Descarga y verifica Qwen para habilitar la optimización automática.';
+  function setTextIfChanged(el,text){if(el&&el.textContent!==text)el.textContent=text;}
   async function normalizeLocalOptimizer(){
-    let st;try{st=await window.ECAPI?.localStatus?.();}catch{return;}const wasMissing=localMissing;localMissing=!st?.model;const badge=q('#ecOptimizeState0321'),box=q('#ecOptimizeResult0321'),btn=q('#optimizeEc0321');
-    if(localMissing){if(badge){badge.textContent='IA LOCAL NO INSTALADA';badge.className='mini-pill neutral';}if(box&&!box.dataset.live)box.textContent='IA local no instalada todavía. Descarga y verifica Qwen para habilitar la optimización automática.';if(btn){btn.disabled=true;btn.title='Instala primero la IA local para habilitar la optimización.';}return;}
-    if(wasMissing){if(badge){badge.textContent='SIN OPTIMIZAR';badge.className='mini-pill';}if(box&&!box.dataset.live)box.textContent='IA local lista. Ya puedes optimizar GEC para esta computadora.';}if(btn){btn.disabled=false;btn.title='';}
+    let st;try{st=await window.ECAPI?.localStatus?.();}catch{return;}const wasMissing=localMissing;localMissing=!st?.model;const badge=q('#ecOptimizeState0321'),box=q('#ecOptimizeResult0321'),btn=q('#optimizeEc0321');optimizerApplying=true;
+    try{
+      if(localMissing){if(badge){setTextIfChanged(badge,'IA LOCAL NO INSTALADA');if(badge.className!=='mini-pill neutral')badge.className='mini-pill neutral';}if(box&&!box.dataset.live)setTextIfChanged(box,missingOptimizerText);if(btn){btn.disabled=true;btn.title='Instala primero la IA local para habilitar la optimización.';}return;}
+      if(wasMissing){if(badge){setTextIfChanged(badge,'SIN OPTIMIZAR');if(badge.className!=='mini-pill')badge.className='mini-pill';}if(box&&!box.dataset.live)setTextIfChanged(box,'IA local lista. Ya puedes optimizar GEC para esta computadora.');}if(btn){btn.disabled=false;btn.title='';}
+    }finally{optimizerApplying=false;}
   }
-  function installOptimizerObserver(){normalizeLocalOptimizer();const box=q('#ecOptimizeResult0321');if(box){new MutationObserver(()=>{if(localMissing)setTimeout(normalizeLocalOptimizer,0);}).observe(box,{childList:true,subtree:true,characterData:true});}window.ECAPI?.on?.('local:event',e=>{const t=String(e?.type||'');if(/download|model|ready/i.test(t))setTimeout(normalizeLocalOptimizer,250);});}
+  function installOptimizerObserver(){normalizeLocalOptimizer();const box=q('#ecOptimizeResult0321');if(box){new MutationObserver(()=>{if(localMissing&&!optimizerApplying&&box.textContent!==missingOptimizerText)setTimeout(normalizeLocalOptimizer,0);}).observe(box,{childList:true,subtree:true,characterData:true});}window.ECAPI?.on?.('local:event',e=>{const t=String(e?.type||'');if(/download|model|ready/i.test(t))setTimeout(normalizeLocalOptimizer,250);});}
 
   function inspect(node=document){polishDock();const pop=node.matches?.('.ec29-popover')?node:node.querySelector?.('.ec29-popover');if(pop)polishPopover(pop);const modal=node.matches?.('.ec29-modal')?node:node.querySelector?.('.ec29-modal');if(modal)polishAdmin(modal);}
   const observer=new MutationObserver(records=>{for(const r of records)for(const n of r.addedNodes)if(n.nodeType===1)inspect(n);polishDock();});observer.observe(document.documentElement,{childList:true,subtree:true});
