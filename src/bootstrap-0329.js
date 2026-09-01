@@ -16,4 +16,5 @@ if(!locked){app.quit();}else{
   require('./services/profileSettingsValidation0329').installProfileSettingsValidation0329();
   require('./services/profileHealthFinal0329').installProfileHealthFinal0329();
   stability.installProfileStability0329();
+  require('./services/profileWatcherFinal0329').installProfileWatcherFinal0329();
 }
