@@ -88,3 +88,5 @@ jobs:
           path: dist/*.exe
           if-no-files-found: error
           retention-days: 14
+
+# CI trigger after Windows PowerShell encoding fix
