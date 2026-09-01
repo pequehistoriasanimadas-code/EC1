@@ -13,6 +13,7 @@ if(!locked){app.quit();}else{
   require('./services/profileAuditHardening0329').installProfileAuditHardening0329();
   require('./services/profileAuditFixes0329').installProfileAuditFixes0329();
   require('./services/profileFinalSafety0329').installProfileFinalSafety0329();
+  require('./services/profileRegistryRuntimeFinal0329').installProfileRegistryRuntimeFinal0329();
   require('./services/profileSettingsValidation0329').installProfileSettingsValidation0329();
   require('./services/profileHealthFinal0329').installProfileHealthFinal0329();
   stability.installProfileStability0329();
