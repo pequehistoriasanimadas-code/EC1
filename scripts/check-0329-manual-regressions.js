@@ -4,10 +4,12 @@ const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'
 function ok(v,m){n++;assert.ok(v,m);}
 const preload=read('src/preload.js'),guard=read('src/renderer-startup-guard-0329.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js');
 ok(legacy.includes('Aprendizaje de pronunciación actualizado.')&&legacy.includes('alert(parts.join'), 'la prueba reproduce la fuente real del popup legado');
-ok(preload.includes('webFrame.executeJavaScript')&&preload.includes('__ecEarlyPronunciationGuard'),'el guard se instala en main world antes del arranque del renderer');
+ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard'),'preload no ejecuta JavaScript invasivo antes de cargar la página');
 ok(guard.includes('window.alert=function')&&guard.includes('pronunciationMigration.test(text)'),'el aviso legado se convierte en información no bloqueante');
 ok(preload.indexOf('renderer-startup-guard-0329.js')<preload.indexOf("renderer-0324.js"),'el guard visual se carga antes de los renderers versionados');
 ok(preload.indexOf('renderer-release-ux-0329.js')>preload.indexOf("renderer-0329.js"),'el polish final se carga después de perfiles 0.3.29');
+ok(preload.includes("contextBridge.exposeInMainWorld('ECAPI'"),'ECAPI sigue expuesta al renderer en el arranque normal');
+ok(ux.includes('if(!window.ECAPI')&&ux.includes('setTimeout(installReleaseUx0329,120)'),'la capa UX espera a que perfiles y renderer estén listos en vez de fallar durante startup');
 ok(ux.includes('ec29-active-pill')&&ux.includes('Perfil activo')&&ux.includes('Perfil disponible'),'selector distingue visualmente perfil activo y disponibles');
 ok(css.includes('.ec29-profile-option.active')&&css.includes('.ec29-active-pill')&&css.includes('max-height:min(560px,60vh)'),'popover tiene jerarquía visual, píldora ACTIVO y scroll responsive');
 ok(css.includes('.ec29-admin-row.active')&&css.includes('.ec29-admin-active-pill'),'Administrar perfiles distingue claramente el activo');
