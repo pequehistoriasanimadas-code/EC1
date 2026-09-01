@@ -7,4 +7,5 @@ if(!locked){app.quit();}else{
   require('./services/profileCompatibility0329').installProfileCompatibility0329();
   require('./services/profilePolicy0329').installVersion0329Profiles();
   require('./services/profileSwitchSafety0329').installProfileSwitchSafety0329();
+  require('./services/profileAuditHardening0329').installProfileAuditHardening0329();
 }
