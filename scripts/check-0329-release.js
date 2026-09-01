@@ -6,6 +6,7 @@ const originalLoad=Module._load;
 try{
   const handlers=new Map();
   Module._load=function(request,parent,isMain){if(request==='electron')return{app:{isPackaged:false,getPath:()=>tmp,on(){}},ipcMain:{removeHandler:k=>handlers.delete(k),handle:(k,fn)=>handlers.set(k,fn),removeAllListeners(){},on(){}},BrowserWindow:{getAllWindows:()=>[]},Notification:{isSupported:()=>false}};return originalLoad.apply(this,arguments);};
+  const {Providers}=require('../src/services/providers');let physicalCancels=0;Providers.prototype.cancelActiveRequests=function(){physicalCancels++;};
   const release=require('../src/services/releaseStability0329');release.installReleaseStability0329();
   eq(release.MAX_PROFILES,30,'límite de perfiles es 30');
   const {ProfileManager0329}=require('../src/services/profileManager0329');const m=new ProfileManager0329(path.join(tmp,'data'));
@@ -19,12 +20,12 @@ try{
   eq(release.importAddCount({list:()=>[{name:'A'},{name:'B'}]},{profiles:[{meta:{name:'A'}},{meta:{name:'C'}}]},'replace'),1,'replace solo consume cupo para perfiles nuevos');
   eq(release.importAddCount({list:()=>[{name:'A'}]},{profiles:[{meta:{name:'A'}},{meta:{name:'C'}}]},'skip'),1,'skip solo consume cupo para perfiles nuevos');
   eq(release.importAddCount({list:()=>[{name:'A'}]},{profiles:[{meta:{name:'A'}},{meta:{name:'C'}}]},'keep'),2,'keep consume cupo por cada perfil importado');
-  const {Providers}=require('../src/services/providers');const gen=Providers.prototype.generateBuilt.toString();
+  const gen=Providers.prototype.generateBuilt.toString();
   ok(gen.includes('for(const provider of providers)'),'fallback recorre toda la cadena de proveedores');ok(!gen.includes('generations<2'),'ya no existe el límite global de dos generaciones');ok(typeof Providers.prototype.cancelActiveRequests==='function','providers puede invalidar solicitudes pendientes');ok(typeof Providers.prototype.generationBlockStatus==='function','providers expone circuit breaker');
   const fake=Object.create(Providers.prototype);fake.cooldownUntil={local:0,claude:0,gemini:0};fake.setCooldown=()=>{};const calls=[];fake.callProvider=async provider=>{calls.push(provider);const e=new Error(`${provider} fuera de servicio`);e.code=provider==='local'?'LOCAL_DOWN':provider==='claude'?'503':'NO_KEY';throw e;};
   const built={prompt:'x',sourceText:'El municipio abrió una biblioteca en Lima.',inputChars:42,promptTokens:10,sourceBudgetChars:42};
-  return Promise.resolve(fake.generateBuilt(built,{},['local','claude','gemini'])).then(()=>{throw new Error('se esperaba fallo');},e=>{eq(calls,['local','claude','gemini'],'se intentan local, Claude y Gemini antes de abrir el circuito');eq(e.code,'ALL_PROVIDERS_UNAVAILABLE','fallo de infraestructura abre circuito');ok(fake.generationBlockStatus().blocked,'circuit breaker queda activo');fake.cancelActiveRequests('test');}).then(()=>{
-    const renderer=read('src/renderer-0329.js'),preload=read('src/preload.js'),bootstrap=read('src/bootstrap-0329.js'),releaseSrc=read('src/services/releaseStability0329.js');
+  return Promise.resolve(fake.generateBuilt(built,{},['local','claude','gemini'])).then(()=>{throw new Error('se esperaba fallo');},e=>{eq(calls,['local','claude','gemini'],'se intentan local, Claude y Gemini antes de abrir el circuito');eq(e.code,'ALL_PROVIDERS_UNAVAILABLE','fallo de infraestructura abre circuito');ok(fake.generationBlockStatus().blocked,'circuit breaker queda activo');fake.cancelActiveRequests('test');eq(physicalCancels,1,'cancelación lógica conserva la cancelación física previa');ok(!fake.generationBlockStatus().blocked,'cambio/cancelación limpia el circuito anterior');}).then(()=>{
+    const renderer=read('src/renderer-0329.js'),preload=read('src/preload.js'),bootstrap=read('src/bootstrap-0329.js'),releaseSrc=read('src/services/releaseStability0329.js'),hardening=read('src/services/profileAuditHardening0329.js');
     ok(renderer.includes('El perfil que estabas usando sigue activo.')&&!renderer.includes('await requestSwitch(created.id);'),'crear perfil no cambia automáticamente de perfil');
     ok(renderer.includes('Hay cambios RSS sin guardar')&&renderer.includes('Guardar y cambiar'),'switch protege RSS sin guardar');
     ok(!renderer.includes('window.ECAPI.saveSettings(settings);}catch(e){status(`Perfil: no se pudo sincronizar'),'renderer no guarda ajustes de forma incondicional al iniciar');
@@ -34,6 +35,7 @@ try{
     ok(releaseSrc.includes('AI_PROVIDER_OUTAGE')&&releaseSrc.includes('45000'),'notificaciones de caída de IA se deduplican');
     ok(releaseSrc.includes('__ec0329SessionSeq')&&releaseSrc.includes('sessionSeq'),'numeración visible de sesión se asigna de forma estable');
     ok(releaseSrc.includes('startGeneration=profileGeneration()')&&!releaseSrc.includes('startGeneration=String(m?.registry?.updatedAt'),'trabajos asíncronos solo se invalidan al cambiar el contexto activo');
+    ok(releaseSrc.includes('baseCancel?.call(this,reason)')&&hardening.includes('AbortController'),'cancelación final conserva AbortController de red');
     ok(bootstrap.includes("require('./services/releaseStability0329').installReleaseStability0329()"),'capa release se instala al final');
     console.log(`GEC 0.3.29 release checks OK · ${checks} verificaciones`);
   }).finally(()=>{Module._load=originalLoad;fs.rmSync(tmp,{recursive:true,force:true});});
