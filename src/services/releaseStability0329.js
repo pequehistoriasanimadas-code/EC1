@@ -38,7 +38,8 @@ function retryable(e){return !NON_RETRY_CODES.has(String(e?.code||''));}
 function circuitDuration(streak){return Math.min(90000,15000*Math.max(1,Math.min(6,2**Math.max(0,streak-1))));}
 function installProviderResilience(){
   const p=Providers.prototype;if(p.__ec0329ReleaseResilience)return;Object.defineProperty(p,'__ec0329ReleaseResilience',{value:true});
-  p.cancelActiveRequests=function(reason='cancelled'){this.__ec0329Generation=(Number(this.__ec0329Generation)||0)+1;this.__ec0329CancelReason=String(reason||'cancelled');return{ok:true,generation:this.__ec0329Generation};};
+  const baseCancel=typeof p.cancelActiveRequests==='function'?p.cancelActiveRequests:null;
+  p.cancelActiveRequests=function(reason='cancelled'){try{baseCancel?.call(this,reason);}catch{}this.__ec0329Generation=(Number(this.__ec0329Generation)||0)+1;this.__ec0329CancelReason=String(reason||'cancelled');this.__ec0329CircuitUntil=0;this.__ec0329FailureStreak=0;return{ok:true,generation:this.__ec0329Generation};};
   p.generationBlockStatus=function(){const until=Number(this.__ec0329CircuitUntil)||0;if(until>Date.now())return{blocked:true,until,retryAfterMs:until-Date.now(),streak:Number(this.__ec0329FailureStreak)||0};if(until){this.__ec0329CircuitUntil=0;}return{blocked:false,until:0,retryAfterMs:0,streak:Number(this.__ec0329FailureStreak)||0};};
   p.generateBuilt=async function(built,settings,order){
     const providers=[...new Set((order||[]).filter(x=>x&&x!=='none'))],attempts=[];if(!providers.length){const e=new Error('No hay un proveedor de IA configurado');e.code='NO_PROVIDERS';throw e;}
