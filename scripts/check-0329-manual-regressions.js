@@ -12,6 +12,7 @@ ok(preload.includes('renderer-pronunciation-notice-0329.js'),'preload carga la v
 ok(preload.indexOf('renderer-release-ux-0329.js')>preload.indexOf("renderer-0329.js"),'el polish final se carga después de perfiles 0.3.29');
 ok(preload.includes("contextBridge.exposeInMainWorld('ECAPI'"),'ECAPI sigue expuesta al renderer en el arranque normal');
 ok(ux.includes('if(!window.ECAPI')&&ux.includes('setTimeout(installReleaseUx0329,120)'),'la capa UX espera a que perfiles y renderer estén listos en vez de fallar durante startup');
+ok(ux.includes("if(arrow&&arrow.textContent!=='⌃')arrow.textContent='⌃'")&&!ux.includes("if(arrow)arrow.textContent='⌃'"),'polishDock es idempotente y no realimenta su MutationObserver con textContent');
 ok(ux.includes('optimizerApplying')&&ux.includes('box.textContent!==missingOptimizerText'),'observer de optimización no se autoalimenta infinitamente');
 ok(ux.includes('ec29-active-pill')&&ux.includes('Perfil activo')&&ux.includes('Perfil disponible'),'selector distingue visualmente perfil activo y disponibles');
 ok(css.includes('.ec29-profile-option.active')&&css.includes('.ec29-active-pill')&&css.includes('max-height:min(560px,60vh)'),'popover tiene jerarquía visual, píldora ACTIVO y scroll responsive');
