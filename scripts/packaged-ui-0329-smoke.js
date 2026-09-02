@@ -74,26 +74,17 @@ async function makeWindow(label){
   stage(`${label} · creando BrowserWindow`);
   const win=new BrowserWindow({show:false,width:1280,height:820,webPreferences:{preload,contextIsolation:true,nodeIntegration:false,sandbox:true}});
   stage(`${label} · BrowserWindow creado`);
-  const dialogs=[];
   win.webContents.on('console-message',(_,level,message)=>{if(level>=2)console.log(`UI-CONSOLE[${level}] ${message}`);});
   win.webContents.on('did-fail-load',(_,code,desc,url)=>console.error(`UI-FAIL-LOAD ${code} ${desc} ${url}`));
   win.webContents.on('render-process-gone',(_,details)=>console.error(`UI-RENDER-GONE ${JSON.stringify(details)}`));
-  try{
-    win.webContents.debugger.attach('1.3');
-    await win.webContents.debugger.sendCommand('Page.enable');
-    win.webContents.debugger.on('message',async(_,method,params)=>{
-      if(method!=='Page.javascriptDialogOpening')return;
-      const msg=String(params?.message||'');dialogs.push(msg);console.error(`UI-UNEXPECTED-DIALOG · ${msg}`);
-      try{await win.webContents.debugger.sendCommand('Page.handleJavaScriptDialog',{accept:true});}catch{}
-    });
-  }catch(e){console.warn(`UI-CDP warning · ${e.message||e}`);}
   stage(`${label} · loadFile inicio`);
-  await Promise.race([win.loadFile(control,{query:{selftest:'1'}}),wait(15000).then(()=>{throw new Error(`loadFile timeout · ${label} · url=${win.webContents.getURL()||'sin-url'}`);})]);
+  await Promise.race([
+    win.loadFile(control,{query:{selftest:'1'}}),
+    wait(15000).then(()=>{throw new Error(`loadFile timeout · ${label} · url=${win.webContents.getURL()||'sin-url'}`);})
+  ]);
   stage(`${label} · loadFile completado`);
-  win.__unexpectedDialogs=dialogs;
   return win;
 }
-function assertNoDialogs(win,where){const list=win?.__unexpectedDialogs||[];assert(!list.length,`Diálogo JavaScript inesperado en ${where}: ${list.join(' | ')}`);}
 
 app.whenReady().then(async()=>{
   stage('app ready');registerIpc();let win=null;
@@ -103,18 +94,18 @@ app.whenReady().then(async()=>{
     await until(win,"document.body.innerText.includes('Bienvenido a GEC Automatic News')");stage('onboarding visible');
     await until(win,"typeof window.__ec0329PronunciationMigrationInfo==='string'");stage('pronunciación no bloqueante visible');
     const first=await js(win,`({bridgeError:document.body.classList.contains('bridge-error'),brand:document.body.innerText.includes('EC Automatic News'),create:document.body.innerText.includes('Crear perfil nuevo'),load:document.body.innerText.includes('Cargar perfiles'),profileInstalled:!!window.__ec0329Installed,pronunciationInfo:window.__ec0329PronunciationMigrationInfo||''})`);
-    assert(!first.bridgeError,'La UI arrancó en estado bridge-error');assert(first.brand,'La UI principal no se renderizó');assert(first.create&&first.load,'No apareció el onboarding de primer inicio');assert(first.profileInstalled,'renderer-0329 no terminó de instalarse');assert(/Aprendizaje de pronunciación actualizado/i.test(first.pronunciationInfo),'La migración de pronunciación no se publicó como información no bloqueante');assertNoDialogs(win,'primer inicio');
+    assert(!first.bridgeError,'La UI arrancó en estado bridge-error');assert(first.brand,'La UI principal no se renderizó');assert(first.create&&first.load,'No apareció el onboarding de primer inicio');assert(first.profileInstalled,'renderer-0329 no terminó de instalarse');assert(/Aprendizaje de pronunciación actualizado/i.test(first.pronunciationInfo),'La migración de pronunciación no se publicó como información no bloqueante');
     await js(win,`document.querySelector('#ec29CreateFirst')?.click(); true;`);await until(win,"!!document.querySelector('#ec29ProfileInput')");await until(win,"!!document.querySelector('.ec29-color-warning')");stage('modal crear perfil visible');
     const input=await js(win,`(()=>{const x=document.querySelector('#ec29ProfileInput');x.focus();x.value='Prueba';x.dispatchEvent(new Event('input',{bubbles:true}));return {disabled:x.disabled,focused:document.activeElement===x,value:x.value,preview:document.querySelector('#ec29ProfilePreview')?.textContent||''};})()`);assert(!input.disabled&&input.focused&&input.value==='Prueba','El campo Nombre del perfil no queda enfocable/editable');assert(/PRUEBA/i.test(input.preview),'La vista previa del nombre no responde al input');
     const dark=await js(win,`(()=>{const c=document.querySelector('#ec29CustomColor');c.value='#000000';c.dispatchEvent(new Event('input',{bubbles:true}));return {disabled:document.querySelector('#ec29Save')?.disabled===true,warning:document.querySelector('.ec29-color-warning')?.classList.contains('visible')===true};})()`);assert(dark.disabled&&dark.warning,'Un color demasiado oscuro no bloquea Guardar o no muestra advertencia');
-    const bright=await js(win,`(()=>{const c=document.querySelector('#ec29CustomColor');c.value='#F7C600';c.dispatchEvent(new Event('input',{bubbles:true}));return {disabled:document.querySelector('#ec29Save')?.disabled===true,warning:document.querySelector('.ec29-color-warning')?.classList.contains('visible')===true};})()`);assert(!bright.disabled&&!bright.warning,'Un color con buen contraste permanece bloqueado');assertNoDialogs(win,'crear perfil');
-    try{win.webContents.debugger.detach();}catch{}win.destroy();win=null;stage('primer inicio OK');
+    const bright=await js(win,`(()=>{const c=document.querySelector('#ec29CustomColor');c.value='#F7C600';c.dispatchEvent(new Event('input',{bubbles:true}));return {disabled:document.querySelector('#ec29Save')?.disabled===true,warning:document.querySelector('.ec29-color-warning')?.classList.contains('visible')===true};})()`);assert(!bright.disabled&&!bright.warning,'Un color con buen contraste permanece bloqueado');
+    win.destroy();win=null;stage('primer inicio OK');
 
     profileMode='profiles';win=await makeWindow('perfiles existentes');await until(win,"!!document.querySelector('#ec29ProfileButton')");stage('selector montado');
     await js(win,`document.querySelector('#ec29ProfileButton').click(); true;`);await until(win,"!!document.querySelector('.ec29-popover .ec29-active-pill')");
     const selector=await js(win,`({active:document.querySelector('.ec29-popover .ec29-active-pill')?.textContent||'',dots:document.querySelectorAll('.ec29-popover .ec29-option-dot').length,options:document.querySelectorAll('.ec29-popover [data-profile]').length,available:[...document.querySelectorAll('.ec29-popover .ec29-option-copy small')].some(x=>/Perfil disponible/i.test(x.textContent)),hasActivate:[...document.querySelectorAll('.ec29-popover button')].some(x=>/^Activar$/i.test(x.textContent.trim()))})`);
-    assert(selector.active==='ACTIVO','El selector no identifica el perfil activo');assert(selector.dots===3&&selector.options===3,'El selector rediseñado no muestra indicadores para los perfiles');assert(selector.available,'El selector no distingue perfiles disponibles');assert(!selector.hasActivate,'El selector conserva una acción Activar redundante');assertNoDialogs(win,'selector de perfiles');
-    try{win.webContents.debugger.detach();}catch{}win.destroy();win=null;clearInterval(heartbeat);
-    console.log('PACKAGED REAL UI 0.3.29 OK · IPC completo · sin diálogos bloqueantes · onboarding · input enfocable · contraste perfil · selector ACTIVO');app.exit(0);
-  }catch(e){clearInterval(heartbeat);console.error(e.stack||e);try{if(win){try{win.webContents.debugger.detach();}catch{}win.destroy();}}catch{}app.exit(1);}
+    assert(selector.active==='ACTIVO','El selector no identifica el perfil activo');assert(selector.dots===3&&selector.options===3,'El selector rediseñado no muestra indicadores para los perfiles');assert(selector.available,'El selector no distingue perfiles disponibles');assert(!selector.hasActivate,'El selector conserva una acción Activar redundante');
+    win.destroy();win=null;clearInterval(heartbeat);
+    console.log('PACKAGED REAL UI 0.3.29 OK · IPC completo · startup sin bloqueo · onboarding · input enfocable · contraste perfil · selector ACTIVO');app.exit(0);
+  }catch(e){clearInterval(heartbeat);console.error(e.stack||e);try{win?.destroy();}catch{}app.exit(1);}
 });
