@@ -50,7 +50,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
-      - name: Packaged 0.3.29 profile smoke test
+      - name: Packaged 0.3.30 service smoke test
         shell: pwsh
         timeout-minutes: 4
         run: |
@@ -58,23 +58,31 @@ jobs:
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
           if (-not (Test-Path $exe)) { throw "Missing executable: $exe" }
           if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'Missing packaged app.asar' }
-          npx electron scripts/packaged-0329-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.29 smoke test failed with code $LASTEXITCODE" }
+          npx electron scripts/packaged-0330-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.30 service smoke test failed with code $LASTEXITCODE" }
 
-      - name: Packaged 0.3.29 real UI startup test
+      - name: Packaged 0.3.30 real UI startup test
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-ui-0330-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.30 real UI startup test failed with code $LASTEXITCODE" }
+
+      - name: Packaged 0.3.29 real UI regression test
         shell: pwsh
         timeout-minutes: 4
         run: |
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           npx electron scripts/packaged-ui-0329-smoke.js $resources
-          if ($LASTEXITCODE -ne 0) { throw "Packaged real UI startup test failed with code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.29 UI regression test failed with code $LASTEXITCODE" }
 
-      - name: Packaged 0.3.25-0.3.28 compatibility test
+      - name: Packaged 0.3.25-0.3.29 compatibility test
         shell: pwsh
         timeout-minutes: 3
         run: |
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
-          npx electron scripts/packaged-compat-0329.js $resources
+          npx electron scripts/packaged-compat-0330.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged compatibility test failed with code $LASTEXITCODE" }
 
       - name: Packaged base UI Output and Kokoro smoke test
