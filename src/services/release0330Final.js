@@ -7,6 +7,8 @@ function rowFor(item){return{id:item.id||'',title:item.story?.title||item.result
 function insertPlanGroup(ready,plans){if(!plans.length)return[...ready];const after=Math.max(0,Number(plans[0].planAfter)||0),index=after<=0?0:Math.min(ready.length,after);const out=[...ready];out.splice(index,0,...plans);return out;}
 function installRelease0330Final(){
   const p=AutomationEngine.prototype;if(p.__ec0330FinalQueue)return;Object.defineProperty(p,'__ec0330FinalQueue',{value:true});
+  const baseRemove=p.removeItem;
+  p.removeItem=function(item){const original=String(item?.originalLink||''),current=String(item?.story?.link||'');const result=baseRemove.call(this,item);if(original)this.queuedUrls?.delete(original);if(current)this.queuedUrls?.delete(current);return result;};
   p.displayQueue=function(s=this.getSettings?.()||{}){
     const ready=projectedNews(this,s),air=[];
     if(this.currentKind==='news'&&this.currentItem)air.push(rowFor(this.currentItem));
