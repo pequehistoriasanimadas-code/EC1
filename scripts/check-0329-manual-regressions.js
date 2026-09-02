@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');let n=0;
 function ok(v,m){n++;assert.ok(v,m);}
-const preload=read('src/preload.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js'),workflow=read('.github/workflows/build-windows.yml'),pronunciationGuard=read('src/services/pronunciationStartupNotice0329.js'),pronunciationUi=read('src/renderer-pronunciation-notice-0329.js'),bootstrap=read('src/bootstrap-0329.js'),uiSmoke=read('scripts/packaged-ui-0329-smoke.js');
+const preload=read('src/preload.js'),ux=read('src/renderer-release-ux-0329.js'),profiles=read('src/renderer-0329.js'),css=read('src/control-0329.css'),health=read('src/services/profileHealthFinal0329.js'),release=read('src/services/releaseStability0329.js'),legacy=read('src/renderer-patches.js'),workflow=read('.github/workflows/build-windows.yml'),pronunciationGuard=read('src/services/pronunciationStartupNotice0329.js'),pronunciationUi=read('src/renderer-pronunciation-notice-0329.js'),bootstrap=read('src/bootstrap-0329.js'),uiSmoke29=read('scripts/packaged-ui-0329-smoke.js'),uiSmoke30=read('scripts/packaged-ui-0330-smoke.js');
 ok(legacy.includes('Aprendizaje de pronunciación actualizado.')&&legacy.includes('alert(parts.join'), 'la auditoría reproduce la fuente histórica del popup legado');
 ok(!preload.includes('webFrame.executeJavaScript')&&!preload.includes('__ecEarlyPronunciationGuard')&&!preload.includes("exposeInMainWorld('__ec0316MigrationNoticeShown'"),'preload no inyecta hacks tempranos ni flags para tapar alertas');
 ok(pronunciationGuard.includes('out.migrationInfo')&&pronunciationGuard.includes('delete out.migrationReport'),'backend cambia migrationReport bloqueante por migrationInfo no bloqueante');
@@ -26,6 +26,8 @@ ok(profiles.includes('restoreControlFocus')&&preload.includes("focusControl:()=>
 ok(health.includes("status:'unset'")&&health.includes("if(!v)return checks.push"),'rutas sin configurar no se cuentan como desaparecidas en la capa health declarada');
 ok(release.includes('MAX_PROFILES=30')&&release.includes('PROFILE_LIMIT'),'límite de 30 perfiles sigue aplicado en backend');
 ok(release.includes('AI_PROVIDER_OUTAGE')&&release.includes('generationBlockStatus'),'protección contra bucle de errores IA sigue presente');
-ok(workflow.includes('Packaged 0.3.29 real UI startup test')&&workflow.includes('packaged-ui-0329-smoke.js'),'CI abre la UI empaquetada y comprueba el primer inicio');
-ok(uiSmoke.includes('loadFile timeout')&&uiSmoke.includes('15000')&&uiSmoke.includes('migrationInfo'),'smoke de UI falla rápido y usa el contrato no bloqueante real');
+ok(workflow.includes('Packaged 0.3.30 real UI startup test')&&workflow.includes('packaged-ui-0330-smoke.js'),'CI 0.3.30 abre la UI empaquetada y comprueba el primer inicio');
+ok(workflow.includes('Packaged 0.3.29 real UI regression test')&&workflow.includes('packaged-ui-0329-smoke.js'),'CI conserva el smoke real de regresión 0.3.29');
+ok(uiSmoke30.includes("profileMode='empty'")&&uiSmoke30.includes("document.querySelector('#ec29Cancel')?.click()")&&uiSmoke30.includes("Bienvenido a GEC Automatic News"),'smoke 0.3.30 prueba crear/cancelar primer perfil y restaurar onboarding');
+ok(uiSmoke29.includes('loadFile timeout')&&uiSmoke29.includes('15000')&&uiSmoke29.includes('migrationInfo'),'smoke 0.3.29 falla rápido y usa el contrato no bloqueante real');
 console.log(`GEC 0.3.29 manual-regression audit OK · ${n} verificaciones`);
