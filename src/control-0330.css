@@ -2,6 +2,20 @@
 #ec0325DesignEditor{min-width:0}
 #ec0325DesignEditor .ec25-design-block{container-type:inline-size;min-width:0}
 #ec0325DesignEditor .ec25-design-row>*{min-width:0}
+#ec0325DesignEditor .ec25-bg-row>*{min-width:0}
+#ec0325DesignEditor .ec25-opacity-control{width:100%;min-width:0}
+#ec0325DesignEditor .ec25-opacity-control input[type=range]{width:auto!important;min-width:0!important;flex:1 1 auto!important}
+#ec0325DesignEditor .ec25-opacity-number{width:64px!important;min-width:0!important;flex:0 0 64px!important}
+#ec0325DesignEditor .ec25-opacity-control>span{flex:0 0 auto}
+
+@container (max-width: 900px){
+  #ec0325DesignEditor .ec25-bg-head{display:none!important}
+  #ec0325DesignEditor .ec25-bg-row{display:grid!important;grid-template-columns:minmax(120px,1fr) minmax(105px,.75fr) minmax(95px,.7fr)!important;grid-template-areas:"label color radius" "opacity opacity opacity"!important;gap:8px 10px!important;padding:11px 4px!important;align-items:center!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-row-label{grid-area:label!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-color-control{grid-area:color!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-radius-control,#ec0325DesignEditor .ec25-bg-row>.ec25-radius-spacer{grid-area:radius!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-opacity-control{grid-area:opacity!important}
+}
 
 @container (max-width: 720px){
   #ec0325DesignEditor .ec25-design-head{display:none!important}
@@ -17,6 +31,8 @@
   #ec0325DesignEditor .ec25-design-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 72px!important;grid-template-areas:"label label label" "family family family" "variant size upper" "color color color"!important}
   #ec0325DesignEditor .ec25-design-row .ec25-text-color{height:34px!important;max-width:110px!important}
   #ec0325DesignEditor .ec25-font-actions{display:grid!important;grid-template-columns:1fr!important;gap:7px!important}
+  #ec0325DesignEditor .ec25-bg-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;grid-template-areas:"label label" "color radius" "opacity opacity"!important}
+  #ec0325DesignEditor .ec25-opacity-number{width:58px!important;flex-basis:58px!important}
 }
 
 .ec0330-preparing-divider{display:flex;align-items:baseline;gap:10px;padding:12px 4px 7px;margin-top:5px;border-top:1px solid #343434;color:#ddd}
