@@ -1,0 +1,25 @@
+/* GEC 0.3.30 · responsive design editor + effective queue */
+#ec0325DesignEditor{min-width:0}
+#ec0325DesignEditor .ec25-design-block{container-type:inline-size;min-width:0}
+#ec0325DesignEditor .ec25-design-row>*{min-width:0}
+
+@container (max-width: 720px){
+  #ec0325DesignEditor .ec25-design-head{display:none!important}
+  #ec0325DesignEditor .ec25-design-row{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px 58px 62px!important;grid-template-areas:"label label label label label" "family variant size upper color"!important;gap:8px!important;padding:11px 4px!important;align-items:center!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-row-label{grid-area:label!important;margin-bottom:1px}
+  #ec0325DesignEditor .ec25-design-row .ec25-family{grid-area:family!important;width:100%!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-variant{grid-area:variant!important;width:100%!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-size{grid-area:size!important;width:100%!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-upper{grid-area:upper!important;width:100%!important;min-width:0!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-text-color{grid-area:color!important;width:100%!important;min-width:44px!important}
+}
+@container (max-width: 520px){
+  #ec0325DesignEditor .ec25-design-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 72px!important;grid-template-areas:"label label label" "family family family" "variant size upper" "color color color"!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-text-color{height:34px!important;max-width:110px!important}
+  #ec0325DesignEditor .ec25-font-actions{display:grid!important;grid-template-columns:1fr!important;gap:7px!important}
+}
+
+.ec0330-preparing-divider{display:flex;align-items:baseline;gap:10px;padding:12px 4px 7px;margin-top:5px;border-top:1px solid #343434;color:#ddd}
+.ec0330-preparing-divider strong{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#f0c93d}
+.ec0330-preparing-divider span{font-size:11px;color:#858585}
+@media(max-width:760px){.ec0330-preparing-divider{align-items:flex-start;flex-direction:column;gap:3px}}
