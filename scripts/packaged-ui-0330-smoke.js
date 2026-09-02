@@ -57,6 +57,7 @@ app.whenReady().then(async()=>{let win=null;try{
   for(const rel of ['src/bootstrap-0330.js','src/renderer-0330.js','src/control-0330.css','src/services/editorial0330.js','src/services/release0330.js','src/services/release0330Final.js','src/services/release0330SwitchFinal.js','scripts/check-0330.js','scripts/packaged-ui-0330-smoke.js'])assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));assert(pkg.version==='0.3.30','Versión empaquetada no es 0.3.30');assert(pkg.main==='src/bootstrap-0330.js','Bootstrap 0.3.30 no es entry point');
   const css=fs.readFileSync(path.join(appRoot,'src','control-0330.css'),'utf8');assert(css.includes('container-type:inline-size')&&css.includes('@container (max-width: 720px)'),'Responsive tipográfico 0.3.30 no quedó empaquetado');
+  registerIpc();
 
   profileMode='empty';win=await makeWindow();await until(win,"document.body.innerText.includes('Bienvenido a GEC Automatic News')");
   await js(win,"document.querySelector('#ec29CreateFirst')?.click(); true;");await until(win,"!!document.querySelector('#ec29ProfileInput')");await js(win,"document.querySelector('#ec29Cancel')?.click(); true;");await until(win,"document.body.innerText.includes('Bienvenido a GEC Automatic News')");assert(await js(win,"!!document.querySelector('#ec29CreateFirst')"),'Cancelar el primer perfil no restauró onboarding');win.destroy();win=null;
