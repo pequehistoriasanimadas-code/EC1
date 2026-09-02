@@ -1,0 +1,26 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const assert=require('assert');
+const root=path.join(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+let n=0;const ok=(v,m)=>{n++;assert.ok(v,m);};
+const final=read('src/services/release0330Final.js');
+const release=read('src/services/release0330.js');
+const switcher=read('src/services/release0330SwitchFinal.js');
+const renderer=read('src/renderer-0330.js');
+const smoke=read('scripts/packaged-ui-0330-smoke.js');
+const workflow=read('.github/workflows/build-windows.yml');
+const pkg=JSON.parse(read('package.json'));
+
+ok(final.includes("item?.originalLink")&&final.includes('queuedUrls?.delete(original)'),'eventId/dynamic URL debe liberar también la URL base');
+ok(release.includes('contentFingerprint')&&release.includes('dynamicEventId'),'páginas dinámicas deben versionarse por contenido');
+ok(release.includes("!/lbposting|liveblog|live-blog|live_blog/i"),'liveblogs/sismos deben conservar el camino especializado');
+ok(switcher.includes('discardPendingDocuments(engine)')&&switcher.includes('quiet(engine,2500)'),'switch debe retirar pendientes antes de esperar quiescencia');
+ok(switcher.includes('PROFILE_SWITCH_RESTART_REQUIRED'),'reinicio debe quedar como último aviso excepcional');
+ok(renderer.includes('optimizationMigrateGlobal')&&renderer.includes('hardwareFingerprint'),'renderer debe migrar tuning por fingerprint real de la PC');
+ok(smoke.includes("Cancelar el primer perfil")&&smoke.includes('OPTIMIZADA')&&smoke.includes('ec0330-preparing-divider'),'smoke 0330 cubre onboarding, tuning y cola efectiva');
+ok(pkg.version==='0.3.30'&&pkg.main==='src/bootstrap-0330.js','package debe ser 0.3.30');
+ok((pkg.build?.files||[]).includes('scripts/packaged-ui-0330-smoke.js'),'smoke 0330 debe quedar dentro del paquete');
+ok(workflow.includes('Packaged 0.3.30 real UI startup test')&&workflow.includes('packaged-ui-0330-smoke.js'),'workflow debe ejecutar smoke 0.3.30');
+console.log(`GEC 0.3.30 final audit OK · ${n} verificaciones`);
