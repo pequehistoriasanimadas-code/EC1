@@ -19,9 +19,14 @@ assert(release.includes('mediaByPath(this.canned,folder,wanted)'),'manual schedu
 assert(hotfixSrc.includes('syncExclusiveIdentity')&&hotfixSrc.includes('normalizeDisplayRows'),'exclusive identity persistence hotfix missing');
 const exclusiveItem={id:'e',sourceType:'rss',status:'LISTA',result:{title:'E',isExclusive:true,accessStatus:'SUBSCRIBER_ONLY'}};assert(hotfix.syncExclusiveIdentity(exclusiveItem)===true&&exclusiveItem.isExclusive===true,'exclusive identity must be persisted on the queue item');
 assert(renderer.includes('Programar como próximo'),'manual content UI action missing');
-assert(renderer.includes('matchCards(snapshot)')&&renderer.includes('card.dataset.ecQueueId'),'queue cards must reconcile by stable identity/title');
-assert(!renderer.includes('const row=rows[i]'),'renderer must not associate queue cards with snapshot rows by array index');
-assert(renderer.includes("qAll('#queue .queue-exclusive').forEach(x=>x.remove())")&&renderer.includes('row.isExclusive'),'exclusive badge must be rebuilt from current row identity on every refresh');
+assert(renderer.includes('function renderQueueDirect(snapshot)'),'queue must render directly from the automation snapshot');
+assert(renderer.includes("const rows=(snapshot?.queue||[]).filter(Boolean)"),'queue renderer must use snapshot.queue as its source of truth');
+assert(!renderer.includes('matchCards(snapshot)'),'legacy DOM-to-row reconciliation must not be used');
+assert(!renderer.includes('card.dataset.ecQueueId'),'queue must not infer row identity from previously rendered cards');
+assert(renderer.includes("exclusive=!!row.isExclusive")&&renderer.includes("<span class=\"queue-exclusive\">EXCLUSIVO</span>"),'exclusive badge must come directly from row identity');
+assert(renderer.includes("planned=!!row.planned")&&renderer.includes("rowTypeLabel(row)")&&renderer.includes("queue-item',planned?'planned'"),'planned content/ad rows must be rendered directly');
+assert(renderer.includes('__ec0331QueueAudit'),'queue runtime audit marker missing');
+assert(renderer.includes("positions:[...box.querySelectorAll('.queue-index')]") ,'queue sequential-position audit missing');
 assert(renderer.includes('Sin video de espera configurado'),'standby optional fallback UI missing');
 assert(out.includes("video.loop=true"),'standby video must loop');
 assert(out.includes("if(a==='stop')setTimeout(()=>showStandby"),'Output stop must return to standby');
@@ -32,4 +37,4 @@ assert(preload.includes('output:pickStandbyVideo')&&preload.includes('canned:sch
 assert(preload.includes('output-0331.js')&&preload.includes('renderer-0331.js'),'0.3.31 renderer/output assets not injected');
 assert.strictEqual(pkg.version,'0.3.31','package version must be 0.3.31');
 assert.strictEqual(pkg.main,'src/bootstrap-0331.js','0.3.31 bootstrap must be entry point');
-console.log('check-0331: OK · exclusivas estables + música standby al abrir Output');
+console.log('check-0331: OK · cola directa + numeración estable + exclusivas + contenidos/anuncios + música standby');
