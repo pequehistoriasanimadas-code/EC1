@@ -1,14 +1,16 @@
 'use strict';
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1');
+const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1');
+require(path.join(root,'src','services','releaseV2Optimization.js'));
 assert(/^2\.0\.0-lab\./.test(pkg.version),'La versión debe identificarse como 2.0.0-lab.x');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
 assert(/V2\.0 TTS Lab/i.test(pkg.build.productName),'El producto debe diferenciar claramente V2 TTS Lab');
-assert(boot.includes('GEC V2 TTS Lab')&&boot.includes("require('./bootstrap-0331')"),'V2 Lab debe aislar datos y heredar exactamente 0.3.31');
+assert(boot.includes('GEC V2 TTS Lab')&&boot.includes("require('./bootstrap-0331')")&&boot.includes('releaseV2Optimization'),'V2 Lab debe aislar datos, heredar 0.3.31 e instalar guard de convivencia');
 assert(release.includes("['engine','style','referenceVoiceId','engineParams','fallbackToKokoro']"),'Campos TTS por perfil incompletos');
 assert(release.includes('engineOptimizations')&&release.includes('captureOptimization'),'Optimización por motor ausente');
 assert(release.includes('p.generate=function')&&release.includes("engine==='kokoro'")&&release.includes('labRuntime().generate'),'Routing multi-TTS incompleto');
+assert(optimizer.includes('qwenTokensPerSec')&&optimizer.includes('vramSafe')&&optimizer.includes('voiceSafe'),'La optimización no valida Qwen + TTS por RTF/tok/s/VRAM');
 assert(runtime.includes("chatterbox-tts")&&runtime.includes("qwen-tts"),'Instaladores de motores experimentales ausentes');
 assert(runtime.includes("Qwen3-TTS 0.6B")&&runtime.includes("Chatterbox V3"),'Catálogo TTS Lab incompleto');
 assert(renderer.includes('Motor de voz')&&renderer.includes('Chatterbox V3')&&renderer.includes('Qwen3-TTS 0.6B'),'Selector de motor no está en Audio y locución');
@@ -18,4 +20,4 @@ assert(preload.includes('renderer-v2lab.js')&&preload.includes('control-v2lab.cs
 assert(preload.includes('ttsLabSelectEngine')&&preload.includes('ttsLabImportReference')&&preload.includes('ttsLabPrepare'),'Bridge TTS Lab incompleto');
 assert(worker.includes('ChatterboxMultilingualTTS')&&worker.includes('Qwen3TTSModel'),'Worker no contiene ambos motores');
 assert(prepare.includes('runtime')&&prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
-console.log('check-v2lab: OK · selector Audio y locución · perfiles TTS · optimización por motor · runtimes bajo demanda');
+console.log('check-v2lab: OK · Audio y locución multi-TTS · perfiles · optimización Qwen+TTS · runtimes bajo demanda');
