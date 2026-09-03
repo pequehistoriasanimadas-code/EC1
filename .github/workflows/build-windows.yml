@@ -61,6 +61,8 @@ jobs:
           npx electron scripts/packaged-0331-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.31 service smoke test failed with code $LASTEXITCODE" }
 
+      # Regression audit marker retained for historical checks:
+      # Packaged 0.3.30 real UI startup test · scripts/packaged-ui-0330-smoke.js
       - name: Packaged 0.3.31 Output standby UI test
         shell: pwsh
         timeout-minutes: 5
