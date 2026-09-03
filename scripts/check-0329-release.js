@@ -1,0 +1,42 @@
+'use strict';
+const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert'),Module=require('module');
+let checks=0;const ok=(v,m)=>{checks++;assert.ok(v,m);},eq=(a,b,m)=>{checks++;assert.deepStrictEqual(a,b,m);};
+const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-release-0329-'));
+const originalLoad=Module._load;
+try{
+  const handlers=new Map();
+  Module._load=function(request,parent,isMain){if(request==='electron')return{app:{isPackaged:false,getPath:()=>tmp,on(){}},ipcMain:{removeHandler:k=>handlers.delete(k),handle:(k,fn)=>handlers.set(k,fn),removeAllListeners(){},on(){}},BrowserWindow:{getAllWindows:()=>[]},Notification:{isSupported:()=>false}};return originalLoad.apply(this,arguments);};
+  const {Providers}=require('../src/services/providers');let physicalCancels=0;Providers.prototype.cancelActiveRequests=function(){physicalCancels++;};
+  const release=require('../src/services/releaseStability0329');release.installReleaseStability0329();
+  eq(release.MAX_PROFILES,30,'límite de perfiles es 30');
+  const {ProfileManager0329}=require('../src/services/profileManager0329');const m=new ProfileManager0329(path.join(tmp,'data'));
+  const defaults={rssFeeds:[],ai:{primary:'local',backup1:'claude',backup2:'gemini'},tts:{voice:'ef_dora',speed:1},visual:{queueColors:{},output:{}},canned:{},documents:{processed:{}},automation:{}};
+  for(let i=1;i<=30;i++)m.create({name:`Perfil ${i}`,color:'#F7C600',defaults});
+  eq(release.profileGeneration(),0,'crear perfiles adicionales no invalida trabajos del perfil activo');
+  const second=m.list()[1].id;m.activate(second);eq(release.profileGeneration(),1,'cambiar realmente de perfil invalida trabajos asíncronos');m.activate(second);eq(release.profileGeneration(),1,'activar el mismo perfil no invalida trabajos');
+  eq(m.status().profileCount,30,'status expone 30 perfiles');eq(m.status().canCreate,false,'status bloquea altas al llegar a 30');
+  assert.throws(()=>m.create({name:'Perfil 31',color:'#22C55E',defaults}),e=>e?.code==='PROFILE_LIMIT');checks++;
+  assert.throws(()=>m.duplicate(m.list()[0].id,{name:'Copia',color:'#22C55E'}),e=>e?.code==='PROFILE_LIMIT');checks++;
+  eq(release.importAddCount({list:()=>[{name:'A'},{name:'B'}]},{profiles:[{meta:{name:'A'}},{meta:{name:'C'}}]},'replace'),1,'replace solo consume cupo para perfiles nuevos');
+  eq(release.importAddCount({list:()=>[{name:'A'}]},{profiles:[{meta:{name:'A'}},{meta:{name:'C'}}]},'skip'),1,'skip solo consume cupo para perfiles nuevos');
+  eq(release.importAddCount({list:()=>[{name:'A'}]},{profiles:[{meta:{name:'A'}},{meta:{name:'C'}}]},'keep'),2,'keep consume cupo por cada perfil importado');
+  const gen=Providers.prototype.generateBuilt.toString();
+  ok(gen.includes('for(const provider of providers)'),'fallback recorre toda la cadena de proveedores');ok(!gen.includes('generations<2'),'ya no existe el límite global de dos generaciones');ok(typeof Providers.prototype.cancelActiveRequests==='function','providers puede invalidar solicitudes pendientes');ok(typeof Providers.prototype.generationBlockStatus==='function','providers expone circuit breaker');
+  const fake=Object.create(Providers.prototype);fake.cooldownUntil={local:0,claude:0,gemini:0};fake.setCooldown=()=>{};const calls=[];fake.callProvider=async provider=>{calls.push(provider);const e=new Error(`${provider} fuera de servicio`);e.code=provider==='local'?'LOCAL_DOWN':provider==='claude'?'503':'NO_KEY';throw e;};
+  const built={prompt:'x',sourceText:'El municipio abrió una biblioteca en Lima.',inputChars:42,promptTokens:10,sourceBudgetChars:42};
+  return Promise.resolve(fake.generateBuilt(built,{},['local','claude','gemini'])).then(()=>{throw new Error('se esperaba fallo');},e=>{eq(calls,['local','claude','gemini'],'se intentan local, Claude y Gemini antes de abrir el circuito');eq(e.code,'ALL_PROVIDERS_UNAVAILABLE','fallo de infraestructura abre circuito');ok(fake.generationBlockStatus().blocked,'circuit breaker queda activo');fake.cancelActiveRequests('test');eq(physicalCancels,1,'cancelación lógica conserva la cancelación física previa');ok(!fake.generationBlockStatus().blocked,'cambio/cancelación limpia el circuito anterior');}).then(()=>{
+    const renderer=read('src/renderer-0329.js'),preload=read('src/preload.js'),bootstrap=read('src/bootstrap-0329.js'),releaseSrc=read('src/services/releaseStability0329.js'),hardening=read('src/services/profileAuditHardening0329.js');
+    ok(renderer.includes('El perfil que estabas usando sigue activo.')&&!renderer.includes('await requestSwitch(created.id);'),'crear perfil no cambia automáticamente de perfil');
+    ok(renderer.includes('Hay cambios RSS sin guardar')&&renderer.includes('Guardar y cambiar'),'switch protege RSS sin guardar');
+    ok(!renderer.includes('window.ECAPI.saveSettings(settings);}catch(e){status(`Perfil: no se pudo sincronizar'),'renderer no guarda ajustes de forma incondicional al iniciar');
+    ok(renderer.includes("pathTypes=new Set(['content','ads','documents','fallback','music','verticalBackground'])"),'health solo anuncia rutas realmente configuradas');
+    ok(renderer.includes('restoreControlFocus')&&preload.includes("focusControl:()=>invoke('ui:focusControl')"),'recuperación de foco está conectada de renderer a main');
+    ok(releaseSrc.includes("removeAllListeners('notify')")&&releaseSrc.includes('palabras procesadas'),'notificación de pronunciación de startup queda filtrada');
+    ok(releaseSrc.includes('AI_PROVIDER_OUTAGE')&&releaseSrc.includes('45000'),'notificaciones de caída de IA se deduplican');
+    ok(releaseSrc.includes('__ec0329SessionSeq')&&releaseSrc.includes('sessionSeq'),'numeración visible de sesión se asigna de forma estable');
+    ok(releaseSrc.includes('startGeneration=profileGeneration()')&&!releaseSrc.includes('startGeneration=String(m?.registry?.updatedAt'),'trabajos asíncronos solo se invalidan al cambiar el contexto activo');
+    ok(releaseSrc.includes('baseCancel?.call(this,reason)')&&hardening.includes('AbortController'),'cancelación final conserva AbortController de red');
+    ok(bootstrap.includes("require('./services/releaseStability0329').installReleaseStability0329()"),'capa release se instala al final');
+    console.log(`GEC 0.3.29 release checks OK · ${checks} verificaciones`);
+  }).finally(()=>{Module._load=originalLoad;fs.rmSync(tmp,{recursive:true,force:true});});
+}catch(e){Module._load=originalLoad;fs.rmSync(tmp,{recursive:true,force:true});throw e;}
