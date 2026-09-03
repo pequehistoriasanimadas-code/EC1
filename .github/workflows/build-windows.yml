@@ -55,7 +55,7 @@ jobs:
         timeout-minutes: 4
         run: |
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
-          $exe = Join-Path $PWD 'dist\win-unpacked\GEC Automatic News V2.0 TTS Lab.exe'
+          $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
           if (-not (Test-Path $exe)) { throw "Missing V2 Lab executable: $exe" }
           if (-not (Test-Path (Join-Path $resources 'app.asar'))) { throw 'Missing packaged app.asar' }
           npx electron scripts/packaged-v2lab-smoke.js $resources
