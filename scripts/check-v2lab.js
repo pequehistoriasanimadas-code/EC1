@@ -5,8 +5,10 @@ const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),r
 require(path.join(root,'src','services','releaseV2Optimization.js'));
 assert(/^2\.0\.0-lab\./.test(pkg.version),'La versión debe identificarse como 2.0.0-lab.x');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
-assert(/V2\.0 TTS Lab/i.test(pkg.build.productName),'El producto debe diferenciar claramente V2 TTS Lab');
+assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','V2 Lab conserva la identidad técnica del portable');
+assert.strictEqual(pkg.build.productName,'EC Automatic News','V2 Lab conserva compatibilidad técnica del productName');
 assert(boot.includes('GEC V2 TTS Lab')&&boot.includes("require('./bootstrap-0331')")&&boot.includes('releaseV2Optimization'),'V2 Lab debe aislar datos, heredar 0.3.31 e instalar guard de convivencia');
+assert(renderer.includes("document.title='GEC Automatic News — V2.0 TTS Lab'")&&renderer.includes('TTS LAB'),'La interfaz debe identificar inequívocamente V2 TTS Lab');
 assert(release.includes("['engine','style','referenceVoiceId','engineParams','fallbackToKokoro']"),'Campos TTS por perfil incompletos');
 assert(release.includes('engineOptimizations')&&release.includes('captureOptimization'),'Optimización por motor ausente');
 assert(release.includes('p.generate=function')&&release.includes("engine==='kokoro'")&&release.includes('labRuntime().generate'),'Routing multi-TTS incompleto');
@@ -20,4 +22,4 @@ assert(preload.includes('renderer-v2lab.js')&&preload.includes('control-v2lab.cs
 assert(preload.includes('ttsLabSelectEngine')&&preload.includes('ttsLabImportReference')&&preload.includes('ttsLabPrepare'),'Bridge TTS Lab incompleto');
 assert(worker.includes('ChatterboxMultilingualTTS')&&worker.includes('Qwen3TTSModel'),'Worker no contiene ambos motores');
 assert(prepare.includes('runtime')&&prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
-console.log('check-v2lab: OK · Audio y locución multi-TTS · perfiles · optimización Qwen+TTS · runtimes bajo demanda');
+console.log('check-v2lab: OK · Audio y locución multi-TTS · identidad visual V2 · compatibilidad portable · optimización Qwen+TTS');
