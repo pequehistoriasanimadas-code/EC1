@@ -9,3 +9,4 @@ process.env.PORTABLE_EXECUTABLE_DIR=labBase;
 process.env.GEC_V2_TTS_LAB='1';
 require('./bootstrap-0331');
 require('./services/releaseV2Lab').installReleaseV2Lab();
+require('./services/releaseV2Optimization').installV2Optimization();
