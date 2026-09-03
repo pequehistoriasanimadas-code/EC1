@@ -20,7 +20,7 @@
     "electron-builder": "26.15.7"
   },
   "build": {
-    "appId": "pe.gec.automaticnews.ttslab",
+    "appId": "pe.ec.automaticnews",
     "productName": "GEC Automatic News V2.0 TTS Lab",
     "artifactName": "GEC-V2.0-TTS-Lab-${version}.${ext}",
     "directories": {"output": "dist"},
