@@ -4,6 +4,8 @@
   if(!window.ECAPI||typeof settings==='undefined'||!settings||typeof renderQueue!=='function'){setTimeout(installRenderer0331,120);return;}
   window.__ec0331RendererInstalled=true;
   const q=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const qAll=s=>[...document.querySelectorAll(s)];
+  const norm=s=>String(s??'').normalize('NFKC').replace(/\s+/g,' ').trim().toLocaleLowerCase('es');
   let lastSnapshot=null;
 
   function ensureStandbyCard(){
@@ -24,10 +26,43 @@
   }
   function ensureManualState(){const list=q('#cannedList');if(!list||q('#ec0331ManualState'))return;const box=document.createElement('div');box.id='ec0331ManualState';box.className='ec0331-manual-state hidden';box.innerHTML='<div><b>SELECCIÓN MANUAL</b><span id="ec0331ManualName"></span></div><button id="ec0331CancelManual" class="dark compact">Cancelar selección</button>';list.insertAdjacentElement('beforebegin',box);q('#ec0331CancelManual').onclick=async()=>{try{const st=await window.ECAPI.cannedCancelSpecific();lastSnapshot=st;updateManualState(st);status('Selección manual cancelada.');}catch(e){status(`No se pudo cancelar: ${e.message||e}`);}};}
   function updateManualState(st=lastSnapshot){ensureManualState();const box=q('#ec0331ManualState'),name=q('#ec0331ManualName'),manual=st?.manualContent;if(!box)return;box.classList.toggle('hidden',!manual);if(name)name.textContent=manual?`Próximo: ${manual.name}`:'';qAll('.ec0331-program-content').forEach(b=>{b.textContent='Programar como próximo';b.disabled=false;});if(manual){qAll('.ec0331-media-item').forEach(item=>{if(item.querySelector('.media-name')?.textContent===manual.name){const b=item.querySelector('.ec0331-program-content');if(b){b.textContent='PROGRAMADO';b.disabled=true;}}});}}
-  function qAll(s){return[...document.querySelectorAll(s)];}
+
+  function rowKind(row){return row?.sourceType==='content'?'content':row?.sourceType==='ad'?'ad':'news';}
+  function cardKind(card){const t=(card?.textContent||'').toUpperCase();if(t.includes('CONTENIDO'))return'content';if(t.includes('ANUNCIO'))return'ad';return'news';}
+  function cardTitle(card){const el=card.querySelector('.queue-title')||card.querySelector('.queue-headline');if(!el)return'';const clone=el.cloneNode(true);clone.querySelectorAll('.queue-exclusive').forEach(x=>x.remove());return norm(clone.textContent||'');}
+  function matchCards(snapshot){
+    const rows=(snapshot?.queue||[]).filter(Boolean),cards=qAll('#queue .queue-item'),used=new Set(),pairs=[];
+    for(const card of cards){
+      let row=null;const saved=String(card.dataset.ecQueueId||'');if(saved)row=rows.find(x=>String(x.id||'')===saved&&!used.has(x));
+      const title=cardTitle(card),kind=cardKind(card);
+      if(!row&&title)row=rows.find(x=>!used.has(x)&&rowKind(x)===kind&&norm(x.title)===title);
+      if(!row&&title)row=rows.find(x=>!used.has(x)&&rowKind(x)===kind&&(norm(x.title).startsWith(title)||title.startsWith(norm(x.title))));
+      if(!row)row=rows.find(x=>!used.has(x)&&rowKind(x)===kind);
+      if(!row)continue;used.add(row);card.dataset.ecQueueId=String(row.id||row.renderKey||'');pairs.push({card,row});
+    }
+    return pairs;
+  }
+  function restoreStatus(card,row){
+    const state=card.querySelector('.queue-status,.status-pill');if(!state)return;
+    const value=String(row.status||'').toUpperCase();state.classList.remove('ok','live','pause','neutral');
+    if(row.exclusiveBlocked){state.textContent='ESPERA';state.classList.add('neutral');return;}
+    if(value)state.textContent=value;if(value==='AL AIRE')state.classList.add('live');else if(value==='LISTA')state.classList.add('ok');else state.classList.add('neutral');
+  }
+  function reconcileQueue(snapshot){
+    const box=q('#queue');if(!box)return;const pairs=matchCards(snapshot);if(!pairs.length)return;
+    qAll('#queue .queue-exclusive').forEach(x=>x.remove());qAll('#queue .ec0331-wait-note').forEach(x=>x.remove());qAll('#queue .ec0330-preparing-divider').forEach(x=>x.remove());
+    let pos=0,firstPreparing=null;
+    for(const {card,row} of pairs){
+      const preparing=row.queueGroup==='preparing';const index=card.querySelector('.queue-index');if(index)index.textContent=preparing?'':`${++pos}.`;if(preparing&&!firstPreparing)firstPreparing=card;
+      card.classList.toggle('ec0331-exclusive-blocked',!!row.exclusiveBlocked);
+      if(row.isExclusive){const head=card.querySelector('.queue-headline')||card.querySelector('.queue-title');if(head){const badge=document.createElement('span');badge.className='queue-exclusive';badge.textContent='EXCLUSIVO';const title=head.querySelector?.('.queue-title');if(title&&title!==head)head.insertBefore(badge,title);else head.insertAdjacentElement('afterbegin',badge);}}
+      if(row.exclusiveBlocked){const note=document.createElement('div');note.className='ec0331-wait-note';note.textContent=row.planText||'En espera de la separación mínima entre exclusivas.';card.appendChild(note);}restoreStatus(card,row);
+    }
+    if(firstPreparing){const divider=document.createElement('div');divider.className='ec0330-preparing-divider';divider.innerHTML='<strong>En preparación</strong><span>Estas noticias todavía no tienen una posición definitiva de emisión.</span>';box.insertBefore(divider,firstPreparing);}
+  }
 
   const oldRefresh=typeof refreshCannedList==='function'?refreshCannedList:null;if(oldRefresh){refreshCannedList=async function(){const r=await oldRefresh.apply(this,arguments);ensureManualState();await rebuildCannedList();updateManualState();return r;};}
-  const baseRender=renderQueue;renderQueue=function(snapshot){lastSnapshot=snapshot;baseRender(snapshot);setTimeout(()=>{const rows=snapshot?.queue||[],cards=qAll('#queue .queue-item');cards.forEach((card,i)=>{const row=rows[i];if(!row)return;if(row.isExclusive&&!card.querySelector('.queue-exclusive')){const title=card.querySelector('.queue-title,.queue-headline');if(title){const badge=document.createElement('span');badge.className='queue-exclusive';badge.textContent='EXCLUSIVO';title.insertAdjacentElement('afterbegin',badge);}}if(row.exclusiveBlocked){card.classList.add('ec0331-exclusive-blocked');const state=card.querySelector('.queue-status,.status-pill');if(state){state.textContent='ESPERA';state.classList.remove('ok','live');state.classList.add('neutral');}if(!card.querySelector('.ec0331-wait-note')){const note=document.createElement('div');note.className='ec0331-wait-note';note.textContent=row.planText||'En espera de la separación mínima entre exclusivas.';card.appendChild(note);}}});updateManualState(snapshot);},0);};
+  const baseRender=renderQueue;renderQueue=function(snapshot){lastSnapshot=snapshot;baseRender(snapshot);reconcileQueue(snapshot);setTimeout(()=>reconcileQueue(snapshot),0);setTimeout(()=>reconcileQueue(snapshot),40);updateManualState(snapshot);};
   window.ECAPI.on('automation:state',s=>{lastSnapshot=s;setTimeout(()=>updateManualState(s),0);});
 
   ensureStandbyCard();updateStandbyUi();ensureExclusiveHelp();ensureManualState();rebuildCannedList().then(()=>updateManualState()).catch(()=>{});
