@@ -30,6 +30,5 @@ assert(out.includes('__ec0331StandbyMusicPlaying'),'standby music playback verif
 assert(out.includes('transitionDuration'),'standby must reuse configured transition duration');
 assert(preload.includes('output:pickStandbyVideo')&&preload.includes('canned:scheduleSpecific'),'0.3.31 bridge APIs missing');
 assert(preload.includes('output-0331.js')&&preload.includes('renderer-0331.js'),'0.3.31 renderer/output assets not injected');
-assert.strictEqual(pkg.version,'0.3.31','package version must be 0.3.31');
-assert.strictEqual(pkg.main,'src/bootstrap-0331.js','0.3.31 bootstrap must be entry point');
-console.log('check-0331: OK · exclusivas estables + música standby al abrir Output');
+const lab=/^2\.0\.0-lab\./.test(pkg.version);assert(pkg.version==='0.3.31'||lab,'package must be 0.3.31 or V2 TTS Lab derivative');assert.strictEqual(pkg.main,lab?'src/bootstrap-v2lab.js':'src/bootstrap-0331.js','entry point must preserve 0.3.31 base or V2 Lab wrapper');
+console.log(`check-0331: OK · baseline 0.3.31 preserved${lab?' inside V2 TTS Lab':''}`);
