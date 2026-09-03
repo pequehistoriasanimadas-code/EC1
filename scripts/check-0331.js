@@ -1,0 +1,27 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const assert=require('assert');
+const root=path.resolve(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const release=read('src/services/release0331.js'),renderer=read('src/renderer-0331.js'),out=read('src/output-0331.js'),preload=read('src/preload.js'),boot=read('src/bootstrap-0331.js'),pkg=JSON.parse(read('package.json'));
+
+assert(boot.includes("require('./bootstrap-0330')"),'0.3.31 must layer on stable 0.3.30');
+assert(release.includes("since<every-1)return normal||null"),'exclusive scheduler must wait instead of emitting consecutive exclusives');
+assert(release.includes("this.__ec0331SkippedContent&&this.emissionRunning"),'skipped content must retain post-content handling');
+assert(release.includes('await this.playAdAfterCanned'),'skipped content must route to the post-content ad');
+assert(release.includes('adLocked=true'),'planned ads must expose a locked identity');
+assert(release.includes('scheduleSpecificContent'),'manual exact-content scheduling missing');
+assert(release.includes('mediaByPath(this.canned,folder,wanted)'),'manual scheduling must resolve the exact selected media path');
+assert(renderer.includes('Programar como próximo'),'manual content UI action missing');
+assert(renderer.includes('EXCLUSIVO'),'exclusive badge regression guard missing');
+assert(renderer.includes('Sin video de espera configurado'),'standby optional fallback UI missing');
+assert(out.includes("video.loop=true"),'standby video must loop');
+assert(out.includes("if(a==='stop')setTimeout(()=>showStandby"),'Output stop must return to standby');
+assert(out.includes('ensureMusic'),'standby must reuse background music');
+assert(out.includes('transitionDuration'),'standby must reuse configured transition duration');
+assert(preload.includes('output:pickStandbyVideo')&&preload.includes('canned:scheduleSpecific'),'0.3.31 bridge APIs missing');
+assert(preload.includes('output-0331.js')&&preload.includes('renderer-0331.js'),'0.3.31 renderer/output assets not injected');
+assert.strictEqual(pkg.version,'0.3.31','package version must be 0.3.31');
+assert.strictEqual(pkg.main,'src/bootstrap-0331.js','0.3.31 bootstrap must be entry point');
+console.log('check-0331: OK');
