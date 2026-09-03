@@ -21,8 +21,8 @@
   },
   "build": {
     "appId": "pe.ec.automaticnews",
-    "productName": "GEC Automatic News V2.0 TTS Lab",
-    "artifactName": "GEC-V2.0-TTS-Lab-${version}.${ext}",
+    "productName": "EC Automatic News",
+    "artifactName": "GEC-Automatic-News-Portable-${version}.${ext}",
     "directories": {"output": "dist"},
     "files": [
       "src/**/*",
