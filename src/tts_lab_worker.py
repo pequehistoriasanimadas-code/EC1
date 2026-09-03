@@ -52,14 +52,23 @@ def load_model():
     MODEL_DEVICE = "cuda" if use_cuda else "cpu"
     if ENGINE == "chatterbox":
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-        MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE, t3_model="v3")
+        try:
+            MODEL = ChatterboxMultilingualTTS.from_pretrained(
+                device=MODEL_DEVICE, t3_model="v3"
+            )
+        except TypeError:
+            # Some packaged Chatterbox releases select the newest multilingual
+            # checkpoint internally and no longer expose t3_model.
+            MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE)
     elif ENGINE == "qwen3tts":
         from qwen_tts import Qwen3TTSModel
         kwargs = {
             "device_map": "cuda:0" if use_cuda else "cpu",
             "dtype": torch.bfloat16 if use_cuda else torch.float32,
         }
-        MODEL = Qwen3TTSModel.from_pretrained("Qwen/Qwen3-TTS-12Hz-0.6B-Base", **kwargs)
+        MODEL = Qwen3TTSModel.from_pretrained(
+            "Qwen/Qwen3-TTS-12Hz-0.6B-Base", **kwargs
+        )
     else:
         raise RuntimeError(f"Motor no soportado: {ENGINE}")
     return MODEL
@@ -79,9 +88,9 @@ def qwen_prompt(ref_audio):
 def generate_piece(text, ref_audio, style, params):
     model = load_model()
     if ENGINE == "chatterbox":
-        import torch
         exaggeration = float(params.get("exaggeration", 0.42))
         cfg = float(params.get("cfgWeight", 0.35))
+        temperature = float(params.get("temperature", 0.8))
         if style == "neutral":
             exaggeration, cfg = 0.50, 0.50
         elif style == "expressive":
@@ -92,6 +101,7 @@ def generate_piece(text, ref_audio, style, params):
             audio_prompt_path=ref_audio,
             exaggeration=exaggeration,
             cfg_weight=cfg,
+            temperature=temperature,
         )
         arr = wav.detach().float().cpu().numpy()
         if arr.ndim > 1:
@@ -151,14 +161,19 @@ def generate(payload):
         "elapsed_ms": round(elapsed * 1000),
         "rtf": round(elapsed / duration, 3) if duration > 0 else 0,
         "device": MODEL_DEVICE,
-        "chunks": len(pieces),
+        "chunks": len(chunks(text)),
     }
 
 
 def handle(payload):
     cmd = str(payload.get("cmd") or "")
     if cmd == "ping":
-        return {"ready": True, "engine": ENGINE, "model_loaded": MODEL is not None, "device": MODEL_DEVICE}
+        return {
+            "ready": True,
+            "engine": ENGINE,
+            "model_loaded": MODEL is not None,
+            "device": MODEL_DEVICE,
+        }
     if cmd == "prepare":
         load_model()
         return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE}
@@ -184,9 +199,11 @@ for raw in sys.stdin:
     except SystemExit:
         break
     except Exception as exc:
-        emit({
-            "id": request_id,
-            "ok": False,
-            "error": str(exc),
-            "trace": traceback.format_exc(limit=4)[-1800:],
-        })
+        emit(
+            {
+                "id": request_id,
+                "ok": False,
+                "error": str(exc),
+                "trace": traceback.format_exc(limit=4)[-1800:],
+            }
+        )
