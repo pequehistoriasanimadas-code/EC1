@@ -38,7 +38,11 @@ jobs:
       - name: Audit production dependencies
         shell: pwsh
         run: |
-          $max = 3
+          $env:npm_config_fetch_retries = '1'
+          $env:npm_config_fetch_timeout = '15000'
+          $env:npm_config_fetch_retry_mintimeout = '1000'
+          $env:npm_config_fetch_retry_maxtimeout = '3000'
+          $max = 2
           for ($i = 1; $i -le $max; $i++) {
             $output = (npm audit --omit=dev --audit-level=high 2>&1 | Out-String)
             $code = $LASTEXITCODE
