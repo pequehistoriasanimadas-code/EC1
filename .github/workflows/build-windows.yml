@@ -61,6 +61,14 @@ jobs:
           npx electron scripts/packaged-0331-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.31 service smoke test failed with code $LASTEXITCODE" }
 
+      - name: Packaged 0.3.32 queue planner and stable renderer test
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-0332-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged 0.3.32 queue planner smoke test failed with code $LASTEXITCODE" }
+
       # Regression audit marker retained for historical checks:
       # Packaged 0.3.30 real UI startup test · scripts/packaged-ui-0330-smoke.js
       - name: Packaged 0.3.31 Output standby UI test
