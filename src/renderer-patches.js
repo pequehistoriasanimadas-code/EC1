@@ -5,6 +5,7 @@
   if(window.__ec0316UiPatchesInstalled)return;window.__ec0316UiPatchesInstalled=true;
 
   renderQueue=function(s){
+    if(window.__ecQueueRenderOwner==='0332')return;
     const box=$('#queue');if(!box)return;const items=s.queue||[],colors={...QUEUE_COLOR_DEFAULT,...(settings?.visual?.queueColors||{})};if(!items.length){box.innerHTML='<div class="empty">Sin actividad</div>';return;}
     box.innerHTML=items.map(x=>{
       const type=x.sourceType||'rss',color=x.status==='ERROR'?colors.error:(colors[type]||colors.rss),[badge,badgeClass]=badgeInfo(x.status),human=x.reason?`Omitida · ${x.reason}`:(x.planText||humanTiming(x)||stageName(x.stage,x.status)),tech=technicalLine(x),classes=`queue-item${x.planned?' planned':''}${x.history?' history':''}`;
