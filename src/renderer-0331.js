@@ -43,7 +43,7 @@
     if(timings.length)parts.push(timings.join(' · '));if(row?.error)parts.push(String(row.error));return parts.join(' · ');
   }
   function technicalHtml(row){const bits=[];if(row?.provider)bits.push(`Proveedor: ${esc(row.provider)}`);if(row?.model)bits.push(`Modelo: ${esc(row.model)}`);if(row?.stage)bits.push(`Etapa: ${esc(row.stage)}`);if(row?.storyUrl)bits.push(`URL: ${esc(row.storyUrl)}`);if(!bits.length)return'';return`<details class="technical-details"><summary>Ver detalles técnicos</summary><div>${bits.join(' · ')}</div></details>`;}
-  function renderQueueDirect(snapshot){
+  function renderQueueDirect(snapshot){if(window.__ecQueueRenderOwner==='0332')return;
     const box=q('#queue');if(!box)return;const rows=(snapshot?.queue||[]).filter(Boolean),scroll=box.scrollTop;if(!rows.length){box.innerHTML='<div class="empty">Sin actividad</div>';return;}
     let pos=0,preparingShown=false;const html=[];
     for(const row of rows){
@@ -58,7 +58,7 @@
 
   const oldRefresh=typeof refreshCannedList==='function'?refreshCannedList:null;if(oldRefresh){refreshCannedList=async function(){const r=await oldRefresh.apply(this,arguments);ensureManualState();await rebuildCannedList();updateManualState();return r;};}
   renderQueue=function(snapshot){lastSnapshot=snapshot;renderQueueDirect(snapshot);updateManualState(snapshot);};
-  window.ECAPI.on('automation:state',s=>{lastSnapshot=s;setTimeout(()=>{renderQueueDirect(s);updateManualState(s);},0);setTimeout(()=>renderQueueDirect(s),80);});
+  window.ECAPI.on('automation:state',s=>{lastSnapshot=s;if(window.__ecQueueRenderOwner!=='0332'){renderQueueDirect(s);updateManualState(s);}});
 
   ensureStandbyCard();updateStandbyUi();ensureExclusiveHelp();ensureManualState();rebuildCannedList().then(()=>updateManualState()).catch(()=>{});
 })();
