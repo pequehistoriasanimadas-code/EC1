@@ -4,7 +4,7 @@ const {app}=require('electron');
 const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked','resources')),appRoot=path.join(resourcesDir,'app.asar'),assert=(v,m)=>{if(!v)throw new Error(m);};
 app.whenReady().then(async()=>{let tmp='';try{
   const required=['src/bootstrap-0331.js','src/services/release0331.js','src/services/release0331Hotfix.js','src/renderer-0331.js','src/control-0331.css','src/output-0331.js','src/output-0331.css','scripts/check-0331.js'];for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
-  const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));assert(pkg.version==='0.3.31','Versión empaquetada no es 0.3.31');assert(pkg.main==='src/bootstrap-0331.js','Bootstrap 0.3.31 no es entry point');
+  const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));assert(['0.3.31','0.3.32'].includes(pkg.version),'Versión empaquetada no es compatible con auditoría 0.3.31');assert(['src/bootstrap-0331.js','src/bootstrap-0332.js'].includes(pkg.main),'Bootstrap empaquetado no es compatible con auditoría 0.3.31');
   const release=require(path.join(appRoot,'src','services','release0331.js')),hotfix=require(path.join(appRoot,'src','services','release0331Hotfix.js'));
   const settings={automation:{exclusiveEveryNews:4},canned:{enabled:true,insertAdAfterContent:true}};
   const e={exclusiveHasEmitted:true,newsSinceExclusive:0,queue:[
