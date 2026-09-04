@@ -27,6 +27,7 @@
 
   const baseRenderQueue=renderQueue;
   renderQueue=function(snapshot){
+    if(window.__ecQueueRenderOwner==='0332')return;
     const rows=(snapshot?.queue||[]).map(x=>({...x,sessionSeq:Number(x.displayPosition)||0})),next={...snapshot,queue:rows};baseRenderQueue(next);const box=q('#queue');if(!box)return;const cards=[...box.querySelectorAll('.queue-item')];cards.forEach((card,i)=>{
       const row=rows[i],index=card.querySelector('.queue-index');if(index)index.textContent=Number(row?.displayPosition)>0?`${Number(row.displayPosition)}.`:'';
       if(row?.isExclusive){const head=card.querySelector('.queue-headline');if(head&&!head.querySelector('.queue-exclusive')){const badge=document.createElement('span');badge.className='queue-exclusive';badge.textContent='EXCLUSIVO';head.insertBefore(badge,head.querySelector('.queue-title')||null);}}
