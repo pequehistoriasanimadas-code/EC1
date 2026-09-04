@@ -84,7 +84,7 @@
   refreshVoiceUi();
 
   // -------- Cola: distintivo exclusivo secundario --------
-  const renderQueue0323=renderQueue;renderQueue=function(s){renderQueue0323(s);const nodes=[...document.querySelectorAll('#queue .queue-item')],items=s?.queue||[];nodes.forEach((node,i)=>{if(!items[i]?.isExclusive)return;const head=node.querySelector('.queue-headline');if(head&&!head.querySelector('.queue-exclusive')){const b=document.createElement('span');b.className='queue-exclusive';b.textContent='🔒 EXCLUSIVO';head.appendChild(b);}});};
+  const renderQueue0323=renderQueue;renderQueue=function(s){if(window.__ecQueueRenderOwner==='0332')return;renderQueue0323(s);const nodes=[...document.querySelectorAll('#queue .queue-item')],items=s?.queue||[];nodes.forEach((node,i)=>{if(!items[i]?.isExclusive)return;const head=node.querySelector('.queue-headline');if(head&&!head.querySelector('.queue-exclusive')){const b=document.createElement('span');b.className='queue-exclusive';b.textContent='🔒 EXCLUSIVO';head.appendChild(b);}});};
 
   // -------- Guardado: nuevos ajustes --------
   const save0323=saveSettings;saveSettings=async function(options={}){if($id('fallbackVoice0324'))settings.tts.fallbackVoice=$id('fallbackVoice0324').value||settings.tts.fallbackVoice||'ef_dora';settings.exclusiveClose={enabled:$id('exclusiveSourceCloseEnabled')?.checked!==false,template:String($id('exclusiveSourceCloseTemplate')?.value||settings.exclusiveClose?.template||'').trim()};return save0323(options);};
