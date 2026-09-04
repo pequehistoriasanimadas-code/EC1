@@ -45,7 +45,8 @@
       "scripts/packaged-ui-0331-smoke.js",
       "scripts/packaged-ui-0330-smoke.js",
       "package.json",
-      "scripts/check-0332.js"
+      "scripts/check-0332.js",
+      "scripts/packaged-0332-smoke.js"
     ],
     "extraResources": [
       {
