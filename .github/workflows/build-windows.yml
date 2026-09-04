@@ -55,6 +55,7 @@ jobs:
               Start-Sleep -Seconds 10
             } else {
               Write-Warning "npm audit endpoint remained unavailable after $max attempts. npm install reported its dependency audit result; continuing only for this recognized registry outage."
+              exit 0
             }
           }
 
