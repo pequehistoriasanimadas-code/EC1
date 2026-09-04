@@ -35,7 +35,7 @@ function planContext(engine,s,mode='scheduled'){
   const c=s?.canned||{},interval=clamp(c.interval,0,999,0),total=Math.max(0,Number(engine.scheduledNewsTotal)||0),played=Math.max(0,Number(engine.cannedPlayed)||0);
   const anchor=Number.isFinite(Number(engine.__ec0330ContentAnchorNews))?Math.max(0,Number(engine.__ec0330ContentAnchorNews)):Math.max(0,Number(engine.lastScheduledCannedAt)||0);
   const manual=engine.__ec0331ManualContent;
-  return [mode,interval,keyPath(c.folder),keyPath(c.adsFolder),anchor,total,played,manual?.requestedAt||0,String(engine.currentKind||'none')].join('|');
+  return [mode,interval,keyPath(c.folder),keyPath(c.adsFolder),anchor,played,manual?.requestedAt||0].join('|');
 }
 function getRegistry(engine,context){
   if(engine.__ec0332PlanContext!==context||!(engine.__ec0332PlanRegistry instanceof Map)){
