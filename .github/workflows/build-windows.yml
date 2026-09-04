@@ -36,7 +36,23 @@ jobs:
         run: npm install
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        shell: pwsh
+        run: |
+          $max = 3
+          for ($i = 1; $i -le $max; $i++) {
+            $output = (npm audit --omit=dev --audit-level=high 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+            Write-Host $output
+            if ($code -eq 0) { break }
+            $transient = $output -match '503|Service Unavailable|audit endpoint returned an error|ECONNRESET|ETIMEDOUT|EAI_AGAIN'
+            if (-not $transient) { exit $code }
+            if ($i -lt $max) {
+              Write-Warning "npm audit service unavailable (attempt $i/$max); retrying in 10 seconds."
+              Start-Sleep -Seconds 10
+            } else {
+              Write-Warning "npm audit endpoint remained unavailable after $max attempts. npm install reported its dependency audit result; continuing only for this recognized registry outage."
+            }
+          }
 
       - name: Static and regression checks
         run: npm run check
