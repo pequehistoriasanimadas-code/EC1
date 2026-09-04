@@ -113,7 +113,7 @@ function projectFullQueue(engine,s,baseRows){
   if(mediaActive)progress=0;
 
   const immediateContent=immediate.find(x=>x.sourceType==='content'),immediateAd=immediate.find(x=>x.sourceType==='ad');
-  const excludeContent=[immediateContent?.mediaPath].filter(Boolean),excludeAds=[immediateAd?.mediaPath].filter(Boolean);
+  const excludeContent=[immediateContent?.mediaPath,...currentMedia.filter(x=>x.sourceType==='content').map(x=>x.mediaPath)].filter(Boolean),excludeAds=[immediateAd?.mediaPath,...currentMedia.filter(x=>x.sourceType==='ad').map(x=>x.mediaPath)].filter(Boolean);
   const maxSlots=Math.max(2,Math.ceil((core.filter(isNewsRow).length+interval)/interval)+2);
   const contentSeq=managerSequence(engine.canned,c.folder,maxSlots+2,excludeContent),adSeq=managerSequence(engine.ads,c.adsFolder,maxSlots+2,excludeAds);
   const resetMode=mediaActive?'after-active':immediate.length?'after-immediate':'scheduled',context=planContext(engine,s,resetMode),usedContent=new Set(),usedAds=new Set();
