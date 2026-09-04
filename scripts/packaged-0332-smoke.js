@@ -20,7 +20,6 @@ app.whenReady().then(async()=>{let tmp='';try{
   const contentDir=path.join(tmp,'contents'),adsDir=path.join(tmp,'ads');fs.mkdirSync(contentDir);fs.mkdirSync(adsDir);
   for(let i=1;i<=6;i++){fs.writeFileSync(path.join(contentDir,`C${i}.mp4`),'x');fs.writeFileSync(path.join(adsDir,`A${i}.mp4`),'x');}
   const {CannedManager}=require(path.join(appRoot,'src','services','canned.js'));
-  require(path.join(appRoot,'src','services','version0328Policy.js')).installVersion0328Policy();
   const {projectFullQueue}=require(path.join(appRoot,'src','services','release0332.js'));
   const engine={scheduledNewsTotal:0,cannedPlayed:0,lastScheduledCannedAt:-1,__ec0330ContentAnchorNews:0,currentKind:'none',canned:new CannedManager(),ads:new CannedManager()};
   const news=Array.from({length:20},(_,i)=>({id:`n${i+1}`,title:`N${i+1}`,status:'LISTA',sourceType:'rss',queueGroup:'effective'}));
