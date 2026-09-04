@@ -35,6 +35,6 @@ assert(out.includes('__ec0331StandbyMusicPlaying'),'standby music playback verif
 assert(out.includes('transitionDuration'),'standby must reuse configured transition duration');
 assert(preload.includes('output:pickStandbyVideo')&&preload.includes('canned:scheduleSpecific'),'0.3.31 bridge APIs missing');
 assert(preload.includes('output-0331.js')&&preload.includes('renderer-0331.js'),'0.3.31 renderer/output assets not injected');
-assert.strictEqual(pkg.version,'0.3.31','package version must be 0.3.31');
-assert.strictEqual(pkg.main,'src/bootstrap-0331.js','0.3.31 bootstrap must be entry point');
+assert(['0.3.31','0.3.32'].includes(pkg.version),'0.3.31 regression check must run on package 0.3.31 or compatible 0.3.32');
+assert(['src/bootstrap-0331.js','src/bootstrap-0332.js'].includes(pkg.main),'0.3.31 regression check must run on bootstrap 0.3.31 or compatible 0.3.32');
 console.log('check-0331: OK · cola directa + numeración estable + exclusivas + contenidos/anuncios + música standby');
