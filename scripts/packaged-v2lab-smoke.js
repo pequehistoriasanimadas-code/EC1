@@ -6,7 +6,7 @@ app.whenReady().then(()=>{let tmp='';try{
   const required=['src/bootstrap-v2lab.js','src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','src/services/releaseV2Lab.js','src/services/releaseV2Optimization.js','src/services/ttsLabRuntime.js','src/renderer-v2lab.js','src/control-v2lab.css','src/tts_lab_worker.py','scripts/check-v2lab.js'];
   for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert(/^2\.0\.0-lab\./.test(pkg.version),'Versión empaquetada no es V2 TTS Lab');
+  assert(pkg.version==='2.0.0-lab.3','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.3');
   assert(pkg.main==='src/bootstrap-v2lab.js','Bootstrap V2 Lab no es entry point');
   assert(pkg.name==='ec-automatic-news','Identidad interna del paquete cambió');
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
@@ -15,10 +15,10 @@ app.whenReady().then(()=>{let tmp='';try{
   tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-v2tts-0332-'));
   const {TTSLabRuntime,ENGINES}=require(path.join(appRoot,'src','services','ttsLabRuntime.js'));const rt=new TTSLabRuntime({resourcesDir,dataDir:tmp});const st=rt.status('kokoro');
   assert(st.python,'TTS Lab no encuentra Python portable');assert(st.workerScript,'TTS Lab no encuentra worker empaquetado');assert(ENGINES.chatterbox&&ENGINES.qwen3tts,'Catálogo experimental incompleto');
-  assert(st.engines.some(x=>x.id==='chatterbox'&&!x.installed)&&st.engines.some(x=>x.id==='qwen3tts'&&!x.installed),'Motores experimentales deben iniciar bajo demanda');
+  assert(st.engines.some(x=>x.id==='chatterbox'&&!x.installed)&&st.engines.some(x=>x.id==='qwen3tts'&&!x.installed),'Motores experimentales deben iniciar bajo demanda');assert(Array.isArray(st.fineTunedModels)&&st.fineTunedModels.length===0,'Modelos fine-tuned deben iniciar vacíos y aislados');assert(typeof rt.importFineTunedZip==='function'&&typeof rt.updateReference==='function'&&typeof rt.prepareReference==='function','Runtime empaquetado no expone flujo de voces V2 completo');
   const {normalizeProfileTts}=require(path.join(appRoot,'src','services','releaseV2Lab.js'));const profile=normalizeProfileTts({engine:'qwen3tts',style:'news',referenceVoiceId:'ref-test'});assert(profile.engine==='qwen3tts'&&profile.referenceVoiceId==='ref-test','Normalización de perfil TTS Lab falló');
   const r32=require(path.join(appRoot,'src','services','release0332.js'));assert(typeof r32.projectFullQueue==='function','Base 0.3.32 no expone planificador final');
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('PACKAGED V2 TTS LAB 0.3.32 OK · herencia 0.3.32 · runtime separado · motores bajo demanda · cola final preservada');
+  console.log('PACKAGED V2 TTS LAB lab.3 OK · cache de referencias · Qwen fine-tuned · herencia 0.3.32 preservada');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
