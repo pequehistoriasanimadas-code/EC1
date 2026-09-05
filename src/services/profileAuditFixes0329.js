@@ -1,0 +1,88 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const {app,ipcMain,dialog,BrowserWindow}=require('electron');
+const {pathToFileURL}=require('url');
+const {SettingsStore}=require('./settings');
+const {HistoryStore}=require('./history');
+const {DocumentLibrary}=require('./documents');
+const {CannedManager,bestDurationIndex}=require('./canned');
+const {FontManager}=require('./fonts');
+const {getProfileManager,readJson}=require('./profileManager0329');
+
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function manager(){return getProfileManager(dataRoot());}
+function controlWindow(){return BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&!/OUTPUT/i.test(w.getTitle?.()||''))||null;}
+function outputs(){return BrowserWindow.getAllWindows().filter(w=>!w.isDestroyed()&&(/OUTPUT/i.test(w.getTitle?.()||'')||/output\.html/i.test(w.webContents?.getURL?.()||'')));}
+function restoreJson(file){try{if(readJson(file))return false;const bak=`${file}.bak`;if(!readJson(bak))return false;fs.copyFileSync(bak,file);return true;}catch{return false;}}
+
+function installBackupRecovery(){
+  const {ProfileManager0329}=require('./profileManager0329'),p=ProfileManager0329.prototype;
+  if(!p.__ec0329FinalBackupRecovery){
+    Object.defineProperty(p,'__ec0329FinalBackupRecovery',{value:true});
+    const read=p.readProfileSettings,globalSettings=p.globalSettings;
+    p.readProfileSettings=function(id){restoreJson(this.profileSettingsFile(id));return read.call(this,id);};
+    p.globalSettings=function(defaults){restoreJson(this.globalSettingsFile);return globalSettings.call(this,defaults);};
+  }
+  const hp=HistoryStore.prototype;
+  if(!hp.__ec0329FinalBackupRecovery){
+    Object.defineProperty(hp,'__ec0329FinalBackupRecovery',{value:true});
+    const recover=self=>{try{const root=path.resolve(self.__ec0329BaseDir||dataRoot()),m=getProfileManager(root),id=m.activeId();if(id)restoreJson(m.historyFile(id));}catch{}};
+    for(const name of ['read','load','save','has','add','getAutomationState','setAutomationState','reset']){
+      const base=hp[name];if(typeof base!=='function')continue;
+      hp[name]=function(...args){recover(this);return base.apply(this,args);};
+    }
+  }
+}
+
+function installSettingsContextGuard(){
+  const p=SettingsStore.prototype;if(p.__ec0329ContextGuard)return;
+  Object.defineProperty(p,'__ec0329ContextGuard',{value:true});
+  const load=p.load,save=p.save;
+  p.load=function(...args){const s=load.apply(this,args),m=getProfileManager(dataRoot());try{Object.defineProperty(s,'__ecProfileId',{value:m.activeId(),enumerable:true,configurable:true,writable:true});Object.defineProperty(s,'__ecProfileRevision',{value:String(m.registry.updatedAt||''),enumerable:true,configurable:true,writable:true});}catch{}return s;};
+  p.save=function(settings,...args){const m=getProfileManager(dataRoot()),incomingId=String(settings?.__ecProfileId||'');if(incomingId&&incomingId!==m.activeId()){const e=new Error('Se descartó un guardado perteneciente al perfil anterior.');e.code='STALE_PROFILE_SETTINGS';throw e;}let clean=settings;if(settings&&typeof settings==='object'){clean={...settings};delete clean.__ecProfileId;delete clean.__ecProfileRevision;}return save.call(this,clean,...args);};
+}
+
+function installDocumentPathAliases(){
+  const p=DocumentLibrary.prototype;if(p.__ec0329ProcessedPathAlias)return;
+  Object.defineProperty(p,'__ec0329ProcessedPathAlias',{value:true});
+  const scan=p.scan;
+  p.scan=function(folder){const r=scan.call(this,folder);try{const s=new SettingsStore(dataRoot()).load(),processed=s.documents?.processed||{},byPath=new Map();for(const [fingerprint,entry] of Object.entries(processed)){const v=String(entry?.path||'').trim();if(!v)continue;try{byPath.set(path.resolve(v).toLocaleLowerCase('es'),fingerprint);}catch{}}for(const x of r.files||[]){let key='';try{key=path.resolve(x.path).toLocaleLowerCase('es');}catch{}const alias=byPath.get(key);if(alias){x.id=alias;x.fingerprint=alias;}}}catch{}return r;};
+}
+
+function installCompletedCyclePreview(){
+  const p=CannedManager.prototype;if(p.__ec0329CompletedPreviewFix)return;
+  Object.defineProperty(p,'__ec0329CompletedPreviewFix',{value:true});
+  const peek=p.peekForDuration,pickFor=p.pickForDuration,pickPath=p.pickPath;
+  p.peekForDuration=function(folder,targetSec){const item=peek.call(this,folder,targetSec);if(item)return item;const status=this.cycleStatus(folder);if(!status?.complete)return null;const scan=this.list(folder);if(!scan.ok||!scan.files?.length)return null;let candidates=scan.files;if(candidates.length>1&&status.last)candidates=candidates.filter(x=>x.name!==status.last);if(!candidates.length)candidates=scan.files;const i=bestDurationIndex(candidates,targetSec),selected=candidates[i<0?0:i];return selected?{...selected,remainingInCycle:scan.files.length,total:scan.files.length,cycleNumber:(Number(status.cycleNumber)||1)+1,previewNextCycle:true}:null;};
+  p.pickPath=function(folder,wanted){const status=this.cycleStatus(folder);if(status?.complete&&status.last){const scan=this.list(folder);if(scan.ok&&scan.files?.length>1&&path.basename(String(wanted||''))===status.last){const alt=scan.files.find(x=>x.name!==status.last);if(alt)wanted=alt.path;}}return pickPath.call(this,folder,wanted);};
+  p.pickForDuration=function(folder,targetSec){const status=this.cycleStatus(folder);if(!status?.complete)return pickFor.call(this,folder,targetSec);this.ensureBag(folder,{advance:true});let candidates=[...(this.bag||[])];if(candidates.length>1&&status.last)candidates=candidates.filter(x=>x.name!==status.last);if(!candidates.length)candidates=[...(this.bag||[])];const i=bestDurationIndex(candidates,targetSec),item=candidates[i<0?0:i];return item?this.pickPath(folder,item.path):null;};
+}
+
+function customFonts(){try{return new FontManager(dataRoot()).custom().map(x=>({family:x.family,url:x.url}));}catch{return[];}}
+function designPayload(s){const o=s.visual?.output||{},url=v=>{try{return v&&fs.existsSync(v)?pathToFileURL(v).href:'';}catch{return'';}};return{...o,verticalVideoBackgroundUrl:url(o.verticalVideoBackground),musicUrl:url(o.musicFile),customFonts:customFonts()};}
+function sendDesign(s){const d=designPayload(s);for(const w of outputs())try{w.webContents.send('output:design',d);}catch{}return d;}
+async function removeSlotFiles(dir,slot,keep=''){try{for(const name of await fs.promises.readdir(dir)){const full=path.join(dir,name);if(full!==keep&&name.startsWith(`${slot}.`))await fs.promises.rm(full,{force:true});}}catch{}}
+async function copyAsset(slot,src,allowed){const m=manager(),id=m.activeId();if(!id)throw new Error('Primero crea o carga un perfil');const ext=path.extname(src).toLowerCase();if(!allowed.includes(ext))throw new Error('Tipo de archivo no compatible');const dir=m.assetsDir(id);await fs.promises.mkdir(dir,{recursive:true});const dest=path.join(dir,`${slot}${ext}`),tmp=`${dest}.tmp-${process.pid}-${Date.now()}`;await fs.promises.copyFile(src,tmp);await fs.promises.rename(tmp,dest);await removeSlotFiles(dir,slot,dest);return dest;}
+function installAsyncAssets(){
+  const bind=(ch,fn)=>{try{ipcMain.removeHandler(ch);}catch{}ipcMain.handle(ch,fn);};
+  bind('fallback:pick',async()=>{const r=await dialog.showOpenDialog(controlWindow(),{properties:['openFile'],filters:[{name:'Imágenes',extensions:['png','jpg','jpeg','webp']}]});if(r.canceled||!r.filePaths[0])return{ok:false,cancelled:true};const dest=await copyAsset('fallback',r.filePaths[0],['.png','.jpg','.jpeg','.webp']),store=new SettingsStore(dataRoot()),s=store.load();s.visual.fallbackImage=dest;store.save(s);return{ok:true,path:dest,url:pathToFileURL(dest).href};});
+  bind('output:pickMusic',async()=>{const r=await dialog.showOpenDialog(controlWindow(),{properties:['openFile'],filters:[{name:'Música MP3',extensions:['mp3']}]});if(r.canceled||!r.filePaths[0])return{ok:false,cancelled:true};const dest=await copyAsset('background-music',r.filePaths[0],['.mp3']),store=new SettingsStore(dataRoot()),s=store.load();s.visual.output.musicFile=dest;store.save(s);return{ok:true,path:dest,url:pathToFileURL(dest).href,design:sendDesign(s)};});
+  bind('output:pickVerticalBackground',async()=>{const r=await dialog.showOpenDialog(controlWindow(),{properties:['openFile'],filters:[{name:'Imagen vertical',extensions:['png','jpg','jpeg','webp']}]});if(r.canceled||!r.filePaths[0])return{ok:false,cancelled:true};const dest=await copyAsset('vertical-video-background',r.filePaths[0],['.png','.jpg','.jpeg','.webp']),store=new SettingsStore(dataRoot()),s=store.load();s.visual.output.verticalVideoBackground=dest;store.save(s);return{ok:true,path:dest,url:pathToFileURL(dest).href,design:sendDesign(s)};});
+  const clear=kind=>async()=>{const store=new SettingsStore(dataRoot()),s=store.load(),m=manager(),id=m.activeId();if(!id)return{ok:true,design:designPayload(s)};const slot=kind==='music'?'background-music':'vertical-video-background',old=kind==='music'?s.visual.output.musicFile:s.visual.output.verticalVideoBackground;if(kind==='music')s.visual.output.musicFile='';else s.visual.output.verticalVideoBackground='';store.save(s);try{const root=path.resolve(m.assetsDir(id))+path.sep,resolved=path.resolve(String(old||''));if(resolved.startsWith(root))await fs.promises.rm(resolved,{force:true});}catch{}return{ok:true,design:sendDesign(s)};};
+  bind('output:clearMusic',clear('music'));bind('output:clearVerticalBackground',clear('background'));
+}
+
+let profileMutation=null;
+async function mutation(fn){if(profileMutation){const e=new Error('Ya hay una operación de perfiles en curso');e.code='PROFILE_OPERATION_BUSY';throw e;}const task=Promise.resolve().then(fn);profileMutation=task;try{return await task;}finally{if(profileMutation===task)profileMutation=null;}}
+function installAsyncProfileCrud(){
+  const bind=(ch,fn)=>{try{ipcMain.removeHandler(ch);}catch{}ipcMain.handle(ch,fn);};
+  bind('profiles:duplicate',(_,p={})=>mutation(async()=>{const m=manager(),id=String(p.id||''),source=m.list().find(x=>x.id===id);if(!source)throw new Error('Perfil no encontrado');const srcAssets=m.assetsDir(id),oldCopy=m.copyDir;let created=null;m.copyDir=()=>{};try{created=m.duplicate(id,p);}finally{m.copyDir=oldCopy;}try{if(fs.existsSync(srcAssets))await fs.promises.cp(srcAssets,m.assetsDir(created.id),{recursive:true,force:true});return created;}catch(e){try{await fs.promises.rm(m.profileDir(created.id),{recursive:true,force:true});const i=m.registry.profiles.findIndex(x=>x.id===created.id);if(i>=0)m.registry.profiles.splice(i,1);m.saveRegistry();}catch{}throw e;} }));
+  bind('profiles:delete',(_,id)=>mutation(async()=>{const m=manager(),value=String(id||'');if(value===m.activeId()){const e=new Error('No puedes eliminar el perfil activo. Cambia primero a otro perfil y vuelve a intentarlo.');e.code='PROFILE_ACTIVE_DELETE';throw e;}if(!UUID_RE.test(value))throw new Error('Perfil no encontrado');const i=m.registry.profiles.findIndex(x=>x.id===value);if(i<0)throw new Error('Perfil no encontrado');const src=m.profileDir(value),backup=path.join(m.baseDir,'backups','deleted-profiles',`${new Date().toISOString().replace(/[:.]/g,'-')}-${value}`);if(fs.existsSync(src)){await fs.promises.mkdir(path.dirname(backup),{recursive:true});await fs.promises.cp(src,backup,{recursive:true,force:true});const st=await fs.promises.stat(backup).catch(()=>null);if(!st?.isDirectory())throw new Error('No se pudo crear la copia de seguridad del perfil; no se eliminó nada.');await fs.promises.rm(src,{recursive:true,force:true});}const [meta]=m.registry.profiles.splice(i,1);m.saveRegistry();return meta;}));
+}
+
+function installStartupProfileGate(){const p=require('./automation0325').AutomationEngine.prototype;if(p.__ec0329ProfileRequiredGate)return;Object.defineProperty(p,'__ec0329ProfileRequiredGate',{value:true});for(const name of ['startProcessing','startEmission','requestCannedNow']){const base=p[name];if(typeof base!=='function')continue;p[name]=function(...args){if(!manager().activeId()){const e=new Error('Primero crea o carga un perfil');e.code='PROFILE_REQUIRED';throw e;}return base.apply(this,args);};}}
+
+function installProfileAuditFixes0329(){installBackupRecovery();installSettingsContextGuard();installDocumentPathAliases();installCompletedCyclePreview();installAsyncAssets();installAsyncProfileCrud();installStartupProfileGate();}
+module.exports={installProfileAuditFixes0329};
