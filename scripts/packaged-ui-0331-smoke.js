@@ -24,5 +24,6 @@ app.whenReady().then(async()=>{let win,tmp='';try{
   assert(contentState.mode==='content','Siguiente cambió indebidamente a standby durante contenido');assert(contentState.paused,'El watchdog/reintento volvió a encender la música tras Siguiente');assert(!contentState.standby,'Siguiente mostró el standby entre contenidos');
   win.webContents.send('output:story',{source:'automatic',kind:'canned',mediaRole:'ad',title:'Anuncio smoke',videoUrl:musicUrl});await wait(900);
   const adState=await win.webContents.executeJavaScript("(()=>({paused:document.querySelector('#music').paused,mode:window.__ec0331StandbyMusicState?.outputMode||''}))()",true);
-  assert(adState.mode==='ad','Output no registró modo anuncio');assert(adState.paused,'La música quedó sonando encima de un anuncio');\n  win.destroy();fs.rmSync(tmp,{recursive:true,force:true});console.log('PACKAGED UI 0.3.32 OK · standby/music + news + rapid Siguiente sobre contenido/anuncio sin música superpuesta');app.exit(0);
+  assert(adState.mode==='ad','Output no registró modo anuncio');assert(adState.paused,'La música quedó sonando encima de un anuncio');
+  win.destroy();fs.rmSync(tmp,{recursive:true,force:true});console.log('PACKAGED UI 0.3.32 OK · standby/music + news + rapid Siguiente sobre contenido/anuncio sin música superpuesta');app.exit(0);
 }catch(e){console.error(e.stack||e);try{win?.destroy();}catch{}try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
