@@ -76,18 +76,25 @@ def load_model(model_path=""):
         # in its constructor, which otherwise raises: 'NoneType' object is not callable.
         # Use Perth's own compatibility watermarker so synthesis can continue.
         import perth
-        if getattr(perth, "PerthImplicitWatermarker", None) is None:
+        if not callable(getattr(perth, "PerthImplicitWatermarker", None)):
             from perth import DummyWatermarker
             perth.PerthImplicitWatermarker = DummyWatermarker
 
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         try:
-            MODEL = ChatterboxMultilingualTTS.from_pretrained(
-                device=MODEL_DEVICE, t3_model="v3"
-            )
-        except TypeError:
-            MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE)
+            try:
+                MODEL = ChatterboxMultilingualTTS.from_pretrained(
+                    device=MODEL_DEVICE, t3_model="v3"
+                )
+            except TypeError as exc:
+                # Older package builds do not expose t3_model. Only retry that
+                # compatibility path when the TypeError refers to the argument.
+                if "t3_model" not in str(exc):
+                    raise
+                MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE)
+        except Exception as exc:
+            raise RuntimeError(f"Chatterbox no pudo cargar el modelo: {exc}") from exc
         CHATTERBOX_BUILTIN = MODEL.conds
     elif ENGINE == "qwen3tts":
         from qwen_tts import Qwen3TTSModel
@@ -136,7 +143,10 @@ def chatterbox_conditionals(ref_audio="", cache_path="", exaggeration=0.5):
                 pass
 
     if not loaded:
-        model.prepare_conditionals(ref_audio, exaggeration=0.5)
+        try:
+            model.prepare_conditionals(ref_audio, exaggeration=0.5)
+        except Exception as exc:
+            raise RuntimeError(f"Chatterbox no pudo preparar la voz de referencia: {exc}") from exc
         if cache_path:
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             model.conds.save(cache_path)
@@ -237,14 +247,17 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
             exaggeration, cfg = 0.62, 0.30
 
         chatterbox_conditionals(ref_audio, cache_path, exaggeration)
-        wav = model.generate(
-            text,
-            language_id="es",
-            audio_prompt_path=None,
-            exaggeration=exaggeration,
-            cfg_weight=cfg,
-            temperature=temperature,
-        )
+        try:
+            wav = model.generate(
+                text,
+                language_id="es",
+                audio_prompt_path=None,
+                exaggeration=exaggeration,
+                cfg_weight=cfg,
+                temperature=temperature,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Chatterbox falló al sintetizar audio: {exc}") from exc
         arr = wav.detach().float().cpu().numpy()
         if arr.ndim > 1:
             arr = arr[0]
