@@ -8,7 +8,7 @@ app.whenReady().then(()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
   assert(/^2\.0\.0-lab\./.test(pkg.version),'Versión empaquetada no es V2 TTS Lab');
   assert(pkg.main==='src/bootstrap-v2lab.js','Bootstrap V2 Lab no es entry point');
-  assert(pkg.build?.appId==='pe.ec.automaticnews'&&pkg.build?.productName==='EC Automatic News','Identidad técnica del portable cambió');
+  assert(pkg.name==='ec-automatic-news','Identidad interna del paquete cambió');
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
   assert(preload.indexOf('renderer-v2lab.js')>preload.indexOf('renderer-0332.js'),'V2 UI debe cargarse después de 0.3.32');
   const worker=path.join(resourcesDir,'runtime','tts-lab','tts_lab_worker.py');assert(fs.existsSync(worker),'Worker de TTS Lab no está incluido en runtime');assert(fs.statSync(worker).size>1000,'Worker TTS Lab parece incompleto');
