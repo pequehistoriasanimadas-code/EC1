@@ -71,6 +71,15 @@ def load_model(model_path=""):
     MODEL_DEVICE = "cuda" if use_cuda else "cpu"
 
     if ENGINE == "chatterbox":
+        # Perth exposes PerthImplicitWatermarker=None when one of its optional
+        # Windows/runtime imports fails. Chatterbox calls it unconditionally
+        # in its constructor, which otherwise raises: 'NoneType' object is not callable.
+        # Use Perth's own compatibility watermarker so synthesis can continue.
+        import perth
+        if getattr(perth, "PerthImplicitWatermarker", None) is None:
+            from perth import DummyWatermarker
+            perth.PerthImplicitWatermarker = DummyWatermarker
+
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         try:
