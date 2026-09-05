@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
 require(path.join(root,'src','services','releaseV2Optimization.js'));
-assert.strictEqual(pkg.version,'2.0.0-lab.3','La build debe identificarse como 2.0.0-lab.3');
+assert.strictEqual(pkg.version,'2.0.0-lab.4','La build debe identificarse como 2.0.0-lab.4');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
 assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','V2 Lab debe conservar el appId técnico');
 assert.strictEqual(pkg.build.productName,'EC Automatic News','V2 Lab debe conservar el productName técnico para compatibilidad');
@@ -24,6 +24,7 @@ assert(preload.includes('ttsLabSelectEngine')&&preload.includes('ttsLabImportRef
 assert(worker.includes('ChatterboxMultilingualTTS')&&worker.includes('Qwen3TTSModel'),'Worker no contiene ambos motores');
 assert(worker.includes('audio_prompt_path=None')&&worker.includes('Conditionals.load')&&worker.includes('model.conds.save'),'Chatterbox debe usar voz predeterminada y cachear conditionals sin reprocesar el WAV');
 assert(worker.includes('x_vector_only_mode=False')&&worker.includes('ref_text=ref_text')&&worker.includes('generate_custom_voice'),'Qwen debe usar prompt completo y soportar modelos fine-tuned');
+assert(worker.includes('PerthImplicitWatermarker')&&worker.includes('DummyWatermarker'),'Chatterbox debe tolerar Perth sin watermarker implícito en Windows');
 assert(renderer.includes('Voz predeterminada de Chatterbox'),'La UI debe ofrecer la voz predeterminada de Chatterbox');
 assert(renderer.includes('Modelo entrenado / Fine-tuned')&&renderer.includes('Importar modelo entrenado')&&renderer.includes('Transcripción Qwen'),'La UI no expone referencia completa y fine-tuning Qwen');
 assert(runtime.includes('importFineTunedZip')&&runtime.includes('fineTunedModels')&&runtime.includes('qwenCache')&&runtime.includes('chatterboxCache'),'Runtime no implementa modelos fine-tuned y caches persistentes');
