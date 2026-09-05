@@ -11,7 +11,7 @@ const main=read('src/main.js');
 assert.strictEqual(pkg.version,'0.3.22','La versión debe ser 0.3.22');
 assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','No cambiar appId: conserva identidad técnica y datos existentes');
 assert.strictEqual(pkg.build.productName,'EC Automatic News','El productName técnico se conserva para compatibilidad del portable');
-assert.ok(/^GEC-Automatic-News-Portable-/.test(pkg.build.artifactName),'El artefacto visible debe usar GEC');
+assert.ok(/^GEC-Automatic-News-Portable-/.test(pkg.build.artifactName)||/^GEC-V2\.0-TTS-Lab-/.test(pkg.build.artifactName),'El artefacto visible debe usar GEC o la identidad explícita V2 TTS Lab');
 assert.ok(main.includes("'EC Automatic News Data'"),'Debe conservarse la carpeta de datos existente');
 
 assert.ok(policy.includes('optimized-profile-change'),'Falta reinicio del worker al cambiar el perfil optimizado');
