@@ -7,8 +7,10 @@ app.whenReady().then(async()=>{let tmp='';try{
   const required=['src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','scripts/check-0332.js'];
   for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert(pkg.version==='0.3.32','Versión empaquetada no es 0.3.32');
-  assert(pkg.main==='src/bootstrap-0332.js','Bootstrap 0.3.32 no es entry point');
+  const lab=/^2\.0\.0-lab\./.test(pkg.version);
+  assert(pkg.version==='0.3.32'||lab,'Versión empaquetada no es 0.3.32 ni V2 Lab derivada');
+  assert(pkg.main==='src/bootstrap-0332.js'||(lab&&pkg.main==='src/bootstrap-v2lab.js'),'Bootstrap empaquetado no conserva la base 0.3.32');
+  if(lab){const v2=fs.readFileSync(path.join(appRoot,'src','bootstrap-v2lab.js'),'utf8');assert(v2.includes("require('./bootstrap-0332')"),'V2 Lab no hereda bootstrap-0332');}
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
   assert(preload.includes("renderer-0332.js"),'Preload no carga renderer-0332');
   for(const file of ['renderer-ui.js','renderer-patches.js','renderer-0324.js','renderer-0325.js','renderer-0329.js','renderer-0330.js','renderer-0331.js']){
