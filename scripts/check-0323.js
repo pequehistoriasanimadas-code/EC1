@@ -11,7 +11,7 @@ const {isSafePhoneticPair,contextualUs,isSimpleLowerSpanish,strongForeignSignal}
 assert.strictEqual(pkg.version,'0.3.23','La versión debe ser 0.3.23');
 assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','No cambiar appId: conserva identidad técnica y datos existentes');
 assert.strictEqual(pkg.build.productName,'EC Automatic News','El productName técnico se conserva para compatibilidad');
-assert.ok(/^GEC-Automatic-News-Portable-/.test(pkg.build.artifactName),'El artefacto visible debe seguir usando GEC');
+assert.ok(/^GEC-Automatic-News-Portable-/.test(pkg.build.artifactName)||/^GEC-V2\.0-TTS-Lab-/.test(pkg.build.artifactName),'El artefacto visible debe seguir usando GEC o la identidad explícita V2 TTS Lab');
 assert.ok(loader.includes("require('./version0323Policy').installVersion0323Policy()"),'El backend 0.3.23 debe cargarse');
 assert.ok(loader.includes("r.src='renderer-0323.js'"),'La UI 0.3.23 debe cargarse después de 0.3.22');
 
