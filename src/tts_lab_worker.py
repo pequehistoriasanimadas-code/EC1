@@ -98,7 +98,7 @@ def generate_piece(text, ref_audio, style, params):
         wav = model.generate(
             text,
             language_id="es",
-            audio_prompt_path=ref_audio,
+            audio_prompt_path=ref_audio or None,
             exaggeration=exaggeration,
             cfg_weight=cfg,
             temperature=temperature,
@@ -136,8 +136,10 @@ def generate(payload):
     params = payload.get("params") or {}
     if not text:
         raise RuntimeError("No hay texto para locutar")
-    if not ref_audio or not os.path.isfile(ref_audio):
-        raise RuntimeError("Selecciona una voz de referencia antes de usar este motor")
+    if ENGINE == "qwen3tts" and (not ref_audio or not os.path.isfile(ref_audio)):
+        raise RuntimeError("Selecciona una voz de referencia antes de usar Qwen3-TTS")
+    if ENGINE == "chatterbox" and ref_audio and not os.path.isfile(ref_audio):
+        raise RuntimeError("La voz de referencia seleccionada ya no existe")
     if not output:
         raise RuntimeError("Ruta de salida inválida")
     started = time.perf_counter()
