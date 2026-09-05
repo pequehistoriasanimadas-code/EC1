@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs'),path=require('path'),os=require('os');
+const {app}=require('electron');
+const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked','resources')),appRoot=path.join(resourcesDir,'app.asar'),assert=(v,m)=>{if(!v)throw new Error(m);};
+app.whenReady().then(()=>{let tmp='';try{
+  const required=['src/bootstrap-v2lab.js','src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','src/services/releaseV2Lab.js','src/services/releaseV2Optimization.js','src/services/ttsLabRuntime.js','src/renderer-v2lab.js','src/control-v2lab.css','src/tts_lab_worker.py','scripts/check-v2lab.js'];
+  for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
+  const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
+  assert(/^2\.0\.0-lab\./.test(pkg.version),'Versión empaquetada no es V2 TTS Lab');
+  assert(pkg.main==='src/bootstrap-v2lab.js','Bootstrap V2 Lab no es entry point');
+  assert(pkg.build?.appId==='pe.ec.automaticnews'&&pkg.build?.productName==='EC Automatic News','Identidad técnica del portable cambió');
+  const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
+  assert(preload.indexOf('renderer-v2lab.js')>preload.indexOf('renderer-0332.js'),'V2 UI debe cargarse después de 0.3.32');
+  const worker=path.join(resourcesDir,'runtime','tts-lab','tts_lab_worker.py');assert(fs.existsSync(worker),'Worker de TTS Lab no está incluido en runtime');assert(fs.statSync(worker).size>1000,'Worker TTS Lab parece incompleto');
+  tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-v2tts-0332-'));
+  const {TTSLabRuntime,ENGINES}=require(path.join(appRoot,'src','services','ttsLabRuntime.js'));const rt=new TTSLabRuntime({resourcesDir,dataDir:tmp});const st=rt.status('kokoro');
+  assert(st.python,'TTS Lab no encuentra Python portable');assert(st.workerScript,'TTS Lab no encuentra worker empaquetado');assert(ENGINES.chatterbox&&ENGINES.qwen3tts,'Catálogo experimental incompleto');
+  assert(st.engines.some(x=>x.id==='chatterbox'&&!x.installed)&&st.engines.some(x=>x.id==='qwen3tts'&&!x.installed),'Motores experimentales deben iniciar bajo demanda');
+  const {normalizeProfileTts}=require(path.join(appRoot,'src','services','releaseV2Lab.js'));const profile=normalizeProfileTts({engine:'qwen3tts',style:'news',referenceVoiceId:'ref-test'});assert(profile.engine==='qwen3tts'&&profile.referenceVoiceId==='ref-test','Normalización de perfil TTS Lab falló');
+  const r32=require(path.join(appRoot,'src','services','release0332.js'));assert(typeof r32.projectFullQueue==='function','Base 0.3.32 no expone planificador final');
+  fs.rmSync(tmp,{recursive:true,force:true});
+  console.log('PACKAGED V2 TTS LAB 0.3.32 OK · herencia 0.3.32 · runtime separado · motores bajo demanda · cola final preservada');
+  app.exit(0);
+}catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
