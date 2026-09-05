@@ -1,0 +1,46 @@
+/* GEC 0.3.30 · responsive design editor + effective queue */
+#ec0325DesignEditor{min-width:0}
+#ec0325DesignEditor .ec25-design-block{container-type:inline-size;min-width:0}
+#ec0325DesignEditor .ec25-design-row>*{min-width:0}
+#ec0325DesignEditor .ec25-bg-row>*{min-width:0}
+#ec0325DesignEditor .ec25-opacity-control{width:100%;min-width:0}
+#ec0325DesignEditor .ec25-opacity-control input[type=range]{width:auto!important;min-width:0!important;flex:1 1 auto!important}
+#ec0325DesignEditor .ec25-opacity-number{width:64px!important;min-width:0!important;flex:0 0 64px!important}
+#ec0325DesignEditor .ec25-opacity-control>span{flex:0 0 auto}
+
+@container (max-width: 900px){
+  #ec0325DesignEditor .ec25-bg-head{display:none!important}
+  #ec0325DesignEditor .ec25-bg-row{display:grid!important;grid-template-columns:minmax(120px,1fr) minmax(105px,.75fr) minmax(95px,.7fr)!important;grid-template-areas:"label color radius" "opacity opacity opacity"!important;gap:8px 10px!important;padding:11px 4px!important;align-items:center!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-row-label{grid-area:label!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-color-control{grid-area:color!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-radius-control,#ec0325DesignEditor .ec25-bg-row>.ec25-radius-spacer{grid-area:radius!important}
+  #ec0325DesignEditor .ec25-bg-row>.ec25-opacity-control{grid-area:opacity!important}
+}
+
+@container (max-width: 720px){
+  #ec0325DesignEditor .ec25-design-head{display:none!important}
+  #ec0325DesignEditor .ec25-design-row{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 76px 58px 62px!important;grid-template-areas:"label label label label label" "family variant size upper color"!important;gap:8px!important;padding:11px 4px!important;align-items:center!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-row-label{grid-area:label!important;margin-bottom:1px}
+  #ec0325DesignEditor .ec25-design-row .ec25-family{grid-area:family!important;width:100%!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-variant{grid-area:variant!important;width:100%!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-size{grid-area:size!important;width:100%!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-upper{grid-area:upper!important;width:100%!important;min-width:0!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-text-color{grid-area:color!important;width:100%!important;min-width:44px!important}
+}
+@container (max-width: 520px){
+  #ec0325DesignEditor .ec25-design-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 72px!important;grid-template-areas:"label label label" "family family family" "variant size upper" "color color color"!important}
+  #ec0325DesignEditor .ec25-design-row .ec25-text-color{height:34px!important;max-width:110px!important}
+  #ec0325DesignEditor .ec25-font-actions{display:grid!important;grid-template-columns:1fr!important;gap:7px!important}
+  #ec0325DesignEditor .ec25-bg-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;grid-template-areas:"label label" "color radius" "opacity opacity"!important}
+  #ec0325DesignEditor .ec25-opacity-number{width:58px!important;flex-basis:58px!important}
+}
+
+.ec0330-preparing-divider{display:flex;align-items:baseline;gap:10px;padding:12px 4px 7px;margin-top:5px;border-top:1px solid #343434;color:#ddd}
+.ec0330-preparing-divider strong{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#f0c93d}
+.ec0330-preparing-divider span{font-size:11px;color:#858585}
+.ec0330-custom-interval{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;border:1px solid #3a3a3a;border-radius:12px;background:#151515;font-weight:750}
+.ec0330-custom-interval.hidden{display:none!important}
+.ec0330-custom-interval input{width:110px!important;flex:0 0 110px}
+.ec0330-custom-unit{font-weight:750;color:#f0f0f0}
+.ec0330-custom-help{flex-basis:100%;font-weight:400;color:#999;margin-top:2px}
+@media(max-width:760px){.ec0330-preparing-divider{align-items:flex-start;flex-direction:column;gap:3px}.ec0330-custom-interval input{width:90px!important;flex-basis:90px}}

@@ -1,153 +1,63 @@
+'use strict';
+let feedHealth={},editingFeedId='',newsRefreshSeq=0;
+
+function humanFeedStatus(r){if(!r)return{label:'Sin comprobar',cls:'',dot:''};if(r.paused)return{label:'Pausada',cls:'warn',dot:'paused'};if(r.ok){const fallback=/FALLBACK/i.test(r.mode||'');return{label:`${fallback?'Funcionando mediante fuente alternativa':'Funcionando'} · ${r.count||0} noticias`,cls:'ok',dot:'ok'};}return{label:'No pudimos leer esta fuente',cls:'error',dot:'error'};}
+async function testFeedAt(i,silent=false){const f=settings.rssFeeds[i];if(!f)return null;if(!f.enabled){feedHealth[f.id]={paused:true};renderFeeds();return null;}const testId=`${f.id}:${f.url}`;feedHealth[f.id]={checking:true,testId};renderFeeds();try{const r=await window.ECAPI.testRss({...f});if(settings.rssFeeds[i]?.id!==f.id||String(settings.rssFeeds[i]?.url||'')!==String(f.url||''))return null;feedHealth[f.id]=r;if(!silent)status(r.ok?`${f.name}: ${r.count} noticias disponibles`:`No pudimos leer ${f.name}`);renderFeeds();return r;}catch(e){if(settings.rssFeeds[i]?.id!==f.id||String(settings.rssFeeds[i]?.url||'')!==String(f.url||''))return null;feedHealth[f.id]={ok:false,error:e.message||String(e),mode:'ERROR'};if(!silent)status(`No pudimos comprobar ${f.name}`);renderFeeds();return null;}}
+async function checkAllFeeds(){for(let i=0;i<settings.rssFeeds.length;i++)if(settings.rssFeeds[i].enabled)await testFeedAt(i,true);}
+function ensureGlobalPartialCloseControls(){
+  const add=$('#addFeed'),card=add?.closest('.card');if(!add||!card||!settings)return;
+  settings.rssPartialClose={enabled:true,template:'Para más información, visita {web}.',...(settings.rssPartialClose||{})};
+  let wrap=$('#globalPartialClose');if(!wrap){wrap=document.createElement('div');wrap.id='globalPartialClose';wrap.className='subcard top-gap';wrap.innerHTML=`<h3>Cierre para fuentes parciales</h3><p class="note">Se aplica a todas las fuentes RSS. EC detecta automáticamente la web original de cada medio; no necesitas configurarla una por una.</p><label class="switch-row"><span><b>Añadir cierre web cuando corresponda</b><small>Solo se usa si la página indica que faltan datos y la IA marca la fuente como parcial.</small></span><input id="partialSourceCloseEnabled" type="checkbox"><span class="switch-ui"></span></label><label>Texto del cierre<input id="partialSourceCloseTemplate" value="Para más información, visita {web}."><small><b>{web}</b> se reemplaza automáticamente por el dominio de la fuente de la noticia.</small></label>`;add.insertAdjacentElement('afterend',wrap);$('#partialSourceCloseEnabled').onchange=e=>{settings.rssPartialClose.enabled=e.target.checked;};$('#partialSourceCloseTemplate').oninput=e=>{settings.rssPartialClose.template=e.target.value;};}
+  $('#partialSourceCloseEnabled').checked=settings.rssPartialClose.enabled!==false;$('#partialSourceCloseTemplate').value=settings.rssPartialClose.template||'Para más información, visita {web}.';
+}
 function renderFeeds(){
-  const box=$('#feeds');box.innerHTML='';
-  settings.rssFeeds.forEach((f,i)=>{
-    const d=document.createElement('div');d.className='feedrow';
-    d.innerHTML=`<div class="feed-head"><span class="feed-title">${escapeHtml(f.name||'Fuente RSS')}</span><label class="switch-row" style="margin:0;padding:7px 9px;min-width:150px"><span><b>RSS activo</b></span><input type="checkbox" class="f-enabled" data-i="${i}" ${f.enabled?'checked':''}><span class="switch-ui"></span></label></div><label>Nombre<input class="f-name" data-i="${i}" value="${escapeHtml(f.name)}"></label><label>URL<input class="f-url" data-i="${i}" value="${escapeHtml(f.url)}"></label><div class="buttons"><button class="f-test" data-i="${i}">Probar RSS</button><button class="f-del dark" data-i="${i}">Eliminar</button></div><div class="feed-status" data-status-i="${i}">Sin comprobar</div>`;
-    box.appendChild(d);
-  });
-  $$('.f-enabled').forEach(x=>x.onchange=e=>settings.rssFeeds[+e.target.dataset.i].enabled=e.target.checked);
-  $$('.f-name').forEach(x=>x.oninput=e=>{const i=+e.target.dataset.i;settings.rssFeeds[i].name=e.target.value;const h=e.target.closest('.feedrow').querySelector('.feed-title');h.textContent=e.target.value||'Fuente RSS';});
-  $$('.f-url').forEach(x=>x.oninput=e=>settings.rssFeeds[+e.target.dataset.i].url=e.target.value);
-  $$('.f-test').forEach(x=>x.onclick=async e=>{
-    const i=+e.target.dataset.i,f=settings.rssFeeds[i],el=$(`[data-status-i="${i}"]`);el.className='feed-status';el.textContent='Comprobando...';
-    try{const r=await window.ECAPI.testRss(f);el.className=`feed-status ${r.ok?'ok':r.mode==='UNRECOGNIZED'?'warn':'error'}`;el.textContent=`${r.ok?'RSS OK':'Atención'} · ${r.count} noticias · ${r.mode} · ${r.detail||''}`;status(`${f.name}: ${r.count} noticias (${r.mode})`);}catch(err){el.className='feed-status error';el.textContent=`Error · ${err.message||err}`;status(`RSS error: ${err.message||err}`);}
-  });
-  $$('.f-del').forEach(x=>x.onclick=e=>{settings.rssFeeds.splice(+e.target.dataset.i,1);renderFeeds();});
-  const filter=$('#feedFilter');filter.innerHTML='<option value="">Todos los RSS</option>'+settings.rssFeeds.map(f=>`<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('');
+  const box=$('#feeds');if(!box||!settings)return;ensureGlobalPartialCloseControls();const filter=$('#feedFilter'),previousFilter=filter?.value||'',openRow=box.querySelector('.feedrow.editing');if(openRow){const openFeed=settings.rssFeeds[Number(openRow.dataset.feedIndex)];if(openFeed)editingFeedId=openFeed.id;}box.innerHTML='';
+  settings.rssFeeds.forEach((f,i)=>{const health=f.enabled?feedHealth[f.id]:{paused:true},hs=humanFeedStatus(health),d=document.createElement('div');d.className=`feedrow${f.enabled?'':' paused'}${editingFeedId===f.id?' editing':''}`;d.dataset.feedIndex=String(i);const checking=health?.checking?'Comprobando…':hs.label;
+    d.innerHTML=`<div class="feed-head"><div class="feed-summary"><span class="feed-dot ${health?.checking?'':hs.dot}"></span><div><div class="feed-title">${escapeHtml(f.name||'Fuente')}</div><div class="feed-state">${escapeHtml(checking)}</div></div></div><div class="feed-actions"><button class="f-edit dark compact" data-i="${i}">Editar</button><button class="f-pause dark compact" data-i="${i}">${f.enabled?'Pausar':'Reactivar'}</button><button class="f-del danger compact" data-i="${i}">Eliminar</button></div></div><div class="feed-edit"><label>Nombre<input class="f-name" data-i="${i}" value="${escapeHtml(f.name)}"></label><label>URL RSS / Atom<input class="f-url" data-i="${i}" value="${escapeHtml(f.url)}"></label><div class="buttons"><button class="f-test" data-i="${i}">Comprobar nuevamente</button></div><div class="feed-status ${hs.cls}" data-status-i="${i}">${escapeHtml(checking)}</div></div>`;box.appendChild(d);});
+  if($('#feedCount'))$('#feedCount').textContent=`${settings.rssFeeds.length} fuente${settings.rssFeeds.length===1?'':'s'}`;
+  $$('.f-edit').forEach(x=>x.onclick=e=>{const row=e.target.closest('.feedrow'),i=+e.target.dataset.i,id=settings.rssFeeds[i]?.id||'',opening=!row.classList.contains('editing');editingFeedId=opening?id:'';row.classList.toggle('editing',opening);});
+  $$('.f-pause').forEach(x=>x.onclick=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];f.enabled=!f.enabled;if(!f.enabled)feedHealth[f.id]={paused:true};else delete feedHealth[f.id];renderFeeds();if(f.enabled)testFeedAt(i,true);});
+  $$('.f-name').forEach(x=>{x.oninput=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(!f)return;f.name=e.target.value;const row=e.target.closest('.feedrow'),title=row?.querySelector('.feed-title');if(title)title.textContent=e.target.value.trim()||'Fuente';};x.onchange=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(!f)return;f.name=e.target.value.trim()||'Fuente';e.target.value=f.name;};});
+  $$('.f-url').forEach(x=>{x.oninput=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(f)f.url=e.target.value;};x.onchange=e=>{const i=+e.target.dataset.i,f=settings.rssFeeds[i];if(!f)return;f.url=e.target.value.trim();e.target.value=f.url;delete feedHealth[f.id];if(f.url)testFeedAt(i,true);};});
+  $$('.f-test').forEach(x=>x.onclick=e=>testFeedAt(+e.target.dataset.i,false));
+  $$('.f-del').forEach(x=>x.onclick=e=>{const i=+e.target.dataset.i,id=settings.rssFeeds[i]?.id;if(editingFeedId===id)editingFeedId='';delete feedHealth[id];settings.rssFeeds.splice(i,1);renderFeeds();});
+  if(filter){filter.innerHTML='<option value="">Todas las fuentes</option>'+settings.rssFeeds.filter(f=>f.enabled).map(f=>`<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('');filter.value=[...filter.options].some(o=>o.value===previousFilter)?previousFilter:'';}
 }
 
-async function refreshRuntimeStatus(){
-  try{
-    const s=await window.ECAPI.localStatus();
-    const idle=s.idleStopScheduled?` · apagado automático en ~${Math.max(1,Math.ceil((s.idleStopInSec||0)/60))} min`:'';
-    const p=s.profile||{};
-    const profile=p.label?` · Perfil: ${p.label} · ctx ${p.ctx} · GPU ${p.gpuLayers} capas · CPU ${p.threads} hilos`:'';
-    $('#localInfo').innerHTML=`Runtime: ${s.runtime?'✓':'✕'} · Modelo: ${s.model?'✓':'✕'} · Servidor: ${s.running?'activo':'detenido'}${profile}${idle}`;
-    $('#startLocal').disabled=!s.model||s.running;
-    $('#stopLocal').disabled=!s.running;
-  }catch(e){$('#localInfo').textContent='IA local no disponible';$('#startLocal').disabled=true;$('#stopLocal').disabled=true;}
-  try{
-    const t=await window.ECAPI.ttsStatus();
-    $('#ttsInfo').textContent=t.ready?`Kokoro integrado · modo seguro · máximo ${t.threads||4} hilos · una voz a la vez`:'Kokoro no disponible en esta build';
-    const v=$('#voice');v.innerHTML='';
-    (t.voices||[]).filter(x=>/^e[fm]_/.test(x)).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;v.appendChild(o)});
-    if(!v.options.length)(t.voices||[]).slice(0,50).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;v.appendChild(o)});
-    if([...v.options].some(o=>o.value===settings.tts.voice))v.value=settings.tts.voice;
-  }catch{$('#ttsInfo').textContent='Error al cargar Kokoro';}
-}
-async function refreshPronunciationStatus(){
-  try{
-    const p=await window.ECAPI.pronunciationStatus();
-    const el=$('#pronunciationInfo');if(!el)return;
-    el.textContent=p.model
-      ?`Normalizador inteligente listo ✓ · ${p.modelName||'Qwen 0.6B'} · ${p.cacheEntries||0} pronunciaciones aprendidas${p.running?' · procesando':' · bajo demanda'}`
-      :'Reglas básicas activas ✓ · modelo inteligente opcional no descargado';
-    $('#downloadPronunciationModel').disabled=!!p.model;
-  }catch(e){if($('#pronunciationInfo'))$('#pronunciationInfo').textContent='Normalizador básico disponible; estado del modelo inteligente no disponible';}
-}
+function voiceLabel(name){const n=String(name||''),gender=n.startsWith('ef_')?'femenina':n.startsWith('em_')?'masculina':'',pretty=n.replace(/^e[fm]_?/,'').replace(/[_-]+/g,' ');return`${pretty||n}${gender?` · ${gender}`:''}`;}
+async function refreshRuntimeStatus(){try{const s=await window.ECAPI.localStatus();$('#localInfo').textContent=!s.model?'IA local no descargada. Puedes descargarla para usar EC sin depender de una API.':s.running?'IA local preparada y activa ✓':'IA local lista ✓ · se activará automáticamente cuando sea necesaria.';$('#downloadModel').disabled=!!s.model||!!s.downloading;$('#startLocal').disabled=!s.model||s.running;$('#stopLocal').disabled=!s.running;}catch(e){$('#localInfo').textContent='No se pudo comprobar la IA local.';$('#startLocal').disabled=true;$('#stopLocal').disabled=true;}try{const t=await window.ECAPI.ttsStatus(),v=$('#voice'),previous=settings?.tts?.voice||v.value;$('#ttsInfo').textContent=t.ready?(t.workerRunning?'Motor de voz preparado ✓ · permanece listo entre notas':'Motor de voz disponible ✓ · se preparará al generar la primera locución'):'El motor de voz no está disponible en esta instalación.';v.innerHTML='';const voices=(t.voices||[]).filter(x=>/^e[fm]_/.test(x)),usable=voices.length?voices:(t.voices||[]).slice(0,80);for(const name of usable){const o=document.createElement('option');o.value=name;o.textContent=voiceLabel(name);v.appendChild(o);}if(!v.options.length){const o=document.createElement('option');o.value='';o.textContent='No se encontraron voces';v.appendChild(o);v.disabled=true;}else{v.disabled=false;if([...v.options].some(o=>o.value===previous))v.value=previous;else{v.value=v.options[0].value;if(settings?.tts)settings.tts.voice=v.value;}}}catch(e){$('#ttsInfo').textContent='No se pudo cargar la lista de voces.';$('#voice').innerHTML='<option value="">Voces no disponibles</option>';$('#voice').disabled=true;}}
+async function refreshPronunciationStatus(){try{const p=await window.ECAPI.pronunciationStatus(),learned=Number(p.learningEntries??p.cacheEntries??0);$('#pronunciationInfo').textContent=`Pronunciación automática activa ✓ · ${learned} término${learned===1?'':'s'} aprendido${learned===1?'':'s'}${p.model?' · mejora local disponible':''}`;$('#downloadPronunciationModel').disabled=!!p.model;$('#pronunciationLearningCount').textContent=`${learned} aprendidas`;}catch{$('#pronunciationInfo').textContent='Pronunciación básica disponible.';}}
+function refreshCannedIntervalUi(){if($('#cannedCustomRow'))$('#cannedCustomRow').classList.toggle('hidden',$('#cannedInterval').value!=='custom');}
+function readCannedInterval(){const v=$('#cannedInterval').value;if(v==='custom')return Math.max(1,Math.min(999,Number($('#cannedCustomInterval').value)||15));return Math.max(0,Number(v)||0);}
+async function refreshCannedList(){const box=$('#cannedList'),count=$('#cannedCount'),info=$('#cannedFolderInfo');if(!box)return;try{const r=await window.ECAPI.cannedList();if(r.folder)settings.canned.folder=r.folder;info.textContent=r.folder?`${r.folder}${r.ok?` · ${r.count||0} videos`:''}`:'Sin carpeta seleccionada.';count.textContent=`${r.count||0} videos`;if(!r.files?.length){box.innerHTML=`<div class="empty">${escapeHtml(r.message||'No hay contenidos compatibles.')}</div>`;return;}box.innerHTML=r.files.map(x=>`<div class="media-item"><div class="media-name">${escapeHtml(x.name)}</div><div class="media-meta">${Number(x.sizeMB||0).toFixed(1)} MB</div></div>`).join('');}catch(e){box.innerHTML='<div class="empty">No se pudieron leer los contenidos.</div>';count.textContent='0 videos';}}
+async function refreshAdsList(){const box=$('#adsList'),count=$('#adsCount'),info=$('#adsFolderInfo'),badge=$('#adsState');if(!box)return;try{const r=await window.ECAPI.cannedListAds();if(r.folder)settings.canned.adsFolder=r.folder;const folder=String(r.folder||settings.canned.adsFolder||'');info.textContent=folder?`${folder}${r.ok?` · ${r.count||0} videos`:''}`:'Sin carpeta seleccionada.';count.textContent=`${r.count||0} videos`;const enabled=settings.canned.insertAdAfterContent!==false;badge.textContent=!folder?'SIN CARPETA':enabled?'ACTIVO':'DESACTIVADO';badge.className=`status-pill ${folder&&enabled?'ok':'neutral'}`;if(!r.files?.length){box.innerHTML=`<div class="empty">${escapeHtml(r.message||'No hay anuncios compatibles.')}</div>`;return;}box.innerHTML=r.files.map(x=>`<div class="media-item"><div class="media-name">${escapeHtml(x.name)}</div><div class="media-meta">${Number(x.sizeMB||0).toFixed(1)} MB</div></div>`).join('');}catch{box.innerHTML='<div class="empty">No se pudieron leer los anuncios.</div>';count.textContent='0 videos';badge.textContent='ERROR';badge.className='status-pill error';}}
+async function refreshDocuments(){const box=$('#documentList');if(!box)return;try{documentScan=await window.ECAPI.documentList();if(documentScan.folder){settings.documents.folder=documentScan.folder;$('#documentFolderInfo').textContent=documentScan.folder;}$('#documentCount').textContent=`${documentScan.count||0} documento${documentScan.count===1?'':'s'}`;renderDocuments();}catch(e){box.innerHTML='<div class="empty">No se pudo leer la carpeta de documentos.</div>';}}
+function renderDocuments(){const box=$('#documentList');if(!box)return;const files=documentScan.files||[];if(!files.length){box.innerHTML='<div class="empty">No se encontraron archivos TXT o DOCX.</div>';return;}box.innerHTML=files.map(x=>{const image=x.imageUrl?`<div class="document-image" style="background-image:url('${escapeHtml(x.imageUrl.replace(/'/g,'%27'))}')"></div>`:'<div class="document-image"></div>',cat=x.categoryFromFolder||'Categoría automática',img=x.imageSource==='document'?'imagen propia':x.imageSource==='category'?'imagen de categoría':'imagen de respaldo';return`<div class="document-item ${x.processed?'processed':''}">${image}<div class="document-copy"><div class="document-title">${escapeHtml(x.title||x.name)}</div><div class="document-meta">${escapeHtml(cat)} · ${escapeHtml(x.ext.toUpperCase())} · ${escapeHtml(img)}</div></div><span class="document-badge ${x.processed?'done':''}">${x.processed?'Procesada':'Pendiente'}</span></div>`;}).join('');}
+async function loadNews(options={}){const seq=++newsRefreshSeq;if(!options.quiet)status('Actualizando noticias…');try{const r=await window.ECAPI.loadRss();if(seq!==newsRefreshSeq)return;stories=r.items||[];for(const f of r.feedStatus||[])feedHealth[f.id]=f;renderFeeds();renderNews();status(`${stories.length} noticias disponibles${r.errors?.length?` · ${r.errors.length} fuente${r.errors.length===1?'':'s'} con problemas`:''}`);}catch(e){if(seq===newsRefreshSeq)status('No se pudieron actualizar las noticias. Revisa tus fuentes.');}}
+function renderNews(){const q=($('#search')?.value||'').toLowerCase(),ff=$('#feedFilter')?.value||'',list=$('#newsList');if(!list)return;list.innerHTML='';stories.filter(s=>(!ff||s.feedId===ff)&&(!q||`${s.title} ${s.description}`.toLowerCase().includes(q))).forEach(s=>{const el=document.createElement('div');el.className='newsItem';el.innerHTML=`<div class="thumb" style="background-image:url('${escapeHtml((s.image||'').replace(/'/g,'%27'))}')"></div><div class="meta"><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.feedName)} · ${escapeHtml(s.category||'Actualidad')}</p><p>${escapeHtml(s.description||'')}</p></div><button class="edit">Revisar</button>`;el.querySelector('.edit').onclick=()=>openStory(s);list.appendChild(el);});if(!list.children.length)list.innerHTML='<div class="empty">No hay noticias que coincidan con la búsqueda.</div>';}
+async function openStory(s){currentStory=s;status('Abriendo noticia…');try{currentArticle=await window.ECAPI.fetchArticle(s.link);}catch{currentArticle={title:s.title,description:s.description,body:s.description,image:''};}$('#title').value=s.title||currentArticle.title||'';$('#category').value=s.category||currentArticle.category||'ACTUALIDAD';$('#summary').value=s.description||currentArticle.description||'';$('#script').value='';$('#manualReview').classList.remove('hidden');refreshPreview();tab('generator');status('Noticia abierta para revisión');}
 
-function refreshCannedIntervalUi(){
-  if(!$('#cannedInterval'))return;
-  $('#cannedCustomRow').classList.toggle('hidden',$('#cannedInterval').value!=='custom');
+function normalizeFeedUrlForCompare(value){try{const u=new URL(String(value||'').trim());u.hash='';return u.href.replace(/\/$/,'');}catch{return String(value||'').trim().replace(/\/$/,'');}}
+function rssCoreSignature(value){let rows=value;if(typeof rows==='string'){try{rows=JSON.parse(rows);}catch{rows=[];}}if(!Array.isArray(rows))rows=[];return JSON.stringify(rows.map(x=>Array.isArray(x)?x.slice(0,5):[x.id,String(x.name||'').trim(),String(x.url||'').trim(),x.enabled!==false,Number(x.priority)||50]));}
+function validateSettingsBeforeSave(){
+  const seen=new Set();for(const f of settings.rssFeeds||[]){if(!String(f.url||'').trim())continue;const u=normalizeFeedUrlForCompare(f.url);if(seen.has(u))throw new Error('La misma dirección RSS está agregada más de una vez.');seen.add(u);}
+  ensureGlobalPartialCloseControls();const enabled=$('#partialSourceCloseEnabled')?.checked!==false,template=String($('#partialSourceCloseTemplate')?.value||'').trim();if(enabled&&!template)throw new Error('Escribe el texto del cierre para fuentes parciales.');if(enabled&&!/\{web\}/i.test(template))throw new Error('El texto del cierre debe incluir {web} para insertar automáticamente la web del medio.');settings.rssPartialClose={enabled,template:template||'Para más información, visita {web}.'};
+  const prompt=$('#editorialPrompt')?.value||'',tokens=Math.ceil(prompt.length/4),instructions=$('#editorialInstructions')?.value||'',words=instructions.trim().split(/\s+/).filter(Boolean).length;if(tokens>1000)throw new Error('El prompt editorial es demasiado largo. Redúcelo a menos de 1000 tokens aproximados.');if(words>300)throw new Error('Las instrucciones adicionales superan 300 palabras. Redúcelas antes de guardar.');
 }
-function readCannedInterval(){
-  const v=$('#cannedInterval').value;
-  if(v==='custom')return Math.max(1,Math.min(999,Number($('#cannedCustomInterval').value)||15));
-  return Math.max(0,Number(v)||0);
-}
-async function refreshCannedList(){
-  const box=$('#cannedList'),count=$('#cannedCount'),info=$('#cannedFolderInfo');
-  if(!box)return;
-  try{
-    const r=await window.ECAPI.cannedList();
-    if(r.folder)settings.canned.folder=r.folder;
-    info.textContent=r.folder?`${r.folder}${r.ok?` · ${r.count||0} videos compatibles`:''}`:'Sin carpeta seleccionada.';
-    count.textContent=`${r.count||0} videos`;
-    if(!r.files?.length){box.innerHTML=`<div class="empty">${escapeHtml(r.message||'No hay videos compatibles.')}</div>`;return;}
-    box.innerHTML=r.files.map(x=>`<div class="media-item"><div class="media-name">${escapeHtml(x.name)}</div><div class="media-meta">${Number(x.sizeMB||0).toFixed(1)} MB</div></div>`).join('');
-  }catch(e){box.innerHTML=`<div class="empty">${escapeHtml(e.message||e)}</div>`;count.textContent='0 videos';}
-}
-
-async function loadNews(){
-  status('Actualizando RSS...');
-  try{
-    const r=await window.ECAPI.loadRss();stories=r.items||[];renderNews();
-    const fallback=(r.feedStatus||[]).filter(x=>x.mode==='WEB_FALLBACK').length;
-    status(`${stories.length} noticias · ${r.errors?.length||0} RSS con error${fallback?` · ${fallback} usando fallback web`:''}`);
-  }catch(e){status(`Error RSS: ${e.message||e}`);}
-}
-function renderNews(){
-  const q=$('#search').value.toLowerCase(),ff=$('#feedFilter').value,list=$('#newsList');list.innerHTML='';
-  stories.filter(s=>(!ff||s.feedId===ff)&&(!q||`${s.title} ${s.description}`.toLowerCase().includes(q))).forEach(s=>{
-    const el=document.createElement('div');el.className='newsItem';el.innerHTML=`<div class="thumb" style="background-image:url('${escapeHtml((s.image||'').replace(/'/g,'%27'))}')"></div><div class="meta"><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.feedName)} · ${escapeHtml(s.category||'Sin categoría')}</p><p>${escapeHtml(s.description||'')}</p></div><button class="edit">Editar</button>`;el.querySelector('.edit').onclick=()=>openStory(s);list.appendChild(el);
-  });
-}
-async function openStory(s){
-  currentStory=s;status('Cargando artículo...');
-  try{currentArticle=await window.ECAPI.fetchArticle(s.link);}catch{currentArticle={title:s.title,description:s.description,body:s.description,image:''};status('Artículo parcial: se usará el RSS');}
-  $('#title').value=s.title||currentArticle.title||'';$('#category').value=s.category||currentArticle.category||'ACTUALIDAD';$('#summary').value=s.description||currentArticle.description||'';$('#script').value='';refreshPreview();tab('editor');status('Noticia lista para editar');
-}
-
 async function saveSettings(options={}){
-  normalizeProviders(true);updateDesignFromControls(false);
-  settings.ai.claudeModel=$('#claudeModel').value.trim();settings.ai.geminiModel=$('#geminiModel').value.trim();settings.ai.claudeKey=$('#claudeKey').value.trim();settings.ai.geminiKey=$('#geminiKey').value.trim();
-  settings.ai.localBackupMode=$('#localBackupMode').value||'on_demand';settings.ai.localIdleMinutes=Math.max(1,Math.min(60,Number($('#localIdleMinutes').value)||5));
-  settings.tts.voice=$('#voice').value||settings.tts.voice;settings.tts.speed=Number($('#voiceSpeed').value||1);settings.tts.pronunciationSmart=true;
-  settings.canned.enabled=$('#cannedEnabled').checked;settings.canned.emergency=$('#cannedEmergency').checked;settings.canned.interval=readCannedInterval();
-  settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15));settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);
-  settings.automation.maxAgeHours=Number($('#maxAge').value||6);settings.automation.avoidRepeats=$('#avoidRepeats').checked;settings.visual.pauseSeconds=Number($('#pauseSeconds').value||2.5);
-  const r=await window.ECAPI.saveSettings(settings);settings.ai.hasClaudeKey=!!r.hasClaudeKey;settings.ai.hasGeminiKey=!!r.hasGeminiKey;settings.ai.claudeKey='';settings.ai.geminiKey='';$('#claudeKey').value='';$('#geminiKey').value='';refreshProviderUi();await refreshRuntimeStatus();await refreshPronunciationStatus();if(!options.quiet)status('Ajustes guardados');return r;
+  if(!settings)throw new Error('Los ajustes todavía no están disponibles');normalizeProviders(true);updateDesignFromControls(false);validateSettingsBeforeSave();
+  settings.ai.claudeModel='claude-haiku-4-5-20251001';settings.ai.geminiModel=$('#geminiModel').value.trim();settings.ai.claudeKey=$('#claudeKey').value.trim();settings.ai.geminiKey=$('#geminiKey').value.trim();settings.ai.localBackupMode=$('#localBackupMode').value||'on_demand';settings.ai.localIdleMinutes=Math.max(1,Math.min(60,Number($('#localIdleMinutes').value)||5));
+  if($('#editorialPrompt')){const value=$('#editorialPrompt').value.trim(),official=String(settings.ai.editorialOfficialPrompt||'').trim();settings.ai.editorialPrompt=value===official?'':value;settings.ai.editorialPromptCustom=!!settings.ai.editorialPrompt;if(settings.ai.editorialPromptCustom)settings.ai.lastValidEditorialPrompt=settings.ai.editorialPrompt;}if($('#editorialInstructions'))settings.ai.editorialInstructions=$('#editorialInstructions').value.trim();
+  const rssBefore=rssCoreSignature(settings.__savedRssSignature||''),rssNow=rssCoreSignature(settings.rssFeeds||[]);
+  const voice=$('#voice').value;if(voice)settings.tts.voice=voice;settings.tts.speed=Number($('#voiceSpeed').value||1);settings.tts.resourceMode=$('#ttsPerformanceProfile').value||'safe_streaming';settings.tts.persistent=true;settings.tts.persistentIdleMinutes=5;settings.tts.pronunciationSmart=true;settings.tts.pronunciationClaudeVerify=$('#pronunciationClaudeVerify').checked;settings.tts.pronunciationMaxSeconds=Math.max(5,Math.min(30,Number($('#pronunciationMaxSeconds').value)||15));settings.canned.enabled=$('#cannedEnabled').checked;settings.canned.emergency=$('#cannedEmergency').checked;settings.canned.interval=readCannedInterval();settings.canned.insertAdAfterContent=$('#adsAfterCanned').checked;settings.documents={...settings.documents,targetSeconds:Number($('#documentDuration').value)||60,categoryMode:$('#documentCategory').value||'auto',batchDate:$('#documentBatchDate').value||'',priority:$('#documentPriority').value||'normal',watch:$('#documentWatch').checked};settings.automation.bufferReady=Math.max(1,Math.min(30,Number($('#bufferReady').value)||15));settings.automation.queueMax=Math.max(settings.automation.bufferReady,30);settings.automation.maxAgeHours=Math.max(1,Math.min(48,Number($('#maxAge').value)||6));settings.automation.avoidRepeats=$('#avoidRepeats').checked;settings.visual.pauseSeconds=Math.max(0,Math.min(10,Number($('#pauseSeconds').value)||2.5));settings.visual.queueColors=readQueueColors();
+  const r=await window.ECAPI.saveSettings(settings);settings.__savedRssSignature=rssNow;settings.ai.hasClaudeKey=!!r.hasClaudeKey;settings.ai.hasGeminiKey=!!r.hasGeminiKey;settings.ai.claudeModel=r.claudeModel||'claude-haiku-4-5-20251001';settings.ai.claudeKey='';settings.ai.geminiKey='';$('#claudeKey').value='';$('#geminiKey').value='';refreshProviderUi();$('#ttsPerformanceHint').textContent=ttsProfileHint(settings.tts.resourceMode);const rssChanged=rssBefore!==rssNow;if(rssChanged)setTimeout(()=>loadNews({quiet:true}),0);if(!options.quiet){await refreshRuntimeStatus();await refreshPronunciationStatus();status(rssChanged?'Cambios guardados · actualizando noticias…':'Todos los cambios fueron guardados');}return{...r,rssChanged};
 }
-
-function stateText(group,type){
-  if(!group.running)return type==='processing'?'DETENIDO':'DETENIDA';
-  if(group.paused)return type==='processing'?'PAUSADO':'PAUSADA';
-  if(type==='emission')return group.currentTitle?(group.currentKind==='canned'?'ENLATADO AL AIRE':'AL AIRE'):'ACTIVA · EN ESPERA';
-  return 'PROCESANDO';
-}
-function refreshAutomation(s){
-  automationState=s||automationState;const p=s.processing||{},e=s.emission||{};
-  const pe=$('#processingState'),ee=$('#emissionState');pe.textContent=stateText(p,'processing');ee.textContent=stateText(e,'emission');
-  pe.className=`status-pill ${!p.running?'neutral':p.paused?'pause':'ok'}`;ee.className=`status-pill ${!e.running?'neutral':e.paused?'pause':'live'}`;
-  $('#processStart').disabled=!!p.running&&!p.paused;$('#processPause').disabled=!p.running||p.paused;$('#processResume').disabled=!p.running||!p.paused;$('#processStop').disabled=!p.running;
-  $('#emissionStart').disabled=!!e.running&&!e.paused;$('#emissionPause').disabled=!e.running||e.paused;$('#emissionResume').disabled=!e.running||!e.paused;$('#emissionStop').disabled=!e.running;
-  const c=s.counts||{},b=s.buffer||{},cs=s.canned||{};
-  $('#queueSummary').innerHTML=`<div class="queue-stat"><b>${c.ready||0}</b><span>LISTAS</span></div><div class="queue-stat"><b>~${b.autonomyMin??0}</b><span>MIN AUTONOMÍA</span></div><div class="queue-stat"><b>${c.processing||0}</b><span>PROCESANDO</span></div><div class="queue-stat"><b>${b.target||15}</b><span>OBJETIVO</span></div><div class="queue-stat"><b>${c.error||0}</b><span>ERRORES</span></div>`;
-  const cannedState=$('#cannedState');
-  if(cannedState){
-    cannedState.textContent=!cs.enabled?'DESACTIVADO':e.currentKind==='canned'?'AL AIRE':'ACTIVO';
-    cannedState.className=`status-pill ${!cs.enabled?'neutral':e.currentKind==='canned'?'live':'ok'}`;
-  }
-  if($('#launchCannedNow'))$('#launchCannedNow').disabled=!cs.enabled||!e.running;
-  if($('#nextCannedInfo')){
-    if(!cs.enabled)$('#nextCannedInfo').textContent='Enlatados: desactivados.';
-    else if(e.currentKind==='canned')$('#nextCannedInfo').textContent=`Enlatado al aire: ${cs.current||e.currentTitle||''} · el buffer sigue procesándose.`;
-    else if(cs.interval>0)$('#nextCannedInfo').textContent=`Próximo enlatado programado: en ${cs.nextIn} noticia${cs.nextIn===1?'':'s'} · emitidos ${cs.played||0} enlatados.`;
-    else $('#nextCannedInfo').textContent=`Enlatado programado desactivado${cs.emergency?' · respaldo de emergencia activo.':'.'}`;
-  }
-  renderQueue(s.queue||[]);
-}
-function renderQueue(q){
-  const box=$('#queue');if(!q.length){box.innerHTML='<div class="empty">Sin actividad</div>';return;}
-  box.innerHTML=q.map((x,i)=>{
-    const failures=(x.attempts||[]).filter(a=>!a.ok);
-    const used=x.provider?`${providerName(x.provider)}${x.model?` · ${x.model}`:''}`:'';
-    const failedProviders=[...new Set(failures.map(a=>providerName(a.provider)))];
-    const usedFallback=used&&failedProviders.length?`Fallback usado tras fallo de ${failedProviders.join(', ')}`:'';
-    const failureDetail=failures.map(a=>{const msg=String(a.message||'Error').replace(/\s+/g,' ').slice(0,240);return `${providerName(a.provider)}${a.code?` [${a.code}]`:''}: ${msg}`;}).join(' | ');
-    const m=x.metrics||{};
-    const timing=m.elapsedMs?`IA ${(m.elapsedMs/1000).toFixed(1)} s`:'';
-    const tokens=m.inputTokens?`Tokens ${Number(m.inputTokens).toLocaleString()} → ${Number(m.outputTokens||0).toLocaleString()}`:'';
-    const inputSize=m.inputChars?`Fuente IA ${Number(m.inputChars).toLocaleString()} caracteres`:'';
-    const pron=m.pronunciationElapsedMs?`Pron. ${(m.pronunciationElapsedMs/1000).toFixed(1)} s${m.pronunciationSmartFailed?' · básico (inteligente no respondió)':m.pronunciationSmart?' inteligente':''}`:'';
-    const audioLen=m.audioDurationSec?`Audio ${Number(m.audioDurationSec).toFixed(1)} s`:'';
-    const rtf=m.ttsRealtimeFactor?`RTF ${Number(m.ttsRealtimeFactor).toFixed(2)}×`:'';
-    const profile=m.ttsProfile?String(m.ttsProfile):'';
-    const tts=m.ttsElapsedMs?`TTS ${(m.ttsElapsedMs/1000).toFixed(1)} s · ${audioLen||'Audio n/d'} · ONNX ${m.ttsThreads||4} hilos${profile?` · ${profile}`:''}${rtf?` · ${rtf}`:''}`:'';
-    const stage=x.stage&&x.status==='PROCESANDO'?`Etapa: ${x.stage}`:'';
-    const generic=x.error&&!failureDetail?x.error:'';
-    const meta=[used,timing,tokens,inputSize,pron,tts,usedFallback,failureDetail,stage,generic].filter(Boolean).join(' · ');
-    const cls=x.status==='LISTA'?'ready':x.status==='PROCESANDO'?'processing':x.status==='AL AIRE'?'air':x.status==='ERROR'?'error':'';
-    return `<div class="queue-item"><div class="queue-main"><span class="queue-index">${i+1}.</span><div class="queue-text"><div class="queue-title">${escapeHtml(x.title)}</div>${meta?`<div class="queue-meta">${escapeHtml(meta)}</div>`:''}</div><span class="queue-badge ${cls}">${escapeHtml(x.status)}</span></div></div>`;
-  }).join('');
-}
+function stateText(group,type){if(!group.running)return type==='processing'?'DETENIDO':'DETENIDA';if(group.paused)return type==='processing'?'PAUSADO':'PAUSADA';if(type==='emission'){if(group.currentKind==='ad')return'ANUNCIO AL AIRE';if(group.currentKind==='canned')return'CONTENIDO AL AIRE';return group.currentTitle?'AL AIRE':'ACTIVA · EN ESPERA';}return'PREPARANDO';}
+function refreshSessionCounters(s){const x=s?.session||{};$('#sessionNewsEmitted').textContent=String(x.newsEmitted||0);$('#sessionCannedEmitted').textContent=String(x.cannedEmitted||0);$('#sessionAdsEmitted').textContent=String(x.adsEmitted||0);}
+function sourceTypeName(type){return({rss:'NOTICIA',generated:'NOTA GENERADA',content:'CONTENIDO',ad:'ANUNCIO'}[type]||'NOTICIA');}
+function stageName(stage,statusValue){if(statusValue==='PENDIENTE')return'En espera';if(statusValue==='PROGRAMADO')return'Programado';if(statusValue==='LISTA')return'Lista para emitir';if(statusValue==='AL AIRE')return'Al aire';if(statusValue==='EMITIDA')return'Emitida';if(statusValue==='OMITIDA')return'Omitida';if(statusValue==='ERROR')return'Error';return({article:'Obteniendo contenido',ai:'Generando noticia',pronunciation:'Mejorando pronunciación',tts:'Generando voz',waiting:'En espera',ready:'Lista para emitir'}[stage]||'Preparando');}
+function badgeInfo(st){return({PENDIENTE:['EN ESPERA','planned'],PROCESANDO:['PREPARANDO','processing'],LISTA:['LISTA','ready'],'AL AIRE':['AL AIRE','air'],PROGRAMADO:['PROGRAMADO','planned'],EMITIDA:['EMITIDO','emitted'],OMITIDA:['OMITIDA','planned'],ERROR:['ERROR','error']}[st]||[st||'','']);}
+function humanTiming(x){const m=x.metrics||{},parts=[];if(m.elapsedMs)parts.push(`Texto ${(m.elapsedMs/1000).toFixed(1)} s`);if(m.pronunciationElapsedMs)parts.push(`Pronunciación ${(m.pronunciationElapsedMs/1000).toFixed(1)} s`);if(m.ttsElapsedMs)parts.push(`Voz ${(m.ttsElapsedMs/1000).toFixed(1)} s`);if(m.audioDurationSec)parts.push(`Audio ${Number(m.audioDurationSec).toFixed(0)} s`);return parts.join(' · ');}
+function technicalLine(x){const m=x.metrics||{},parts=[];if(x.provider)parts.push(providerName(x.provider));if(x.model)parts.push(x.model);if(m.inputChars)parts.push(`entrada ${m.inputChars} caracteres`);if(m.promptTokens)parts.push(`prompt ~${m.promptTokens} tokens`);if(m.ttsThreads)parts.push(`${m.ttsThreads} hilos de voz`);if(m.ttsRealtimeFactor)parts.push(`RTF ${Number(m.ttsRealtimeFactor).toFixed(2)}×`);if(m.ttsPersistent)parts.push('motor persistente');if(x.attempts?.length)parts.push(`intentos ${x.attempts.length}`);return parts.join(' · ');}
+function renderQueue(s){if(window.__ecQueueRenderOwner==='0332')return;const box=$('#queue');if(!box)return;const items=s.queue||[],colors={...QUEUE_COLOR_DEFAULT,...(settings?.visual?.queueColors||{})};if(!items.length){box.innerHTML='<div class="empty">Sin actividad</div>';return;}box.innerHTML=items.map((x,i)=>{const type=x.sourceType||'rss',color=x.status==='ERROR'?colors.error:(colors[type]||colors.rss),[badge,badgeClass]=badgeInfo(x.status),human=x.reason?`Omitida · ${x.reason}`:(x.planText||humanTiming(x)||stageName(x.stage,x.status)),tech=technicalLine(x),classes=`queue-item${x.planned?' planned':''}${x.history?' history':''}`;return`<div class="${classes}" style="--type-color:${escapeHtml(color)}"><div class="queue-main"><span class="queue-index">${i+1}.</span><div class="queue-text"><div class="queue-headline"><span class="queue-type">${sourceTypeName(type)}</span><span class="queue-title">${escapeHtml(x.title)}</span></div><div class="queue-meta">${escapeHtml(human)}</div>${x.error?`<div class="queue-meta" style="color:#ffb3b3">${escapeHtml(x.error)}</div>`:''}${tech?`<details class="technical-details"><summary>Ver detalles técnicos</summary><div>${escapeHtml(tech)}</div></details>`:''}</div><span class="queue-badge ${badgeClass}">${badge}</span></div></div>`;}).join('');}
+function refreshAutomation(s){automationState=s||automationState;const p=automationState.processing||{},e=automationState.emission||{},pe=$('#processingState'),ee=$('#emissionState');pe.textContent=stateText(p,'processing');ee.textContent=stateText(e,'emission');pe.className=`status-pill ${!p.running?'neutral':p.paused?'pause':'ok'}`;ee.className=`status-pill ${!e.running?'neutral':e.paused?'pause':'live'}`;$('#processingDetail').textContent=p.message||(!p.running?'Preparación detenida.':p.paused?'Preparación pausada.':'Preparando noticias.');$('#processStart').disabled=!!p.running&&!p.paused;$('#processPause').disabled=!p.running||p.paused;$('#processResume').disabled=!p.running||!p.paused;$('#processStop').disabled=!p.running;$('#emissionStart').disabled=!!e.running&&!e.paused;$('#emissionPause').disabled=!e.running||e.paused;$('#emissionResume').disabled=!e.running||!e.paused;$('#emissionStop').disabled=!e.running;const c=automationState.counts||{},b=automationState.buffer||{},healthClass=`health-${b.health||'critical'}`;$('#queueSummary').innerHTML=`<div class="queue-stat"><b>${c.ready||0}</b><span>LISTAS</span></div><div class="queue-stat ${healthClass}"><b>${Number(b.autonomyMin||0).toFixed(1)}</b><span>MIN DE AUTONOMÍA</span></div><div class="queue-stat"><b>${(c.processing||0)+(c.pending||0)}</b><span>PREPARANDO / ESPERA</span></div><div class="queue-stat"><b>${b.target||15}</b><span>OBJETIVO</span></div><div class="queue-stat"><b>${c.error||0}</b><span>ERRORES</span></div>`;refreshSessionCounters(automationState);renderQueue(automationState);const cs=automationState.canned||{};$('#nextCannedInfo').textContent=!cs.enabled?'Contenidos: desactivados.':cs.requested?'Contenido solicitado: saldrá al terminar lo actual.':cs.nextIn===0?'Hay un contenido programado como próximo respaldo.':cs.nextIn!=null?`Próximo contenido programado después de ${cs.nextIn} noticia${cs.nextIn===1?'':'s'}.`:'Contenidos disponibles como respaldo.';const cannedBadge=$('#cannedState');if(cannedBadge){cannedBadge.textContent=cs.enabled?'ACTIVO':'DESACTIVADO';cannedBadge.className=`status-pill ${cs.enabled?'ok':'neutral'}`;}}
