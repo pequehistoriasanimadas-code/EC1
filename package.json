@@ -1,6 +1,6 @@
 {
   "name": "ec-automatic-news",
-  "version": "2.0.0-lab.4",
+  "version": "2.0.0-lab.5",
   "description": "GEC Automatic News V2.0 TTS Lab - basado en GEC 0.3.32",
   "author": "Carls Mayo",
   "main": "src/bootstrap-v2lab.js",
