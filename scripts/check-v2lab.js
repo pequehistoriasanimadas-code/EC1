@@ -22,6 +22,9 @@ assert(preload.indexOf("renderer-0332.js")>=0&&preload.indexOf("renderer-v2lab.j
 assert(preload.includes('control-v2lab.css'),'CSS V2 Lab no inyectado');
 assert(preload.includes('ttsLabSelectEngine')&&preload.includes('ttsLabImportReference')&&preload.includes('ttsLabPrepare'),'Bridge TTS Lab incompleto');
 assert(worker.includes('ChatterboxMultilingualTTS')&&worker.includes('Qwen3TTSModel'),'Worker no contiene ambos motores');
+assert(worker.includes('audio_prompt_path=ref_audio or None'),'Chatterbox debe poder usar su voz predeterminada sin referencia');
+assert(worker.includes('ENGINE == "qwen3tts" and (not ref_audio'),'Solo Qwen3-TTS Base debe exigir voz de referencia');
+assert(renderer.includes('Voz predeterminada de Chatterbox'),'La UI debe ofrecer la voz predeterminada de Chatterbox');
 assert(prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
 assert(workflow.includes('Packaged 0.3.32 queue planner and stable renderer test'),'V2 Lab debe conservar el smoke 0.3.32');
 assert(workflow.includes('GEC-V2.0-TTS-Lab-Windows-Portable-EXE'),'Workflow no distingue el artefacto V2');
