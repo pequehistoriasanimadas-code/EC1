@@ -6,7 +6,7 @@ app.whenReady().then(()=>{let tmp='';try{
   const required=['src/bootstrap-v2lab.js','src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','src/services/releaseV2Lab.js','src/services/releaseV2Optimization.js','src/services/ttsLabRuntime.js','src/renderer-v2lab.js','src/control-v2lab.css','src/tts_lab_worker.py','scripts/check-v2lab.js'];
   for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert(pkg.version==='2.0.0-lab.4','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.4');
+  assert(pkg.version==='2.0.0-lab.5','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.5');
   assert(pkg.main==='src/bootstrap-v2lab.js','Bootstrap V2 Lab no es entry point');
   assert(pkg.name==='ec-automatic-news','Identidad interna del paquete cambió');
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
@@ -19,6 +19,6 @@ app.whenReady().then(()=>{let tmp='';try{
   const {normalizeProfileTts}=require(path.join(appRoot,'src','services','releaseV2Lab.js'));const profile=normalizeProfileTts({engine:'qwen3tts',style:'news',referenceVoiceId:'ref-test'});assert(profile.engine==='qwen3tts'&&profile.referenceVoiceId==='ref-test','Normalización de perfil TTS Lab falló');
   const r32=require(path.join(appRoot,'src','services','release0332.js'));assert(typeof r32.projectFullQueue==='function','Base 0.3.32 no expone planificador final');
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('PACKAGED V2 TTS LAB lab.3 OK · cache de referencias · Qwen fine-tuned · herencia 0.3.32 preservada');
+  console.log('PACKAGED V2 TTS LAB lab.5 OK · cache de referencias · Qwen fine-tuned · herencia 0.3.32 preservada');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
