@@ -18,6 +18,7 @@ MODEL_KEY = ""
 VOICE_PROMPTS = {}
 CHATTERBOX_BUILTIN = None
 CHATTERBOX_ACTIVE_KEY = ""
+CHATTERBOX_VARIANT = ""
 
 
 def emit(payload):
@@ -77,9 +78,16 @@ def torch_runtime_info():
             gpu = str(torch.cuda.get_device_name(0))
         except Exception:
             gpu = ""
+    vram_mb = 0
+    if available:
+        try:
+            vram_mb = int(torch.cuda.get_device_properties(0).total_memory / (1024 * 1024))
+        except Exception:
+            vram_mb = 0
     return {
         "cuda_available": available,
         "gpu_name": gpu or nvidia_gpu_name(),
+        "gpu_vram_mb": vram_mb,
         "torch_version": str(getattr(torch, "__version__", "")),
         "torch_cuda": str(getattr(getattr(torch, "version", None), "cuda", "") or ""),
     }
@@ -101,8 +109,53 @@ def _device_name():
     return "cuda" if MODEL_DEVICE.startswith("cuda") else "cpu"
 
 
-def load_model(model_path=""):
-    global MODEL, MODEL_DEVICE, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY
+def load_chatterbox_latam(device):
+    import torch
+    from pathlib import Path
+    from huggingface_hub import snapshot_download, hf_hub_download
+    from safetensors.torch import load_file as load_safetensors
+    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+    from chatterbox.models.t3 import T3
+    from chatterbox.models.t3.modules.t3_config import T3Config
+    from chatterbox.models.s3gen import S3Gen
+    from chatterbox.models.tokenizers import MTLTokenizer
+    from chatterbox.models.voice_encoder import VoiceEncoder
+
+    repo_id = "ResembleAI/Chatterbox-Multilingual-es-mx-latam"
+    base_dir = Path(
+        snapshot_download(
+            repo_id="ResembleAI/chatterbox",
+            repo_type="model",
+            revision="main",
+            allow_patterns=["ve.pt"],
+            token=os.getenv("HF_TOKEN"),
+        )
+    )
+    t3_path = Path(hf_hub_download(repo_id=repo_id, filename="t3_es_mx_latam.safetensors", token=os.getenv("HF_TOKEN")))
+    s3_path = Path(hf_hub_download(repo_id=repo_id, filename="s3gen_v3.pt", token=os.getenv("HF_TOKEN")))
+    tok_path = Path(hf_hub_download(repo_id=repo_id, filename="grapheme_mtl_merged_expanded_v1.json", token=os.getenv("HF_TOKEN")))
+
+    ve = VoiceEncoder()
+    ve.load_state_dict(torch.load(base_dir / "ve.pt", weights_only=True, map_location="cpu"))
+    ve.to(device).eval()
+
+    t3 = T3(T3Config.multilingual())
+    t3_state = load_safetensors(t3_path)
+    if "model" in t3_state.keys():
+        t3_state = t3_state["model"][0]
+    t3.load_state_dict(t3_state)
+    t3.to(device).eval()
+
+    s3gen = S3Gen()
+    s3gen.load_state_dict(torch.load(s3_path, weights_only=True, map_location="cpu"), strict=False)
+    s3gen.to(device).eval()
+
+    tokenizer = MTLTokenizer(str(tok_path))
+    return ChatterboxMultilingualTTS(t3, s3gen, ve, tokenizer, device, conds=None)
+
+
+def load_model(model_path="", chatterbox_variant="latam"):
+    global MODEL, MODEL_DEVICE, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
     import torch
 
     runtime = ensure_cuda_consistency()
@@ -111,7 +164,8 @@ def load_model(model_path=""):
     if ENGINE == "qwen3tts":
         requested = os.path.abspath(model_path) if model_path else "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
     else:
-        requested = "chatterbox-v3"
+        chatterbox_variant = "multilingual" if str(chatterbox_variant) == "multilingual" else "latam"
+        requested = "chatterbox-" + chatterbox_variant
     key = f"{ENGINE}:{requested}"
     if MODEL is not None and MODEL_KEY == key:
         return MODEL
@@ -119,6 +173,7 @@ def load_model(model_path=""):
     MODEL = None
     VOICE_PROMPTS = {}
     CHATTERBOX_ACTIVE_KEY = ""
+    CHATTERBOX_VARIANT = ""
     MODEL_DEVICE = "cuda" if use_cuda else "cpu"
 
     if ENGINE == "chatterbox":
@@ -134,19 +189,21 @@ def load_model(model_path=""):
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         try:
-            try:
-                MODEL = ChatterboxMultilingualTTS.from_pretrained(
-                    device=MODEL_DEVICE, t3_model="v3"
-                )
-            except TypeError as exc:
-                # Older package builds do not expose t3_model. Only retry that
-                # compatibility path when the TypeError refers to the argument.
-                if "t3_model" not in str(exc):
-                    raise
-                MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE)
+            if chatterbox_variant == "latam":
+                MODEL = load_chatterbox_latam(MODEL_DEVICE)
+            else:
+                try:
+                    MODEL = ChatterboxMultilingualTTS.from_pretrained(
+                        device=MODEL_DEVICE, t3_model="v3"
+                    )
+                except TypeError as exc:
+                    if "t3_model" not in str(exc):
+                        raise
+                    MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE)
         except Exception as exc:
-            raise RuntimeError(f"Chatterbox no pudo cargar el modelo: {exc}") from exc
+            raise RuntimeError(f"Chatterbox no pudo cargar el modelo {chatterbox_variant}: {exc}") from exc
         CHATTERBOX_BUILTIN = MODEL.conds
+        CHATTERBOX_VARIANT = chatterbox_variant
     elif ENGINE == "qwen3tts":
         from qwen_tts import Qwen3TTSModel
 
@@ -162,13 +219,14 @@ def load_model(model_path=""):
     return MODEL
 
 
-def chatterbox_conditionals(ref_audio="", cache_path="", exaggeration=0.5):
+def chatterbox_conditionals(ref_audio="", cache_path="", exaggeration=0.5, variant="latam"):
     global CHATTERBOX_ACTIVE_KEY
-    model = load_model()
+    variant = "multilingual" if str(variant) == "multilingual" else "latam"
+    model = load_model(chatterbox_variant=variant)
 
     if not ref_audio:
         if CHATTERBOX_BUILTIN is None:
-            raise RuntimeError("Chatterbox no tiene una voz predeterminada disponible")
+            raise RuntimeError("Chatterbox LatAm necesita una voz de referencia" if variant == "latam" else "Chatterbox no tiene una voz predeterminada disponible")
         model.conds = CHATTERBOX_BUILTIN
         CHATTERBOX_ACTIVE_KEY = "__builtin__"
         return
@@ -263,15 +321,18 @@ def prepare_reference(payload):
     ref_audio = str(payload.get("reference") or "").strip()
     ref_text = str(payload.get("reference_text") or "").strip()
     cache_path = str(payload.get("cache_path") or "").strip()
+    params = payload.get("params") or {}
 
     if ENGINE == "chatterbox":
-        chatterbox_conditionals(ref_audio, cache_path, 0.5)
+        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
+        chatterbox_conditionals(ref_audio, cache_path, 0.5, variant)
         info = torch_runtime_info()
         return {
             "prepared_reference": True,
             "engine": ENGINE,
             "device": MODEL_DEVICE,
             "cache_path": cache_path,
+            "variant": variant if ENGINE == "chatterbox" else "",
             **info,
         }
 
@@ -296,10 +357,11 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         exaggeration = float(params.get("exaggeration", 0.42))
         cfg = float(params.get("cfgWeight", 0.35))
         temperature = float(params.get("temperature", 0.8))
+        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
         # Estilo is resolved by the UI as a visible preset. The worker always
         # respects the values displayed to the user instead of silently
         # overriding Exaggeration / CFG.
-        chatterbox_conditionals(ref_audio, cache_path, exaggeration)
+        chatterbox_conditionals(ref_audio, cache_path, exaggeration, variant)
         try:
             wav = model.generate(
                 text,
@@ -318,10 +380,6 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
 
     if ENGINE == "qwen3tts":
         temperature = float(params.get("temperature", 0.78))
-        if style == "neutral":
-            temperature = 0.70
-        elif style == "expressive":
-            temperature = 0.88
 
         if qwen_mode == "finetuned":
             if not model_path or not os.path.isdir(model_path):
@@ -427,7 +485,10 @@ def generate(payload):
     started = time.perf_counter()
     pieces, sample_rate = [], 0
     text_chunks = chunks(text)
-    for part in text_chunks:
+    request_id = str(payload.get("id") or "")
+    for idx, part in enumerate(text_chunks):
+        emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
+        chunk_started = time.perf_counter()
         audio, sr = generate_piece(
             part,
             ref_audio,
@@ -443,10 +504,12 @@ def generate(payload):
         if pieces and sr:
             pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
         pieces.append(audio)
+        emit({"type": "progress", "id": request_id, "phase": "chunk-done", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_ms": round((time.perf_counter() - chunk_started) * 1000)})
 
     if not pieces or not sample_rate:
         raise RuntimeError("El motor no produjo audio")
 
+    emit({"type": "progress", "id": request_id, "phase": "postprocess", "chunks": len(text_chunks)})
     audio = np.concatenate(pieces)
     if abs(speed - 1.0) >= 0.001:
         audio = time_stretch_preserve_pitch(audio, sample_rate, speed)
@@ -464,6 +527,7 @@ def generate(payload):
         "chunks": len(text_chunks),
         "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "",
         "speed": round(speed, 3),
+        "variant": ("multilingual" if str(params.get("variant") or "") == "multilingual" else "latam") if ENGINE == "chatterbox" else "",
         **info,
     }
 
@@ -480,9 +544,14 @@ def handle(payload):
             **info,
         }
     if cmd == "prepare":
-        load_model()
+        params = payload.get("params") or {}
+        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
+        if ENGINE == "chatterbox":
+            load_model(chatterbox_variant=variant)
+        else:
+            load_model()
         info = torch_runtime_info()
-        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, **info}
+        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, "variant": variant if ENGINE == "chatterbox" else "", **info}
     if cmd == "prepare_reference":
         return prepare_reference(payload)
     if cmd == "generate":
