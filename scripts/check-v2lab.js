@@ -1,9 +1,9 @@
 'use strict';
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),queueRenderer=read('src/renderer-0332.js'),automation=read('src/services/automation0325.js'),localRuntime=read('src/services/localRuntime.js'),providers=read('src/services/providers.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
+const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),queueRenderer=read('src/renderer-0332.js'),baseOptimizerUi=read('src/renderer-0321.js'),automation=read('src/services/automation0325.js'),localRuntime=read('src/services/localRuntime.js'),providers=read('src/services/providers.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
 require(path.join(root,'src','services','releaseV2Optimization.js'));
-assert.strictEqual(pkg.version,'2.0.0-lab.7','La build debe identificarse como 2.0.0-lab.7');
+assert.strictEqual(pkg.version,'2.0.0-lab.8','La build debe identificarse como 2.0.0-lab.8');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
 assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','V2 Lab debe conservar el appId técnico');
 assert.strictEqual(pkg.build.productName,'EC Automatic News','V2 Lab debe conservar el productName técnico para compatibilidad');
@@ -11,6 +11,7 @@ assert(/^GEC-V2\.0-TTS-Lab-/.test(pkg.build.artifactName),'El artefacto descarga
 assert(boot.includes('GEC V2 TTS Lab')&&boot.includes("require('./bootstrap-0332')")&&boot.includes('releaseV2Optimization'),'V2 Lab debe aislar datos, heredar 0.3.32 e instalar guard de convivencia');
 assert(release.includes("['engine','style','referenceVoiceId','engineParams','fallbackToKokoro']"),'Campos TTS por perfil incompletos');
 assert(release.includes('engineOptimizations')&&release.includes('captureOptimization'),'Optimización por motor ausente');
+assert(release.includes('optimizationKey')&&release.includes('chatterbox:multilingual')&&release.includes("variant:['latam','multilingual']"),'La optimización debe separarse por variante Chatterbox y migrar la configuración anterior');
 assert(release.includes('p.generate=function')&&release.includes("engine==='kokoro'")&&release.includes('labRuntime().generate'),'Routing multi-TTS incompleto');
 assert(optimizer.includes('qwenTokensPerSec')&&optimizer.includes('vramSafe')&&optimizer.includes('voiceSafe'),'La optimización no valida Qwen + TTS por RTF/tok/s/VRAM');
 assert(optimizer.includes("coexistenceMode:'gpu-coordinated'")&&optimizer.includes("mode:'simultaneous'"),'El optimizador V2 debe elegir entre solapamiento y GPU coordinada');
@@ -23,6 +24,7 @@ assert(renderer.includes('Motor de voz')&&renderer.includes('Chatterbox V3')&&re
 assert(renderer.includes('Runtime CUDA instalado')&&renderer.includes('gpuName')&&renderer.includes('Torch'),'La UI debe mostrar CUDA/GPU real para motores experimentales');
 assert(renderer.includes('Voz de referencia')&&renderer.includes('Noticias / Informativo'),'UX de voz/estilo incompleta');
 assert(renderer.includes('Velocidad de lectura')&&renderer.includes('Personalizado')&&renderer.includes('CHATTER_PRESETS')&&renderer.includes('CFG / adherencia'),'Presets/velocidad Chatterbox no están completos');
+assert(renderer.includes('Latinoamérica · recomendado')&&renderer.includes('v2ChatterVariant')&&renderer.includes('QWEN_PRESETS'),'La UI debe permitir LatAm/Multilingual y presets Qwen visibles');
 assert(renderer.includes('patchOptimizerLiveText')&&renderer.includes('GPU coordinada'),'La UI V2 debe corregir textos heredados y mostrar coordinación GPU');
 assert(renderer.includes('optimizationText')&&renderer.includes('Qwen +'),'Optimizador no refleja el motor seleccionado');
 assert(preload.indexOf("renderer-0332.js")>=0&&preload.indexOf("renderer-v2lab.js")>preload.indexOf("renderer-0332.js"),'V2 Lab debe cargarse después del renderer estable 0.3.32');
@@ -35,6 +37,8 @@ assert(worker.includes('PerthImplicitWatermarker')&&worker.includes('DummyWaterm
 assert(worker.includes('ensure_cuda_consistency')&&worker.includes('nvidia-smi')&&worker.includes('torch.cuda.is_available()'),'Worker debe detectar GPU NVIDIA y rechazar fallback CPU accidental');
 assert(worker.includes('gpu_name')&&worker.includes('torch_cuda')&&worker.includes('cuda_available'),'Worker debe reportar diagnóstico CUDA');
 assert(worker.includes('time_stretch_preserve_pitch')&&worker.includes('phase_vocoder')&&worker.includes('speed'),'Worker debe aplicar velocidad conservando tono');
+assert(worker.includes('ResembleAI/Chatterbox-Multilingual-es-mx-latam')&&worker.includes('t3_es_mx_latam.safetensors')&&worker.includes('s3gen_v3.pt'),'Worker debe integrar el pack oficial LatAm de Chatterbox');
+assert(worker.includes('chunk-start')&&worker.includes('chunk-done')&&worker.includes('postprocess'),'Worker debe enviar heartbeats de progreso TTS');
 assert(renderer.includes('Voz predeterminada de Chatterbox'),'La UI debe ofrecer la voz predeterminada de Chatterbox');
 assert(renderer.includes('Modelo entrenado / Fine-tuned')&&renderer.includes('Importar modelo entrenado')&&renderer.includes('Transcripción Qwen'),'La UI no expone referencia completa y fine-tuning Qwen');
 assert(renderer.includes('v2TranscriptModal')&&renderer.includes('openTranscriptModal')&&!renderer.includes("prompt('Transcripción exacta"),'Qwen debe usar editor integrado y no prompt del navegador');
@@ -42,11 +46,16 @@ assert(renderer.includes("engine==='qwen3tts'? ")&&renderer.includes('Chatterbox
 assert(release.includes('affectedProfiles')&&release.includes("ps.tts.referenceVoiceId=''") ,'Eliminar referencia debe limpiar perfiles que la estén usando');
 assert(automation.includes('gpuStageQueue')&&automation.includes('runGpuCoordinated')&&automation.includes("stageMetric(kind,'QueueWaitMs')")&&automation.includes('totalElapsedMs'),'Pipeline debe coordinar GPU y medir esperas/tiempo total');
 assert(queueRenderer.includes('Espera voz')&&queueRenderer.includes('textTokensPerSec')&&queueRenderer.includes('RTF:'),'Cola 0.3.32 debe mostrar telemetría real del pipeline');
+assert(queueRenderer.includes('Bloqueo voz')&&queueRenderer.includes('tts-retry-wait')&&queueRenderer.includes('ttsVariant'),'La cola debe hacer visibles bloqueos, reintentos y variante de voz');
 assert(localRuntime.includes('lastGenerationMetrics')&&providers.includes('tokensPerSec'),'Qwen local debe publicar tok/s por noticia');
-assert(runtime.includes('210000')&&runtime.includes('generationAttempts'),'TTS experimental debe tener watchdog y un reintento controlado');
+assert(runtime.includes('TTS_STALL')&&runtime.includes('inactivityMs')&&runtime.includes('hardStop')&&runtime.includes('progressCount'),'TTS experimental debe usar watchdog por progreso y reinicio de worker');
+assert(automation.includes("TTS_STALL")&&automation.includes("tts-retry-wait")&&automation.includes("retry:voiceAttempt>0"),'El reintento TTS debe liberar GPU y volver al final de la cola');
+assert(runtime.includes('TTS_WORKER_ABORTED')&&runtime.includes('p.reject(err)'),'Un hard stop debe resolver/rechazar todas las promesas pendientes');
 assert(runtime.includes('importFineTunedZip')&&runtime.includes('fineTunedModels')&&runtime.includes('qwenCache')&&runtime.includes('chatterboxCache'),'Runtime no implementa modelos fine-tuned y caches persistentes');
+assert(runtime.includes('chatterboxPreparedLatam')&&runtime.includes('preparedInfo')&&runtime.includes('gpuVramMb'),'Runtime debe separar cachés LatAm y conservar identidad GPU entre reinicios');
+assert(baseOptimizerUi.includes('ttsLabel0321')&&baseOptimizerUi.includes('ttsLabStatus')&&baseOptimizerUi.includes("version:'2.0-lab.8'"),'Optimizador base V2 debe nombrar el motor real y usar la GPU CUDA real');
 assert(release.includes('prepareReference')&&release.includes('importFineTunedModel')&&release.includes('referenceText'),'Routing/benchmark V2 no contempla referencias preparadas y modelos entrenados');
 assert(prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
 assert(workflow.includes('Packaged 0.3.32 queue planner and stable renderer test'),'V2 Lab debe conservar el smoke 0.3.32');
 assert(workflow.includes('GEC-V2.0-TTS-Lab-Windows-Portable-EXE'),'Workflow no distingue el artefacto V2');
-console.log('check-v2lab: OK · lab.7 · GPU coordinada · telemetría por noticia · velocidad con tono · Kokoro aislado');
+console.log('check-v2lab: OK · lab.8 · Chatterbox LatAm · watchdog por progreso · reintento sin bloquear GPU · telemetría completa · Kokoro aislado');
