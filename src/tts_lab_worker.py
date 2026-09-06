@@ -353,11 +353,11 @@ def prepare_reference(payload):
 
 def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mode, model_path, speaker):
     if ENGINE == "chatterbox":
-        model = load_model()
+        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
+        model = load_model(chatterbox_variant=variant)
         exaggeration = float(params.get("exaggeration", 0.42))
         cfg = float(params.get("cfgWeight", 0.35))
         temperature = float(params.get("temperature", 0.8))
-        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
         # Estilo is resolved by the UI as a visible preset. The worker always
         # respects the values displayed to the user instead of silently
         # overriding Exaggeration / CFG.
