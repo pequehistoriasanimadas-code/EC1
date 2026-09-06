@@ -14,21 +14,27 @@
   function statusClass(row){const s=String(row?.exclusiveBlocked?'ESPERA':row?.status||'').toUpperCase();if(s==='AL AIRE')return'air';if(s==='LISTA')return'ready';if(s==='PROCESANDO'||s==='PENDIENTE'||s==='ESPERA')return'processing';if(s==='ERROR')return'error';if(s==='PROGRAMADO')return'planned';if(s==='EMITIDA'||s==='OMITIDA')return'emitted';return'planned';}
   function statusText(row){return row?.exclusiveBlocked?'ESPERA':String(row?.status||'').toUpperCase()||'LISTA';}
   function seconds(v){const n=Number(v);return Number.isFinite(n)&&n>=0?`${n.toFixed(n<10?1:0)} s`:'';}
+  function stageLabel(stage=''){return({article:'artículo','ai-wait':'esperando Qwen / IA',ai:'generando con Qwen / IA',pronunciation:'pronunciación','tts-wait':'esperando voz / GPU',tts:'generando voz',ready:'lista'}[String(stage)]||String(stage||''));}
+  function pipelineLabel(mode=''){return String(mode||'').includes('gpu-coordinated')?'Escalonado · GPU coordinada':String(mode||'').includes('staggered')?'Escalonado simultáneo':String(mode||'')==='gpu-coordinated'?'Escalonado · GPU coordinada':String(mode||'')||'';}
   function metaText(row){
     if(row?.planned)return String(row.planText||'Programado');
     const parts=[];if(row?.feedName)parts.push(String(row.feedName));if(row?.category)parts.push(String(row.category));
     const m=row?.metrics||{},timings=[];
-    const text=seconds(m.textElapsedSec??(Number(m.textElapsedMs)>=0?Number(m.textElapsedMs)/1000:NaN));if(text)timings.push(`Texto ${text}`);
+    const aiWait=seconds(Number(m.aiQueueWaitMs)>=0?Number(m.aiQueueWaitMs)/1000:NaN);if(aiWait&&Number(m.aiQueueWaitMs)>250)timings.push(`Espera IA ${aiWait}`);
+    const text=seconds(m.textElapsedSec??(Number(m.textElapsedMs)>=0?Number(m.textElapsedMs)/1000:NaN));if(text)timings.push(`${String(row?.provider||'')==='local'?'Qwen':'IA'} ${text}`);
+    const tps=Number(m.textTokensPerSec||0);if(tps>0)timings.push(`${tps.toFixed(1)} tok/s`);
     const pron=seconds(m.pronunciationElapsedSec??(Number(m.pronunciationElapsedMs)>=0?Number(m.pronunciationElapsedMs)/1000:NaN));if(pron)timings.push(`Pronunciación ${pron}`);
+    const voiceWait=seconds(Number(m.ttsQueueWaitMs)>=0?Number(m.ttsQueueWaitMs)/1000:NaN);if(voiceWait&&Number(m.ttsQueueWaitMs)>250)timings.push(`Espera voz ${voiceWait}`);
     const voice=seconds(m.voiceElapsedSec??(Number(m.ttsElapsedMs)>=0?Number(m.ttsElapsedMs)/1000:NaN));if(voice)timings.push(`Voz ${voice}`);
     const audio=seconds(row?.audioDurationSec??m.audioDurationSec??row?.result?.durationSec);if(audio)timings.push(`Audio ${audio}`);
+    const total=seconds(Number(m.totalElapsedMs)>=0?Number(m.totalElapsedMs)/1000:NaN);if(total)timings.push(`Total ${total}`);
     if(timings.length)parts.push(timings.join(' · '));if(row?.error)parts.push(String(row.error));return parts.join(' · ');
   }
-  function technicalHtml(row){const bits=[];if(row?.provider)bits.push(`Proveedor: ${esc(row.provider)}`);if(row?.model)bits.push(`Modelo: ${esc(row.model)}`);if(row?.stage)bits.push(`Etapa: ${esc(row.stage)}`);if(row?.storyUrl)bits.push(`URL: ${esc(row.storyUrl)}`);if(!bits.length)return'';return`<details class="technical-details"><summary>Ver detalles técnicos</summary><div>${bits.join(' · ')}</div></details>`;}
+  function technicalHtml(row){const m=row?.metrics||{},bits=[];if(row?.provider)bits.push(`Proveedor: ${esc(row.provider)}`);if(row?.model)bits.push(`Modelo: ${esc(row.model)}`);if(row?.stage)bits.push(`Etapa: ${esc(stageLabel(row.stage))}`);if(m.pipelineMode)bits.push(`Pipeline: ${esc(pipelineLabel(m.pipelineMode))}`);if(m.ttsEngine)bits.push(`Voz: ${esc(m.ttsEngine)}${m.ttsDevice?` · ${esc(String(m.ttsDevice).toUpperCase())}`:''}`);if(Number(m.ttsRealtimeFactor)>0)bits.push(`RTF: ${Number(m.ttsRealtimeFactor).toFixed(2)}`);if(Number(m.ttsSpeed)>0&&Math.abs(Number(m.ttsSpeed)-1)>.001)bits.push(`Velocidad: ${Number(m.ttsSpeed).toFixed(2)}x`);if(Number(m.ttsGenerationAttempts)>1)bits.push(`Reintentos voz: ${Number(m.ttsGenerationAttempts)-1}`);if(row?.storyUrl)bits.push(`URL: ${esc(row.storyUrl)}`);if(!bits.length)return'';return`<details class="technical-details"><summary>Ver detalles técnicos</summary><div>${bits.join(' · ')}</div></details>`;}
   function keyFor(row,i){if(row?.id)return String(row.id);if(row?.renderKey)return String(row.renderKey);if(row?.planKey)return `plan-${row.sourceType}-${row.planKey}`;return`${row?.sourceType||'row'}-${row?.displayPosition||i}-${row?.title||''}`;}
   function signature(row,index){
     const m=row?.metrics||{};
-    return JSON.stringify([row?.displayPosition,index,row?.title,row?.status,row?.sourceType,!!row?.isExclusive,!!row?.exclusiveBlocked,row?.planText,row?.feedName,row?.category,row?.error,row?.stage,row?.provider,row?.model,m.textElapsedMs,m.pronunciationElapsedMs,m.ttsElapsedMs,m.audioDurationSec,typeColor(row)]);
+    return JSON.stringify([row?.displayPosition,index,row?.title,row?.status,row?.sourceType,!!row?.isExclusive,!!row?.exclusiveBlocked,row?.planText,row?.feedName,row?.category,row?.error,row?.stage,row?.provider,row?.model,m.aiQueueWaitMs,m.textElapsedMs,m.textTokensPerSec,m.pronunciationElapsedMs,m.ttsQueueWaitMs,m.ttsElapsedMs,m.audioDurationSec,m.totalElapsedMs,m.ttsRealtimeFactor,m.ttsEngine,m.ttsDevice,m.pipelineMode,typeColor(row)]);
   }
   function updateCard(node,row,index,key){
     const sig=signature(row,index);if(node.dataset.ecSignature===sig)return;
