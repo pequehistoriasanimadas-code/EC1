@@ -5,6 +5,7 @@ import re
 import sys
 import time
 import traceback
+import subprocess
 
 import numpy as np
 import soundfile as sf
@@ -47,6 +48,54 @@ def chunks(text, max_chars=360):
     return out
 
 
+def nvidia_gpu_name():
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if proc.returncode == 0:
+            return (proc.stdout or "").strip().splitlines()[0].strip()
+    except Exception:
+        pass
+    return ""
+
+
+def torch_runtime_info():
+    import torch
+
+    available = bool(torch.cuda.is_available())
+    gpu = ""
+    if available:
+        try:
+            gpu = str(torch.cuda.get_device_name(0))
+        except Exception:
+            gpu = ""
+    return {
+        "cuda_available": available,
+        "gpu_name": gpu or nvidia_gpu_name(),
+        "torch_version": str(getattr(torch, "__version__", "")),
+        "torch_cuda": str(getattr(getattr(torch, "version", None), "cuda", "") or ""),
+    }
+
+
+def ensure_cuda_consistency():
+    info = torch_runtime_info()
+    # If Windows can see an NVIDIA GPU, silently falling back to CPU means
+    # the experimental runtime loaded a CPU-only/incompatible PyTorch wheel.
+    if info["gpu_name"] and not info["cuda_available"]:
+        raise RuntimeError(
+            "Se detectó una GPU NVIDIA (" + info["gpu_name"] + ") pero PyTorch CUDA no está disponible. "
+            "Repara o reinstala el motor para instalar el runtime CUDA de GEC."
+        )
+    return info
+
+
 def _device_name():
     return "cuda" if MODEL_DEVICE.startswith("cuda") else "cpu"
 
@@ -55,7 +104,8 @@ def load_model(model_path=""):
     global MODEL, MODEL_DEVICE, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY
     import torch
 
-    use_cuda = bool(torch.cuda.is_available())
+    runtime = ensure_cuda_consistency()
+    use_cuda = bool(runtime["cuda_available"])
     requested = ""
     if ENGINE == "qwen3tts":
         requested = os.path.abspath(model_path) if model_path else "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
@@ -215,21 +265,25 @@ def prepare_reference(payload):
 
     if ENGINE == "chatterbox":
         chatterbox_conditionals(ref_audio, cache_path, 0.5)
+        info = torch_runtime_info()
         return {
             "prepared_reference": True,
             "engine": ENGINE,
             "device": MODEL_DEVICE,
             "cache_path": cache_path,
+            **info,
         }
 
     if ENGINE == "qwen3tts":
         load_model()
         qwen_prompt(ref_audio, ref_text, cache_path)
+        info = torch_runtime_info()
         return {
             "prepared_reference": True,
             "engine": ENGINE,
             "device": MODEL_DEVICE,
             "cache_path": cache_path,
+            **info,
         }
 
     raise RuntimeError("Motor no soportado")
@@ -357,6 +411,7 @@ def generate(payload):
     sf.write(output, audio, sample_rate)
     elapsed = time.perf_counter() - started
     duration = len(audio) / float(sample_rate)
+    info = torch_runtime_info()
     return {
         "output": output,
         "duration_sec": round(duration, 3),
@@ -365,21 +420,25 @@ def generate(payload):
         "device": MODEL_DEVICE,
         "chunks": len(text_chunks),
         "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "",
+        **info,
     }
 
 
 def handle(payload):
     cmd = str(payload.get("cmd") or "")
     if cmd == "ping":
+        info = torch_runtime_info()
         return {
             "ready": True,
             "engine": ENGINE,
             "model_loaded": MODEL is not None,
             "device": MODEL_DEVICE,
+            **info,
         }
     if cmd == "prepare":
         load_model()
-        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE}
+        info = torch_runtime_info()
+        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, **info}
     if cmd == "prepare_reference":
         return prepare_reference(payload)
     if cmd == "generate":
