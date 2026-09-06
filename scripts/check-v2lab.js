@@ -42,7 +42,7 @@ assert(worker.includes('chunk-start')&&worker.includes('chunk-done')&&worker.inc
 assert(renderer.includes('Voz predeterminada de Chatterbox'),'La UI debe ofrecer la voz predeterminada de Chatterbox');
 assert(renderer.includes('Modelo entrenado / Fine-tuned')&&renderer.includes('Importar modelo entrenado')&&renderer.includes('Transcripción Qwen'),'La UI no expone referencia completa y fine-tuning Qwen');
 assert(renderer.includes('v2TranscriptModal')&&renderer.includes('openTranscriptModal')&&!renderer.includes("prompt('Transcripción exacta"),'Qwen debe usar editor integrado y no prompt del navegador');
-assert(renderer.includes("engine==='qwen3tts'? ")&&renderer.includes('Chatterbox ·'),'Las tarjetas de referencia deben mostrar controles/estado específicos por motor');
+assert(renderer.includes("engine==='qwen3tts'? ")&&renderer.includes('Chatterbox LatAm')&&renderer.includes('Chatterbox Multilingual'),'Las tarjetas de referencia deben mostrar controles/estado específicos por motor y variante');
 assert(release.includes('affectedProfiles')&&release.includes("ps.tts.referenceVoiceId=''") ,'Eliminar referencia debe limpiar perfiles que la estén usando');
 assert(automation.includes('gpuStageQueue')&&automation.includes('runGpuCoordinated')&&automation.includes("stageMetric(kind,'QueueWaitMs')")&&automation.includes('totalElapsedMs'),'Pipeline debe coordinar GPU y medir esperas/tiempo total');
 assert(queueRenderer.includes('Espera voz')&&queueRenderer.includes('textTokensPerSec')&&queueRenderer.includes('RTF:'),'Cola 0.3.32 debe mostrar telemetría real del pipeline');
