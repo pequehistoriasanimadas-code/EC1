@@ -29,4 +29,6 @@ assert(aiStart>=0&&aiEnd>aiStart&&pronunciation>aiEnd,'Pronunciación debe ejecu
 assert(source.includes('gpuQueueTimeoutMs=180000')&&source.includes("GPU_QUEUE_TIMEOUT"),'Debe existir watchdog de espera de cola GPU');
 assert(source.includes('performanceSummary()')&&source.includes('voiceWaitMedianMs')&&source.includes('totalP95Ms'),'Debe conservar métricas históricas mediana/P95');
 assert(source.includes("voiceBacklog>=2?1:2"),'Backpressure debe reducir workers si se acumula voz');
-console.log('check-v2lab-pipeline: OK · 5 noticias · prioridad voz acotada · sin starvation · pronunciación fuera de GPU · watchdog/backpressure');
+assert(source.includes("engine==='qwen3tts'?'gpu-swap':'gpu-coordinated'"),'Qwen3-TTS sin optimizar debe usar GPU SWAP seguro');
+assert(source.includes('releaseOppositeForGpuSwap')&&source.includes('stopAndWait'),'GPU SWAP debe esperar liberación real de los runtimes');
+console.log('check-v2lab-pipeline: OK · 5 noticias · anti-starvation · pronunciación fuera de GPU · watchdog/backpressure · GPU SWAP seguro');
