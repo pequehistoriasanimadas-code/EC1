@@ -26,7 +26,7 @@ app.whenReady().then(()=>{try{
   const release=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8');
   assert(release.includes('installProcessingWarmup')&&release.includes('ttsRuntimeSignature')&&release.includes("tts-lab:stop"),'Warm-up/invalidation/stop TTS no está empaquetado');
   const runtime=require(path.join(appRoot,'src','services','ttsLabRuntime.js'));
-  assert(runtime.CACHE_REVISION==='lab11-r1','Cache TTS empaquetada no corresponde a lab.11');
-  console.log('PACKAGED V2 PIPELINE lab.11 OK · 5 noticias · pronunciación liberada · anti-starvation · watchdog · RTF');
+  assert(runtime.CACHE_REVISION==='lab11-r1','Cache TTS empaquetada no corresponde a lab.12');
+  console.log('PACKAGED V2 PIPELINE lab.12 OK · 5 noticias · pronunciación liberada · anti-starvation · watchdog · RTF');
   app.exit(0);
 }catch(e){console.error(e.stack||e);app.exit(1);}});
