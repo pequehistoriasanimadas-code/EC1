@@ -5,14 +5,14 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.13');
+  assert.strictEqual(pkg.version,'2.0.0-lab.14');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES}=require(runtimePath);
   assert.strictEqual(CUDA_RUNTIME.revision,2);
   assert.strictEqual(CUDA_RUNTIME.slot,'shared-cuda-v2');
   assert(CUDA_CRITICAL_FILES.includes('torch/torch_version.py'));
 
-  tmp=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO packaged lab13 '));
+  tmp=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO packaged lab14 '));
   const rt=new TTSLabRuntime({resourcesDir,dataDir:tmp});
   rt.freeBytes=()=>20*1024*1024*1024;rt.nvidiaPresent=async()=>true;
   rt.validateCudaSite=async site=>({ok:true,torch:'2.6.0',torchaudio:'2.6.0',cuda:true,torch_cuda:'12.4',site});
@@ -29,10 +29,10 @@ app.whenReady().then(async()=>{let tmp='';try{
   const source=fs.readFileSync(runtimePath,'utf8'),ui=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8');
   assert(source.includes('_installCudaRuntimeTransaction')&&source.includes('backupRoot')&&source.includes('cudaInstallPromise'),'Runtime transaccional/mutex no empaquetado');
   assert(source.includes('minFreeBytes')&&source.includes('legacyCudaRoot')&&source.includes("'--no-cache-dir'"),'Protecciones de disco/migración no empaquetadas');
-  assert(source.includes('validateInstalledEnginesAgainstCuda')&&source.includes('crossFailures.length'),'Prueba cruzada Chatterbox/Qwen no empaquetada');
+  assert(source.includes('validateInstalledEnginesAgainstCuda')&&source.includes('baselineHealthy')&&source.includes('engineFailures'),'Prueba cruzada Chatterbox/Qwen no empaquetada');
   assert(ui.includes('Runtime CUDA necesita reparación')&&ui.includes('Reparar runtime CUDA')&&ui.includes('shared-cuda-v2'),'UI de reparación CUDA v2 no empaquetada');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 RUNTIME ISOLATION lab.13 OK · CUDA v2 · mutex · transaction · torch_version corruption · Unicode path');
+  console.log('PACKAGED V2 RUNTIME ISOLATION lab.14 OK · CUDA v2 · mutex · transaction · torch_version corruption · Unicode path');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
