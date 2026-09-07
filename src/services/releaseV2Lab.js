@@ -63,6 +63,7 @@ function installIpc(){const bind=(name,fn)=>{try{ipcMain.removeHandler(name);}ca
   bind('tts-lab:install',async(_,p={})=>labRuntime().install(String(p.engine||'')));
   bind('tts-lab:prepare',async(_,p={})=>{const s=currentSettings(),engine=String(p.engine||'');return labRuntime().prepare(engine,{params:s.tts?.engineParams?.[engine]||{}});});
   bind('tts-lab:validateSelected',async()=>{const s=currentSettings(),engine=String(s.tts?.engine||'kokoro');if(engine!=='qwen3tts')return{ok:true,engine,skipped:true};return labRuntime().validateSelectedQwen(s.tts?.engineParams?.qwen3tts||{});});
+  bind('tts-lab:benchmarkPerformance',async(event)=>{const s=currentSettings(),engine=String(s.tts?.engine||'kokoro');if(engine!=='qwen3tts')return{ok:true,engine,skipped:true};const params=s.tts?.engineParams?.qwen3tts||{},referenceVoiceId=String(s.tts?.referenceVoiceId||'');return labRuntime().benchmarkQwenPerformance({referenceVoiceId,style:s.tts?.style||'news',params},p=>{try{event.sender.send('tts-lab:event',p);}catch{}});});
   bind('tts-lab:prepareReference',async(_,p={})=>{const s=currentSettings(),engine=String(p.engine||'');return labRuntime().prepareReference(engine,String(p.id||''),{params:s.tts?.engineParams?.[engine]||{}});});
   bind('tts-lab:stop',async()=>{await labRuntime().stopAndWait();return{ok:true};});
   bind('tts-lab:warmupSelected',async()=>{const s=currentSettings(),engine=String(s.tts?.engine||'kokoro');return labRuntime().warmup(engine,{referenceVoiceId:String(s.tts?.referenceVoiceId||''),params:s.tts?.engineParams?.[engine]||{}});});
