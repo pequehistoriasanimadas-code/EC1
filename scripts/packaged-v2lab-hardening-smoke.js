@@ -8,7 +8,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert.strictEqual(pkg.version,'2.0.0-lab.14');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js'),bootPath=path.join(appRoot,'src','bootstrap-v2lab.js');
   const {TTSLabRuntime,QWEN_ASSET_REVISION}=require(runtimePath);
-  const source=fs.readFileSync(runtimePath,'utf8'),boot=fs.readFileSync(bootPath,'utf8'),renderer=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8'),worker=fs.readFileSync(path.join(appRoot,'src','tts_lab_worker.py'),'utf8'),release=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8');
+  const source=fs.readFileSync(runtimePath,'utf8'),boot=fs.readFileSync(bootPath,'utf8'),renderer=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8'),worker=fs.readFileSync(path.join(appRoot,'src','tts_lab_worker.py'),'utf8'),release=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8'),main=fs.readFileSync(path.join(appRoot,'src','main.js'),'utf8');
   assert.strictEqual(QWEN_ASSET_REVISION,2);
   assert(boot.includes('requestSingleInstanceLock')&&boot.includes("if(!gotLock){app.quit();}else{"),'Single-instance guard no empaquetado');
   assert(source.includes('withMaintenance')&&source.includes('waitForWorkersIdle')&&source.includes('workerStops'),'Maintenance/lifecycle guard no empaquetado');
@@ -18,6 +18,8 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(renderer.includes('v2InstallProgress')&&renderer.includes('Reintentar activación')&&renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab14'"),'UX lab.14 no empaquetada');
   assert(worker.includes('GEC_TTS_MODEL_OVERLAYS')&&worker.includes('chunk-heartbeat')&&worker.includes('QWEN_SHARED_REVISION = 2'),'Overlay/heartbeat Qwen no empaquetado');
   assert(release.includes('fallbackFrom:engine')&&release.includes('recoverAllTransactions'),'Fallback/recovery startup no empaquetado');
+  assert(main.includes("show:false,title:'EC Automatic News'")&&main.includes('CONTROL_LOAD_SLOW')&&main.includes("controlWindow.on('unresponsive'"),'Startup renderer guard no empaquetado');
+  assert(release.includes("browser-window-created")&&release.includes("control\\.html")&&!release.includes("setTimeout(recover,50)"),'Recovery TTS diferido hasta UI no empaquetado');
 
   tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-packaged-lab14-'));
   const rt=new TTSLabRuntime({resourcesDir,dataDir:tmp}),src=path.join(tmp,'src-folder'),dst=path.join(tmp,'dst-folder');fs.mkdirSync(src,{recursive:true});
