@@ -5,6 +5,12 @@ import pathlib
 import shutil
 import sys
 import tempfile
+import types
+
+# The repair test exercises only filesystem/model-cache helpers. CI's system
+# Python does not need the runtime audio dependencies just to import the worker.
+sys.modules.setdefault("numpy", types.ModuleType("numpy"))
+sys.modules.setdefault("soundfile", types.ModuleType("soundfile"))
 
 root = pathlib.Path(__file__).resolve().parents[1]
 worker_path = root / "src" / "tts_lab_worker.py"
