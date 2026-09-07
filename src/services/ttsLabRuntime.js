@@ -60,7 +60,51 @@ class TTSLabRuntime{
   freeBytes(dir=this.root){try{if(typeof fs.statfsSync!=='function')return Number.MAX_SAFE_INTEGER;const s=fs.statfsSync(dir),block=Number(s.bsize||s.frsize||0),avail=Number(s.bavail??s.bfree??0);return block>0&&avail>=0?block*avail:Number.MAX_SAFE_INTEGER;}catch{return Number.MAX_SAFE_INTEGER;}}
   async renameWithRetry(src,dst,{attempts=[1000,2000,3000,5000,8000],onProgress=null,label='Activando archivos'}={}){let last=null;for(let i=0;i<=attempts.length;i++){try{await fs.promises.rename(src,dst);return{ok:true,attempt:i+1};}catch(e){last=e;const code=String(e?.code||'');if(!['EPERM','EBUSY','EACCES'].includes(code)||i>=attempts.length)break;this.progress(onProgress,'waiting-windows',`${label} · Windows aún mantiene archivos en uso`,{attempt:i+1,maxAttempts:attempts.length+1,retryInMs:attempts[i],code});await sleep(attempts[i]);}}const err=new Error(`${label}: Windows no permitió mover los archivos después de varios intentos · ${last?.code||''} ${last?.message||last||''}`);err.code=String(last?.code||'TTS_RENAME_FAILED');err.cause=last;throw err;}
   writeCudaJournal(stage,data={}){const value={revision:1,stage,updatedAt:new Date().toISOString(),candidate:path.join(this.root,`${CUDA_RUNTIME.slot}.candidate`),active:this.cudaRoot,...data};this.writeJson(this.cudaJournal(),value);return value;}
-  async recoverCudaTransaction(onProgress=null){const j=this.readJson(this.cudaJournal());if(!j)return{ok:true,recovered:false};const candidate=String(j.candidate||path.join(this.root,`${CUDA_RUNTIME.slot}.candidate`)),backup=String(j.backup||'');this.progress(onProgress,'recovery','Recuperando una instalación CUDA interrumpida…',{journalStage:j.stage});let activeOk=false;if(this.cudaLightHealth(this.cudaRoot).ok){try{await this.validateCudaSite(this.cudaSite);activeOk=true;}catch{activeOk=false;}}if(activeOk){try{if(fs.existsSync(candidate))await fs.promises.rm(candidate,{recursive:true,force:true});}catch{}try{if(backup&&fs.existsSync(backup))await fs.promises.rm(backup,{recursive:true,force:true});}catch{}try{await fs.promises.rm(this.cudaJournal(),{force:true});}catch{}return{ok:true,recovered:true,action:'active-valid'};}if(!fs.existsSync(this.cudaRoot)&&backup&&fs.existsSync(backup)){try{await this.renameWithRetry(backup,this.cudaRoot,{onProgress,label:'Restaurando runtime CUDA anterior'});this.invalidateCudaHealth();if(this.cudaLightHealth(this.cudaRoot).ok){try{await this.validateCudaSite(this.cudaSite);try{await fs.promises.rm(this.cudaJournal(),{force:true});}catch{}return{ok:true,recovered:true,action:'backup-restored'};}catch{}}catch{}}if(fs.existsSync(candidate)){const candidateHealth=this.cudaLightHealth(candidate);if(candidateHealth.ok){try{await this.validateCudaSite(path.join(candidate,'site-packages'));return{ok:true,recovered:true,action:'candidate-ready',candidate};}catch{}}}return{ok:false,recovered:false,action:'manual-required',journal:j};}
+  async recoverCudaTransaction(onProgress=null){
+    const journal=this.readJson(this.cudaJournal());
+    if(!journal)return{ok:true,recovered:false};
+    const candidate=String(journal.candidate||path.join(this.root,`${CUDA_RUNTIME.slot}.candidate`));
+    const backup=String(journal.backup||'');
+    this.progress(onProgress,'recovery','Recuperando una instalación CUDA interrumpida…',{journalStage:journal.stage});
+
+    let activeOk=false;
+    if(this.cudaLightHealth(this.cudaRoot).ok){
+      try{
+        await this.validateCudaSite(this.cudaSite);
+        activeOk=true;
+      }catch{
+        activeOk=false;
+      }
+    }
+    if(activeOk){
+      try{if(fs.existsSync(candidate))await fs.promises.rm(candidate,{recursive:true,force:true});}catch{}
+      try{if(backup&&fs.existsSync(backup))await fs.promises.rm(backup,{recursive:true,force:true});}catch{}
+      try{await fs.promises.rm(this.cudaJournal(),{force:true});}catch{}
+      return{ok:true,recovered:true,action:'active-valid'};
+    }
+
+    if(!fs.existsSync(this.cudaRoot)&&backup&&fs.existsSync(backup)){
+      try{
+        await this.renameWithRetry(backup,this.cudaRoot,{onProgress,label:'Restaurando runtime CUDA anterior'});
+        this.invalidateCudaHealth();
+        if(this.cudaLightHealth(this.cudaRoot).ok){
+          try{
+            await this.validateCudaSite(this.cudaSite);
+            try{await fs.promises.rm(this.cudaJournal(),{force:true});}catch{}
+            return{ok:true,recovered:true,action:'backup-restored'};
+          }catch{}
+        }
+      }catch{}
+    }
+
+    if(fs.existsSync(candidate)&&this.cudaLightHealth(candidate).ok){
+      try{
+        await this.validateCudaSite(path.join(candidate,'site-packages'));
+        return{ok:true,recovered:true,action:'candidate-ready',candidate};
+      }catch{}
+    }
+    return{ok:false,recovered:false,action:'manual-required',journal};
+  }
 
   pipEnv(extra={}){return{...process.env,PYTHONUTF8:'1',PYTHONNOUSERSITE:'1',...extra};}
   cudaEnvFor(site,extra={}){const existingPath=process.env.PATH||'',torchLib=path.join(site,'torch','lib');return this.pipEnv({PYTHONPATH:[site].join(path.delimiter),PATH:[torchLib,existingPath].filter(Boolean).join(path.delimiter),...extra});}
