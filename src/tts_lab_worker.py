@@ -33,6 +33,7 @@ QWEN_SHARED_FILES = [
     "speech_tokenizer/model.safetensors",
     "speech_tokenizer/preprocessor_config.json",
 ]
+QWEN_BASE_MODEL_FILES = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
 
 
 def emit(payload):
@@ -155,34 +156,35 @@ def _link_or_copy(src, dst):
     return True
 
 
-def _qwen_base_snapshot():
+def _qwen_base_snapshot(include_model=False):
     from huggingface_hub import snapshot_download, hf_hub_download
     token = os.getenv("HF_TOKEN")
+    required = QWEN_BASE_MODEL_FILES if include_model else QWEN_SHARED_FILES
     try:
         base = snapshot_download(
             repo_id=QWEN_BASE_REPO,
             repo_type="model",
-            allow_patterns=QWEN_SHARED_FILES,
+            allow_patterns=required,
             token=token,
         )
     except Exception as exc:
-        raise RuntimeError(f"Qwen3-TTS no pudo descargar sus componentes compartidos: {exc}") from exc
-    missing = [rel for rel in QWEN_SHARED_FILES if not os.path.isfile(os.path.join(base, *rel.split("/")))]
+        raise RuntimeError(f"Qwen3-TTS no pudo descargar sus componentes: {exc}") from exc
+    missing = [rel for rel in required if not os.path.isfile(os.path.join(base, *rel.split("/")))]
     if missing:
         for rel in missing:
             try:
                 hf_hub_download(repo_id=QWEN_BASE_REPO, filename=rel, token=token, force_download=True)
             except Exception as exc:
                 raise RuntimeError(f"Qwen3-TTS no pudo reparar {rel}: {exc}") from exc
-        base = snapshot_download(repo_id=QWEN_BASE_REPO, repo_type="model", allow_patterns=QWEN_SHARED_FILES, token=token)
-    missing = [rel for rel in QWEN_SHARED_FILES if not os.path.isfile(os.path.join(base, *rel.split("/")))]
+        base = snapshot_download(repo_id=QWEN_BASE_REPO, repo_type="model", allow_patterns=required, token=token)
+    missing = [rel for rel in required if not os.path.isfile(os.path.join(base, *rel.split("/")))]
     if missing:
         raise RuntimeError("Qwen3-TTS está incompleto: faltan " + ", ".join(missing[:4]))
     return os.path.abspath(base)
 
 
 def ensure_qwen_assets(model_path=""):
-    base = _qwen_base_snapshot()
+    base = _qwen_base_snapshot(include_model=not bool(model_path))
     if not model_path:
         return base, []
     target = os.path.abspath(model_path)
