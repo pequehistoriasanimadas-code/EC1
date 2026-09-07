@@ -140,6 +140,7 @@ function buildProfile(settings={},payload={}){
 function compatibility(settings={},profile=null){
   if(!profile)return{ok:false,reason:'sin perfil de producción'};
   if(Number(profile.schemaVersion)!==PROFILE_SCHEMA)return{ok:false,reason:'perfil antiguo'};
+  if(String(profile.version||'')!==PROFILE_VERSION)return{ok:false,reason:`perfil ${profile.version||'anterior'} pendiente de revalidación ${PROFILE_VERSION}`};
   if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.16'};
   if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.16'};
   if(profile.pipeline?.mode==='gpu-swap'&&profile.pipeline?.swapValidated!==true)return{ok:false,reason:'GPU SWAP no validado'};
