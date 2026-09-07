@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.15');
+  assert.strictEqual(pkg.version,'2.0.0-lab.16');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime,CACHE_REVISION}=require(runtimePath);
   assert.strictEqual(CACHE_REVISION,'lab11-r1');
@@ -36,9 +36,9 @@ app.whenReady().then(async()=>{try{
   assert(worker.includes('attn_implementation')&&worker.includes('torch.float16')&&worker.includes('torch.bfloat16'),'Qwen dtype/attention tuning not packaged');
   assert(worker.includes('torch.backends.cuda.matmul.allow_tf32')&&worker.includes('cudnn.benchmark'),'CUDA safe speed flags not packaged');
   assert(worker.includes('benchmarkSeed')&&worker.includes('audio_rms'),'Deterministic/signal safety checks not packaged');
-  assert(ui.includes('ttsLabBenchmarkPerformance')&&ui.includes('OPTIMIZADA · VOZ LENTA')&&ui.includes("version:'2.0-lab.15'"),'Unified optimizer lab.15 UI not packaged');
+  assert(ui.includes('ttsLabBenchmarkPerformance')&&ui.includes('OPTIMIZADA · VOZ LENTA')&&ui.includes("version:'2.0-lab.16'"),'Unified optimizer lab.16 UI not packaged');
   assert(v2.includes("gec:settings-updated")&&v2.includes('GPU SWAP'),'V2 synchronization/mode text not packaged');
   assert(preload.includes("'tts-lab:event'")&&preload.includes('ttsLabBenchmarkPerformance'),'Live Qwen benchmark bridge not packaged');
-  console.log('PACKAGED V2 QWEN SPEED lab.15 OK · autotune · FP16/SDPA · chunk guard · state sync');
+  console.log('PACKAGED V2 QWEN SPEED lab.16 OK · autotune · FP16/SDPA · chunk guard · state sync');
   app.exit(0);
 }catch(e){console.error(e.stack||e);app.exit(1);}});
