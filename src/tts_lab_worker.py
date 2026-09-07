@@ -302,6 +302,13 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
             torch.backends.cudnn.benchmark = True
+            torch.set_float32_matmul_precision("high")
+            try:
+                torch.backends.cuda.enable_flash_sdp(True)
+                torch.backends.cuda.enable_mem_efficient_sdp(True)
+                torch.backends.cuda.enable_math_sdp(True)
+            except Exception:
+                pass
         except Exception:
             pass
     requested = ""
@@ -538,31 +545,35 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                 raise RuntimeError("Selecciona un modelo Qwen3-TTS entrenado")
             if not speaker:
                 raise RuntimeError("El modelo entrenado no declara un speaker válido")
+            import torch
             model = load_model(model_path, qwen_params=params)
-            wavs, sr = model.generate_custom_voice(
-                text=text,
-                language="Spanish",
-                speaker=speaker,
-                max_new_tokens=2048,
-                do_sample=True,
-                top_k=50,
-                top_p=1.0,
-                temperature=temperature,
-                repetition_penalty=1.05,
-            )
+            with torch.inference_mode():
+                wavs, sr = model.generate_custom_voice(
+                    text=text,
+                    language="Spanish",
+                    speaker=speaker,
+                    max_new_tokens=2048,
+                    do_sample=True,
+                    top_k=50,
+                    top_p=1.0,
+                    temperature=temperature,
+                    repetition_penalty=1.05,
+                )
         else:
+            import torch
             model = load_model(qwen_params=params)
-            wavs, sr = model.generate_voice_clone(
-                text=text,
-                language="Spanish",
-                voice_clone_prompt=qwen_prompt(ref_audio, ref_text, cache_path, params),
-                max_new_tokens=2048,
-                do_sample=True,
-                top_k=50,
-                top_p=1.0,
-                temperature=temperature,
-                repetition_penalty=1.05,
-            )
+            with torch.inference_mode():
+                wavs, sr = model.generate_voice_clone(
+                    text=text,
+                    language="Spanish",
+                    voice_clone_prompt=qwen_prompt(ref_audio, ref_text, cache_path, params),
+                    max_new_tokens=2048,
+                    do_sample=True,
+                    top_k=50,
+                    top_p=1.0,
+                    temperature=temperature,
+                    repetition_penalty=1.05,
+                )
         return np.asarray(wavs[0], dtype=np.float32), int(sr)
 
     raise RuntimeError("Motor no soportado")
