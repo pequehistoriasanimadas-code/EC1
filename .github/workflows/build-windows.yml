@@ -90,6 +90,14 @@ jobs:
           npx electron scripts/packaged-v2lab-pipeline-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged V2 pipeline smoke test failed with code $LASTEXITCODE" }
 
+      - name: Packaged V2.0 Qwen fine-tuned smoke test
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-v2lab-qwen-finetuned-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged V2 Qwen fine-tuned smoke test failed with code $LASTEXITCODE" }
+
       - name: Packaged 0.3.31 service smoke test
         shell: pwsh
         timeout-minutes: 4
