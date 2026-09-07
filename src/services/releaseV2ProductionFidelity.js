@@ -112,6 +112,7 @@ function buildProfile(settings={},payload={}){
       mode:pipelineMode,
       validated:!!payload.validated||String(payload.source||'optimizer')==='optimizer',
       swapValidated,
+      coordinatedValidated:pipelineMode==='gpu-coordinated'&&!!(payload?.localResult?.summary?.coordinatedValidated||payload?.localResult?.coexistence?.coordinatedValidated),
       simultaneousSafe:pipelineMode==='simultaneous'
     },
     voiceConsistency:{
@@ -130,6 +131,9 @@ function buildProfile(settings={},payload={}){
 function compatibility(settings={},profile=null){
   if(!profile)return{ok:false,reason:'sin perfil de producción'};
   if(Number(profile.schemaVersion)!==PROFILE_SCHEMA)return{ok:false,reason:'perfil antiguo'};
+  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.15'};
+  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.15'};
+  if(profile.pipeline?.mode==='gpu-swap'&&profile.pipeline?.swapValidated!==true)return{ok:false,reason:'GPU SWAP no validado'};
   const tts=settings.tts||{},engine=String(tts.engine||'kokoro');
   if(String(profile.tts?.engine||'')!==engine)return{ok:false,reason:'motor TTS distinto'};
   const sig=ttsRuntimeSignature(tts);
@@ -174,7 +178,7 @@ function migrateLegacy(settings={},root=dataRoot()){
     hardwareLabel:o.hardwareLabel||'',
     localResult:{recommendedConfig:local,summary:settings?.ai?.lastLocalBenchmark||o.local||{},recommendedId:settings?.ai?.lastLocalBenchmark?.recommendedId||'',recommendedLabel:settings?.ai?.lastLocalBenchmark?.recommendedLabel||''},
     ttsResult:{stableRealtimeFactor:o?.voice?.medianRtf||0},
-    validated:true
+    validated:false
   });
   atomicJson(profileFile(root),p);
   return p;
