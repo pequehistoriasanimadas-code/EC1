@@ -577,6 +577,7 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                 raise RuntimeError("El modelo entrenado no declara un speaker válido")
             import torch
             model = load_model(model_path, qwen_params=params)
+            stable_mode = str(params.get("consistencyMode") or "") == "stable-v1"
             with torch.inference_mode():
                 wavs, sr = model.generate_custom_voice(
                     text=text,
@@ -584,8 +585,8 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                     speaker=speaker,
                     max_new_tokens=2048,
                     do_sample=True,
-                    top_k=50,
-                    top_p=1.0,
+                    top_k=20 if stable_mode else 50,
+                    top_p=0.90 if stable_mode else 1.0,
                     temperature=temperature,
                     repetition_penalty=1.05,
                 )
