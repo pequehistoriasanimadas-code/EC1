@@ -25,7 +25,7 @@ assert(runtime.includes("Qwen3-TTS 0.6B")&&runtime.includes("Chatterbox V3"),'Ca
 assert(renderer.includes('Motor de voz')&&renderer.includes('Chatterbox V3')&&renderer.includes('Qwen3-TTS 0.6B'),'Selector de motor no está en Audio y locución');
 assert(renderer.includes('Runtime CUDA')&&renderer.includes('integridad')&&renderer.includes('gpuName')&&renderer.includes('Torch'),'La UI debe mostrar CUDA/GPU real para motores experimentales');
 assert(renderer.includes('Voz de referencia')&&renderer.includes('Noticias / Informativo'),'UX de voz/estilo incompleta');
-assert(renderer.includes('Velocidad de lectura')&&renderer.includes('Personalizado')&&renderer.includes('CHATTER_PRESETS')&&renderer.includes('CFG / adherencia'),'Presets/velocidad Chatterbox no están completos');
+assert(!renderer.includes('id="v2ReadingSpeed"')&&!renderer.includes('Velocidad de lectura')&&renderer.includes('Consistencia de voz: Automática ✓')&&renderer.includes('Personalizado')&&renderer.includes('CHATTER_PRESETS')&&renderer.includes('CFG / adherencia'),'Lab.16 debe retirar la velocidad obsoleta y mantener presets/consistencia Chatterbox');
 assert(renderer.includes('Latinoamérica · recomendado')&&renderer.includes('v2ChatterVariant')&&renderer.includes('QWEN_PRESETS'),'La UI debe permitir LatAm/Multilingual y presets Qwen visibles');
 assert(renderer.includes('patchOptimizerLiveText')&&renderer.includes('GPU coordinada'),'La UI V2 debe corregir textos heredados y mostrar coordinación GPU');
 assert(renderer.includes('optimizationText')&&renderer.includes('Qwen +'),'Optimizador no refleja el motor seleccionado');
