@@ -100,8 +100,7 @@ class AutomationEngine extends Automation0324{
       return;
     }
     if(holder)holder.stage='gpu-swap-release-ai';this.state();
-    try{global.__ec0320LocalRuntime?.stop?.('gpu-swap-before-voice');}catch{}
-    await wait(700);
+    try{const local=global.__ec0320LocalRuntime;if(local?.stopAndWait)await local.stopAndWait('gpu-swap-before-voice',5000);else{local?.stop?.('gpu-swap-before-voice');await wait(700);}}catch{await wait(700);}
   }
   async pumpGpuCoordinated(){
     if(this.gpuStageBusy)return;const req=this.nextGpuRequest();if(!req)return;if(req.queueTimer)clearTimeout(req.queueTimer);
