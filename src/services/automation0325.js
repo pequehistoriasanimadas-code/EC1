@@ -9,6 +9,7 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const isNews=x=>x&&['rss','generated'].includes(x.sourceType||'rss');
 const isLiveUrl=url=>/lbposting|liveblog|live-blog|live_blog/i.test(String(url||''));
 const clamp=(n,min,max,fallback)=>{n=Number(n);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;};
+function selectGpuRequestIndex(queue=[],voiceBurst=0,maxVoiceBurst=2){if(!queue.length)return-1;const voiceIndex=queue.findIndex(x=>x?.kind==='voice'),aiIndex=queue.findIndex(x=>x?.kind==='ai');if(voiceIndex>=0&&(Number(voiceBurst)<Number(maxVoiceBurst)||aiIndex<0))return voiceIndex;if(aiIndex>=0)return aiIndex;return 0;}
 function locutionSource(title,script){const t=String(title||'').trim(),s=String(script||'').trim();if(!t)return s;if(!s)return t;const clean=x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),ct=clean(t),cs=clean(s.slice(0,Math.max(t.length*2,220)));return ct&&cs.startsWith(ct)?s:`${t}. ${s}`;}
 function feedFor(story,s){return(s?.rssFeeds||[]).find(f=>String(f.id)===String(story?.feedId))||{};}
 function sourceName(story={}){return String(story.feedName||'Fuente');}
@@ -90,14 +91,7 @@ class AutomationEngine extends Automation0324{
       this.gpuStageQueue.push(req);this.pumpGpuCoordinated();
     });
   }
-  nextGpuRequest(){
-    if(!this.gpuStageQueue.length)return null;
-    const voiceIndex=this.gpuStageQueue.findIndex(x=>x.kind==='voice'),aiIndex=this.gpuStageQueue.findIndex(x=>x.kind==='ai');
-    let idx=0;
-    if(voiceIndex>=0&&(this.gpuVoiceBurst<this.gpuMaxVoiceBurst||aiIndex<0))idx=voiceIndex;
-    else if(aiIndex>=0)idx=aiIndex;
-    const [req]=this.gpuStageQueue.splice(idx,1);return req||null;
-  }
+  nextGpuRequest(){const idx=selectGpuRequestIndex(this.gpuStageQueue,this.gpuVoiceBurst,this.gpuMaxVoiceBurst);if(idx<0)return null;const [req]=this.gpuStageQueue.splice(idx,1);return req||null;}
   async pumpGpuCoordinated(){
     if(this.gpuStageBusy)return;const req=this.nextGpuRequest();if(!req)return;if(req.queueTimer)clearTimeout(req.queueTimer);
     this.gpuStageBusy=true;this.gpuStageCurrent=req.kind;this.gpuVoiceBurst=req.kind==='voice'?this.gpuVoiceBurst+1:0;
@@ -202,4 +196,4 @@ class AutomationEngine extends Automation0324{
 }
 
 function URLSafe(value){try{return new URL(String(value||''));}catch{return{hash:''};}}
-module.exports={AutomationEngine};
+module.exports={AutomationEngine,selectGpuRequestIndex};
