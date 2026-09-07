@@ -237,9 +237,11 @@ function resolvePipelineMode(settings={}){
   return'gpu-coordinated';
 }
 async function preflightAutomation(engine){
-  const s=engine.getSettings?.()||{},profile=productionProfileFrom(s);
+  const s=engine.getSettings?.()||{},rawProfile=s.activeOptimizationV2||null,profile=productionProfileFrom(s);
   engine.__v2ProductionProfile=profile||null;
-  if(!profile)return{ok:true,optimized:false,pipeline:resolvePipelineMode(s),reason:'sin perfil de producción; modo coordinado seguro'};
+  if(rawProfile&&rawProfile.valid===false){const e=new Error(`El perfil optimizado necesita revalidación antes de producción: ${rawProfile.invalidReason||'ejecuta Optimizar GEC'}`);e.code='PRODUCTION_PROFILE_INVALID';throw e;}
+  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.15. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
+  if(!profile)return{ok:true,optimized:false,pipeline:resolvePipelineMode(s),reason:'sin perfil previo; modo coordinado seguro explícito'};
   if(profile.localAi?.required){
     const local=engine.localRuntime||global.__ec0320LocalRuntime;
     if(!local?.configure||!local?.status){const e=new Error('No se encontró la instancia de Qwen local para aplicar el perfil optimizado');e.code='PRODUCTION_PROFILE_RUNTIME_MISSING';throw e;}
