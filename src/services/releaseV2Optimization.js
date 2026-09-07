@@ -9,6 +9,7 @@ function installV2Optimization(){
   Object.defineProperty(p,'__gecV2Optimization',{value:true});
   const base=p.benchmarkLocalAI;
   if(typeof base!=='function')return;
+  if(typeof p.stopAndWait!=='function')p.stopAndWait=async function(reason='v2-stop',timeoutMs=5000){const child=this.server;this.stop(reason);if(!child)return true;const end=Date.now()+Math.max(500,Number(timeoutMs)||5000);while(Date.now()<end&&child.exitCode==null){await new Promise(r=>setTimeout(r,100));}try{if(child.exitCode==null)child.kill();}catch{}await new Promise(r=>setTimeout(r,100));return true;};
 
   p.benchmarkLocalAI=async function(args={}){
     const result=await base.call(this,args);
@@ -80,8 +81,7 @@ function installV2Optimization(){
     let swap=null;
     if(isolated>0&&args?.kokoro?.generate){
       try{
-        this.stop('v2-swap-validation-release-local');
-        await new Promise(r=>setTimeout(r,700));
+        await this.stopAndWait('v2-swap-validation-release-local',5000);
         const audio=await args.kokoro.generate(SWAP_VOICE_TEXT,{voice:args.voice||'ef_dora',speed:Number(args.speed)||1});
         const swapRtf=Number(audio?.steadyRealtimeFactor||audio?.realtimeFactor||0);
         if(!audio?.path||!swapRtf)throw new Error('el motor de voz no produjo audio válido en modo secuencial');
