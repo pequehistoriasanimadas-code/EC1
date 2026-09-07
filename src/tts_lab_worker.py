@@ -566,7 +566,9 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         return arr.astype(np.float32), int(model.sr)
 
     if ENGINE == "qwen3tts":
-        temperature = float(params.get("temperature", 0.78))
+        configured_temperature = float(params.get("temperature", 0.78))
+        production_temperature = float(params.get("productionTemperature", configured_temperature))
+        temperature = max(0.10, min(1.50, production_temperature))
 
         if qwen_mode == "finetuned":
             if not model_path or not os.path.isdir(model_path):
@@ -664,13 +666,15 @@ def generate(payload):
     if not text:
         raise RuntimeError("No hay texto para locutar")
     benchmark_seed = int(params.get("benchmarkSeed") or 0)
-    if benchmark_seed:
+    production_seed = int(params.get("productionSeed") or 0)
+    active_seed = benchmark_seed or production_seed
+    if active_seed:
         try:
             import torch
-            torch.manual_seed(benchmark_seed)
+            torch.manual_seed(active_seed)
             if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(benchmark_seed)
-            np.random.seed(benchmark_seed % (2**32 - 1))
+                torch.cuda.manual_seed_all(active_seed)
+            np.random.seed(active_seed % (2**32 - 1))
         except Exception:
             pass
     if ENGINE == "qwen3tts" and qwen_mode != "finetuned":
@@ -691,6 +695,7 @@ def generate(payload):
         pass
     started = time.perf_counter()
     pieces, sample_rate = [], 0
+    chunk_diagnostics = []
     text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else 360)
     request_id = str(payload.get("id") or "")
     for idx, part in enumerate(text_chunks):
@@ -720,10 +725,20 @@ def generate(payload):
             stop_chunk_beat.set()
             chunk_beat.join(timeout=1)
         sample_rate = sr
+        chunk_elapsed_ms = round((time.perf_counter() - chunk_started) * 1000)
+        chunk_audio_sec = round(len(audio) / float(sr), 3) if sr else 0
+        chunk_diagnostics.append({
+            "index": idx + 1,
+            "chars": len(part),
+            "elapsed_ms": chunk_elapsed_ms,
+            "audio_sec": chunk_audio_sec,
+            "seed": active_seed,
+            "temperature": round(float(params.get("productionTemperature", params.get("temperature", 0.78))), 3) if ENGINE == "qwen3tts" else 0,
+        })
         if pieces and sr:
             pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
         pieces.append(audio)
-        emit({"type": "progress", "id": request_id, "phase": "chunk-done", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_ms": round((time.perf_counter() - chunk_started) * 1000)})
+        emit({"type": "progress", "id": request_id, "phase": "chunk-done", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_ms": chunk_elapsed_ms, "audio_sec": chunk_audio_sec, "seed": active_seed})
 
     if not pieces or not sample_rate:
         raise RuntimeError("El motor no produjo audio")
@@ -763,6 +778,10 @@ def generate(payload):
         "cuda_peak_reserved_mb": peak_reserved_mb,
         "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "",
         "qwen_runtime": qwen_runtime_params(params) if ENGINE == "qwen3tts" else {},
+        "production_seed": active_seed if ENGINE == "qwen3tts" else 0,
+        "production_temperature": round(float(params.get("productionTemperature", params.get("temperature", 0.78))), 3) if ENGINE == "qwen3tts" else 0,
+        "consistency_mode": str(params.get("consistencyMode") or "") if ENGINE == "qwen3tts" else "",
+        "chunk_diagnostics": chunk_diagnostics,
         "speed": round(speed, 3),
         "variant": ("multilingual" if str(params.get("variant") or "") == "multilingual" else "latam") if ENGINE == "chatterbox" else "",
         **info,
