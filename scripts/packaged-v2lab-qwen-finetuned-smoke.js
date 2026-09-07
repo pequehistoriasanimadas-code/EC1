@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.11','Versión empaquetada no es lab.11');
+  assert.strictEqual(pkg.version,'2.0.0-lab.12','Versión empaquetada no es lab.12');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime,CACHE_REVISION}=require(runtimePath);
   assert.strictEqual(CACHE_REVISION,'lab11-r1');
@@ -39,6 +39,6 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(ui.includes('currentOptimizationKey')&&ui.includes('ttsLabValidateSelected'),'UI fine-tuned no está empaquetada');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 QWEN FINE-TUNED lab.11 OK · Aurelio exacto · repair · fingerprint · GPU SWAP');
+  console.log('PACKAGED V2 QWEN FINE-TUNED lab.12 OK · Aurelio exacto · repair · fingerprint · GPU SWAP');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
