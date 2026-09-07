@@ -7,6 +7,8 @@ import sys
 import time
 import traceback
 import subprocess
+import shutil
+import gc
 
 import numpy as np
 import soundfile as sf
@@ -19,6 +21,18 @@ VOICE_PROMPTS = {}
 CHATTERBOX_BUILTIN = None
 CHATTERBOX_ACTIVE_KEY = ""
 CHATTERBOX_VARIANT = ""
+QWEN_BASE_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+QWEN_SHARED_FILES = [
+    "generation_config.json",
+    "merges.txt",
+    "preprocessor_config.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "speech_tokenizer/config.json",
+    "speech_tokenizer/configuration.json",
+    "speech_tokenizer/model.safetensors",
+    "speech_tokenizer/preprocessor_config.json",
+]
 
 
 def emit(payload):
@@ -109,6 +123,92 @@ def _device_name():
     return "cuda" if MODEL_DEVICE.startswith("cuda") else "cpu"
 
 
+def _release_model_memory():
+    global MODEL, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
+    MODEL = None
+    MODEL_KEY = ""
+    VOICE_PROMPTS = {}
+    CHATTERBOX_BUILTIN = None
+    CHATTERBOX_ACTIVE_KEY = ""
+    CHATTERBOX_VARIANT = ""
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            try:
+                torch.cuda.ipc_collect()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _link_or_copy(src, dst):
+    if os.path.isfile(dst):
+        return False
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    try:
+        os.link(src, dst)
+    except Exception:
+        shutil.copy2(src, dst)
+    return True
+
+
+def _qwen_base_snapshot():
+    from huggingface_hub import snapshot_download, hf_hub_download
+    token = os.getenv("HF_TOKEN")
+    try:
+        base = snapshot_download(
+            repo_id=QWEN_BASE_REPO,
+            repo_type="model",
+            allow_patterns=QWEN_SHARED_FILES,
+            token=token,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Qwen3-TTS no pudo descargar sus componentes compartidos: {exc}") from exc
+    missing = [rel for rel in QWEN_SHARED_FILES if not os.path.isfile(os.path.join(base, *rel.split("/")))]
+    if missing:
+        for rel in missing:
+            try:
+                hf_hub_download(repo_id=QWEN_BASE_REPO, filename=rel, token=token, force_download=True)
+            except Exception as exc:
+                raise RuntimeError(f"Qwen3-TTS no pudo reparar {rel}: {exc}") from exc
+        base = snapshot_download(repo_id=QWEN_BASE_REPO, repo_type="model", allow_patterns=QWEN_SHARED_FILES, token=token)
+    missing = [rel for rel in QWEN_SHARED_FILES if not os.path.isfile(os.path.join(base, *rel.split("/")))]
+    if missing:
+        raise RuntimeError("Qwen3-TTS está incompleto: faltan " + ", ".join(missing[:4]))
+    return os.path.abspath(base)
+
+
+def ensure_qwen_assets(model_path=""):
+    base = _qwen_base_snapshot()
+    if not model_path:
+        return base, []
+    target = os.path.abspath(model_path)
+    if not os.path.isdir(target):
+        raise RuntimeError("El modelo Qwen3-TTS entrenado seleccionado ya no existe")
+    if not os.path.isfile(os.path.join(target, "config.json")) or not os.path.isfile(os.path.join(target, "model.safetensors")):
+        raise RuntimeError("El modelo Qwen3-TTS entrenado está incompleto: faltan config.json o model.safetensors")
+    repaired = []
+    for rel in QWEN_SHARED_FILES:
+        src = os.path.join(base, *rel.split("/"))
+        dst = os.path.join(target, *rel.split("/"))
+        if _link_or_copy(src, dst):
+            repaired.append(rel)
+    missing = [rel for rel in QWEN_SHARED_FILES if not os.path.isfile(os.path.join(target, *rel.split("/")))]
+    if missing:
+        raise RuntimeError("El modelo Qwen3-TTS entrenado no pudo repararse: faltan " + ", ".join(missing[:4]))
+    return target, repaired
+
+
+def validate_qwen_model(model_path="", speaker=""):
+    resolved, repaired = ensure_qwen_assets(model_path)
+    if model_path and not str(speaker or "").strip():
+        raise RuntimeError("El modelo Qwen3-TTS entrenado no declara un speaker válido")
+    return {"model_path": resolved, "repaired": repaired, "shared_assets_ok": True}
+
+
 def load_chatterbox_latam(device):
     import torch
     from pathlib import Path
@@ -162,7 +262,7 @@ def load_model(model_path="", chatterbox_variant="latam"):
     use_cuda = bool(runtime["cuda_available"])
     requested = ""
     if ENGINE == "qwen3tts":
-        requested = os.path.abspath(model_path) if model_path else "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+        requested, _ = ensure_qwen_assets(os.path.abspath(model_path) if model_path else "")
     else:
         chatterbox_variant = "multilingual" if str(chatterbox_variant) == "multilingual" else "latam"
         requested = "chatterbox-" + chatterbox_variant
@@ -170,10 +270,7 @@ def load_model(model_path="", chatterbox_variant="latam"):
     if MODEL is not None and MODEL_KEY == key:
         return MODEL
 
-    MODEL = None
-    VOICE_PROMPTS = {}
-    CHATTERBOX_ACTIVE_KEY = ""
-    CHATTERBOX_VARIANT = ""
+    _release_model_memory()
     MODEL_DEVICE = "cuda" if use_cuda else "cpu"
 
     if ENGINE == "chatterbox":
@@ -546,17 +643,38 @@ def handle(payload):
     if cmd == "prepare":
         params = payload.get("params") or {}
         variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
+        qwen_mode = str(payload.get("qwen_mode") or params.get("voiceMode") or "reference")
+        model_path = str(payload.get("model_path") or "").strip()
+        speaker = str(payload.get("speaker") or "").strip()
+        repaired = []
         if ENGINE == "chatterbox":
             load_model(chatterbox_variant=variant)
+        elif ENGINE == "qwen3tts":
+            if qwen_mode == "finetuned":
+                validated = validate_qwen_model(model_path, speaker)
+                repaired = validated.get("repaired") or []
+                load_model(validated["model_path"])
+            else:
+                validated = validate_qwen_model("", "")
+                load_model(validated["model_path"])
         else:
-            load_model()
+            raise RuntimeError("Motor no soportado")
         info = torch_runtime_info()
-        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, "variant": variant if ENGINE == "chatterbox" else "", **info}
+        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, "variant": variant if ENGINE == "chatterbox" else "", "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "", "model_key": MODEL_KEY, "repaired_assets": repaired, **info}
+    if cmd == "validate_qwen":
+        model_path = str(payload.get("model_path") or "").strip()
+        speaker = str(payload.get("speaker") or "").strip()
+        result = validate_qwen_model(model_path, speaker)
+        return {"validated": True, "engine": ENGINE, **result}
+    if cmd == "release":
+        _release_model_memory()
+        return {"released": True, "engine": ENGINE, **torch_runtime_info()}
     if cmd == "prepare_reference":
         return prepare_reference(payload)
     if cmd == "generate":
         return generate(payload)
     if cmd == "stop":
+        _release_model_memory()
         emit({"id": payload.get("id"), "ok": True, "stopping": True})
         raise SystemExit(0)
     raise RuntimeError(f"Comando desconocido: {cmd}")
