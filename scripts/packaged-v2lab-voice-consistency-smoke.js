@@ -16,7 +16,7 @@ app.whenReady().then(async()=>{try{
   assert(!ui.includes('id="v2ReadingSpeed"')&&!ui.includes('Velocidad de lectura'));
   assert(ui.includes('Consistencia de voz: Automática ✓')&&ui.includes('Copiar diagnóstico de voz'));
   assert(!worker.includes('def time_stretch_preserve_pitch')&&!worker.includes('phase_vocoder'));
-  assert(worker.includes('speed = 1.0')&&worker.includes('chunk_seed = active_seed + idx * 1009'));
+  assert(worker.includes('speed = 1.0')&&worker.includes('chunk_seed = active_seed if active_seed else 0'));
   assert(worker.includes('voice_session_id')&&worker.includes('540 if stable_mode else 360'));
   assert(routing.includes('fallbackExplicit:true')&&routing.includes('speed:1'));
   assert(prod.includes("const PROFILE_VERSION='2.0-lab.16'")&&prod.includes('chunkChars:540')&&prod.includes('processing-stop-lab16'));
