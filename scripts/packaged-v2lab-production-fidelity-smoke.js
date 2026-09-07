@@ -37,7 +37,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   rt.configure('tuned',{label:'GPU alta',ctx:4096,gpuLayers:48,batch:384,ubatch:192,threads:4,prio:-1,poll:0,warmup:false});
   assert.strictEqual(rt.profile().gpuLayers,48,'Packaged LocalRuntime tuned cayó a safe_streaming');
 
-  const s={ai:{primary:'local',lastLocalBenchmark:{coexistenceMode:'gpu-swap',swapValidated:false}},tts:{engine:'qwen3tts'},activeOptimizationV2:{valid:true,pipeline:{mode:'gpu-coordinated',validated:true,swapValidated:false}}};
+  const s={ai:{primary:'local',lastLocalBenchmark:{coexistenceMode:'gpu-swap',swapValidated:false}},tts:{engine:'qwen3tts'},activeOptimizationV2:{valid:true,pipeline:{mode:'gpu-coordinated',validated:true,swapValidated:false,coordinatedValidated:true}}};
   assert.strictEqual(resolvePipelineMode(s),'gpu-coordinated');
   s.activeOptimizationV2.pipeline.mode='gpu-swap';
   assert.strictEqual(resolvePipelineMode(s),'gpu-coordinated');
