@@ -63,6 +63,13 @@ assert(runtime.includes('_installCudaRuntimeTransaction')&&runtime.includes('cud
 assert(runtime.includes('cudaManifestForSite')&&runtime.includes('validateCudaSite')&&runtime.includes('validateInstalledEnginesAgainstCuda'),'CUDA debe verificar manifest, imports y compatibilidad cruzada');
 assert(runtime.includes('legacyCudaRoot')&&runtime.includes('minFreeBytes'),'La migración debe preservar el runtime anterior y comprobar espacio libre');
 assert(renderer.includes('Runtime CUDA necesita reparación')&&renderer.includes('Reparar runtime CUDA')&&renderer.includes('shared-cuda-v2'),'La UI debe detectar y ofrecer reparación central sin confundir los motores');
+assert(!runtime.includes('spawnSync'),'Lab.13 no debe bloquear Electron con spawnSync en TTS Lab');
+assert(runtime.includes('async runProcess(')&&runtime.includes('cachedCudaHealth')&&runtime.includes('cudaHealthTtlMs'),'Lab.13 debe ejecutar health checks de forma asíncrona y cachearlos por sesión');
+assert(runtime.includes("const existing=this.workers.get(id);if(existing?.child&&existing.ready)return existing;await this.ensureCudaRuntimeHealthy()"),'ensureWorker debe reutilizar un worker sano antes de validar CUDA');
+assert(runtime.includes('async importFineTunedZip')&&runtime.includes('findModelDirAsync')&&runtime.includes('modelFingerprintAsync'),'Importación de modelos fine-tuned debe evitar I/O pesado síncrono');
+assert(renderer.includes('qwenParams=settings?.tts?.engineParams?.qwen3tts')&&!renderer.includes(",q=settings?.tts?.engineParams?.qwen3tts"),'Renderer no debe sombrear el helper q()');
+assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab13'")&&release.includes('await labRuntime().importFineTunedZip'),'Hardening de responsividad lab.13 incompleto');
+assert(baseOptimizerUi.includes('GEC valida ambos motores')&&!baseOptimizerUi.includes('EC valida también Qwen + Kokoro al mismo tiempo'),'Texto del optimizador debe reflejar el motor seleccionado y no mencionar Kokoro de forma fija');
 assert(runtime.includes('chatterboxPreparedLatam')&&runtime.includes('preparedInfo')&&runtime.includes('gpuVramMb'),'Runtime debe separar cachés LatAm y conservar identidad GPU entre reinicios');
 assert(baseOptimizerUi.includes('ttsLabel0321')&&baseOptimizerUi.includes('ttsLabStatus')&&baseOptimizerUi.includes("version:'2.0-lab.13'")&&baseOptimizerUi.includes('ttsLabStop')&&baseOptimizerUi.includes('ttsLabValidateSelected'),'Optimizador base V2 debe prevalidar Qwen, liberar TTS antes de Qwen local y usar la GPU CUDA real');
 assert(release.includes('prepareReference')&&release.includes('importFineTunedModel')&&release.includes('referenceText'),'Routing/benchmark V2 no contempla referencias preparadas y modelos entrenados');
@@ -78,4 +85,4 @@ assert(renderer.includes('currentOptimizationKey')&&renderer.includes('selectedF
 assert(prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
 assert(workflow.includes('Packaged 0.3.32 queue planner and stable renderer test'),'V2 Lab debe conservar el smoke 0.3.32');
 assert(workflow.includes('GEC-V2.0-TTS-Lab-Windows-Portable-EXE'),'Workflow no distingue el artefacto V2');
-console.log('check-v2lab: OK · lab.13 · CUDA v2 transaccional · aislamiento Chatterbox/Qwen · Qwen speed autotune · GPU SWAP');
+console.log('check-v2lab: OK · lab.13 · UI responsiva · CUDA health async/cache · q fixed · import async · aislamiento Chatterbox/Qwen · GPU SWAP');
