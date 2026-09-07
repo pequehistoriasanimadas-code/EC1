@@ -106,6 +106,14 @@ jobs:
           npx electron scripts/packaged-v2lab-qwen-speed-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged V2 Qwen speed smoke test failed with code $LASTEXITCODE" }
 
+      - name: Packaged V2.0 CUDA runtime isolation smoke test
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          npx electron scripts/packaged-v2lab-runtime-isolation-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged V2 runtime isolation smoke test failed with code $LASTEXITCODE" }
+
       - name: Packaged 0.3.31 service smoke test
         shell: pwsh
         timeout-minutes: 4
