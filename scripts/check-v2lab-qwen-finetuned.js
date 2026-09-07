@@ -55,7 +55,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
 
     const opt=read('src/services/releaseV2Optimization.js');
     assert(opt.includes("mode:'gpu-swap'")&&opt.includes('swapValidated:true'),'Optimización debe disponer de GPU SWAP validado');
-    assert(opt.includes('if(isolated>0&&errorFree&&rtf>0&&vramSafe)'),'GPU coordinada solo debe aceptarse si ambos motores coexistieron realmente');
+    assert(opt.includes('coordinatedValidated:true')&&opt.includes('coordinatedTpsRatio')&&opt.includes('tpsRatio>=.70'),'GPU coordinada debe superar una prueba secuencial residente y conservar al menos 70% del rendimiento');
     assert(opt.includes('v2-swap-validation-release-local'),'GPU SWAP debe probar liberación real del Qwen local');
 
     const automation=read('src/services/automation0325.js');
