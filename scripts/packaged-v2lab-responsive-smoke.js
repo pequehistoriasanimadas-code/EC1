@@ -13,7 +13,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(source.includes('cudaHealthTtlMs')&&source.includes('cachedCudaHealth')&&source.includes('cudaHealthPromise'),'Cache CUDA de sesión no empaquetada');
   assert(source.includes('await this.waitForMaintenance()')&&source.includes('if(existing?.child&&existing.ready)return existing')&&source.includes('await this.ensureCudaRuntimeHealthy()'),'Worker reuse-first no empaquetado');
   assert(renderer.includes('qwenParams=settings?.tts?.engineParams?.qwen3tts')&&!renderer.includes(",q=settings?.tts?.engineParams?.qwen3tts"),'Fix de q shadow no empaquetado');
-  assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab13'"),'Marcador de renderer lab.14 no empaquetado');
+  assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab14'"),'Marcador de renderer lab.14 no empaquetado');
   assert(optimizer.includes("version:'2.0-lab.14'")&&optimizer.includes('GEC valida ambos motores'),'Optimizador lab.14 no empaquetado');
   assert(release.includes('await labRuntime().importFineTunedZip')&&release.includes("type:'tts-lab-import'")===false,'Handler asíncrono debe delegar progreso al runtime');
 
