@@ -24,14 +24,14 @@ function makeEnginePackage(rt,id){
   assert.strictEqual(CUDA_RUNTIME.slot,'shared-cuda-v2');
   assert(CUDA_CRITICAL_FILES.includes('torch/torch_version.py'));
 
-  const base=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO lab12 '));
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO lab13 '));
   try{
     const resources=path.join(base,'Portable Folder con Ñ'),data=path.join(base,'EC Automatic News Data');
     makePython(resources);
     const rt=new TTSLabRuntime({resourcesDir:resources,dataDir:data});
     rt.freeBytes=()=>20*1024*1024*1024;
-    rt.nvidiaPresent=()=>true;
-    rt.validateCudaSite=site=>({ok:true,torch:'2.6.0',torchaudio:'2.6.0',cuda:true,torch_cuda:'12.4',site});
+    rt.nvidiaPresent=async()=>true;
+    rt.validateCudaSite=async site=>({ok:true,torch:'2.6.0',torchaudio:'2.6.0',cuda:true,torch_cuda:'12.4',site});
     let pipCount=0;
     rt.runPip=async args=>{pipCount++;const idx=args.indexOf('--target');assert(idx>=0);const site=args[idx+1];await new Promise(r=>setTimeout(r,80));writeCritical(site,'install-'+pipCount);};
 
@@ -44,7 +44,7 @@ function makeEnginePackage(rt,id){
     // checked against both without either installer writing into the other.
     makeEnginePackage(rt,'chatterbox');makeEnginePackage(rt,'qwen3tts');
     const validated=[];
-    rt.validateEngineRuntime=(id,{cudaSite}={})=>{validated.push({id,cudaSite});return{ok:true,engine:id};};
+    rt.validateEngineRuntime=async(id,{cudaSite}={})=>{validated.push({id,cudaSite});return{ok:true,engine:id};};
 
     // Two motors requesting CUDA at the same time must share one transaction.
     const [a,b]=await Promise.all([rt.installCudaRuntime({force:true}),rt.installCudaRuntime({force:true})]);
