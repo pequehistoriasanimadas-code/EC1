@@ -10,7 +10,7 @@ const {AutomationEngine}=require('./automation0325');
 const {optimizationKey,qwenModelIdentity,ttsRuntimeSignature}=require('./releaseV2Lab');
 
 const PROFILE_SCHEMA=1;
-const PROFILE_VERSION='2.0-lab.15';
+const PROFILE_VERSION='2.0-lab.16';
 const PROFILE_FILE='active-production-profile.json';
 const PIPELINE_MODES=new Set(['split','simultaneous','gpu-coordinated','gpu-swap']);
 const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
@@ -65,17 +65,22 @@ function selectedPipeline(payload={},settings={}){
 }
 function buildProfile(settings={},payload={}){
   const tts=settings.tts||{},engine=String(tts.engine||'kokoro'),identity=engine==='qwen3tts'?qwenModelIdentity(tts):{mode:'',id:'',fingerprint:'',name:''};
-  const q=tts.engineParams?.qwen3tts||{},localConfig=normalizeLocalConfig(payload?.localResult?.recommendedConfig||settings?.ai?.localTunedConfig||{});
+  const q=tts.engineParams?.qwen3tts||{},ch=tts.engineParams?.chatterbox||{},localConfig=normalizeLocalConfig(payload?.localResult?.recommendedConfig||settings?.ai?.localTunedConfig||{});
   const pipelineMode=selectedPipeline(payload,settings),swapValidated=pipelineMode==='gpu-swap'&&!!(payload?.localResult?.summary?.swapValidated||payload?.localResult?.coexistence?.swapValidated||settings?.ai?.lastLocalBenchmark?.swapValidated);
   const localSummary=payload?.localResult?.summary||settings?.ai?.lastLocalBenchmark||{},expectedTps=Number(pipelineMode==='gpu-coordinated'?(localSummary.coordinatedTps||localSummary.tokensPerSec||0):(localSummary.tokensPerSec||0));
   const expectedRtf=Number(payload?.ttsResult?.stableRealtimeFactor||payload?.ttsResult?.bestRealtimeFactor||payload?.ttsResult?.realtimeFactor||settings?.optimization0321?.voice?.medianRtf||0);
-  const baseTemp=clamp(q.temperature,0.1,1.5,.78),stableTemp=engine==='qwen3tts'&&identity.mode==='finetuned'?Math.min(baseTemp,.55):baseTemp;
-  const productionSeed=intSeed(identity.fingerprint||identity.id||identity.name||engine);
+  const qBaseTemp=clamp(q.temperature,0.1,1.5,.78),chBaseTemp=clamp(ch.temperature,0.1,1.5,.8),stableTemp=engine==='chatterbox'?Math.min(chBaseTemp,.60):engine==='qwen3tts'&&identity.mode==='finetuned'?Math.min(qBaseTemp,.55):qBaseTemp;
+  const voiceIdentity=engine==='chatterbox'?String(tts.referenceVoiceId||'')+'|'+String(ch.variant||'latam'):identity.fingerprint||identity.id||identity.name||String(tts.referenceVoiceId||'')||engine;
+  const productionSeed=intSeed(voiceIdentity);
   const runtimeParams=engine==='qwen3tts'?{
     dtypeMode:String(q.dtypeMode||payload?.qwenPerf?.recommendedParams?.dtypeMode||'bf16'),
     attentionMode:String(q.attentionMode||payload?.qwenPerf?.recommendedParams?.attentionMode||'auto'),
     chunkChars:Math.round(clamp(q.chunkChars||payload?.qwenPerf?.recommendedParams?.chunkChars,240,900,360)),
-    temperature:baseTemp,
+    temperature:qBaseTemp,
+    productionTemperature:stableTemp,
+    productionSeed,
+    consistencyMode:'stable-v1'
+  }:engine==='chatterbox'?{
     productionTemperature:stableTemp,
     productionSeed,
     consistencyMode:'stable-v1'
@@ -97,6 +102,7 @@ function buildProfile(settings={},payload={}){
       modelId:identity.id||'',
       modelFingerprint:identity.fingerprint||'',
       modelName:identity.name||'',
+      referenceVoiceId:engine==='chatterbox'||(engine==='qwen3tts'&&identity.mode!=='finetuned')?String(tts.referenceVoiceId||''):'',
       runtimeParams,
       expectedRtf
     },
@@ -116,10 +122,12 @@ function buildProfile(settings={},payload={}){
       simultaneousSafe:pipelineMode==='simultaneous'
     },
     voiceConsistency:{
-      mode:engine==='qwen3tts'&&identity.mode==='finetuned'?'stable-v1':'default',
+      mode:engine==='qwen3tts'||engine==='chatterbox'?'stable-v1':'default',
+      source:engine==='qwen3tts'&&identity.mode==='finetuned'?'fine-tuned-model':engine==='chatterbox'?'reference-audio':engine==='qwen3tts'?'reference-audio':'builtin',
       productionTemperature:stableTemp,
       productionSeed,
-      chunkDiagnostics:true
+      chunkDiagnostics:true,
+      naturalSpeed:true
     }
   };
   if(profile.pipeline.mode==='gpu-swap'&&!profile.pipeline.swapValidated){
@@ -131,8 +139,8 @@ function buildProfile(settings={},payload={}){
 function compatibility(settings={},profile=null){
   if(!profile)return{ok:false,reason:'sin perfil de producción'};
   if(Number(profile.schemaVersion)!==PROFILE_SCHEMA)return{ok:false,reason:'perfil antiguo'};
-  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.15'};
-  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.15'};
+  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.16'};
+  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.16'};
   if(profile.pipeline?.mode==='gpu-swap'&&profile.pipeline?.swapValidated!==true)return{ok:false,reason:'GPU SWAP no validado'};
   const tts=settings.tts||{},engine=String(tts.engine||'kokoro');
   if(String(profile.tts?.engine||'')!==engine)return{ok:false,reason:'motor TTS distinto'};
@@ -142,7 +150,9 @@ function compatibility(settings={},profile=null){
     const id=qwenModelIdentity(tts);
     if(String(profile.tts?.modelId||'')!==String(id.id||''))return{ok:false,reason:'modelo fine-tuned distinto'};
     if(profile.tts?.modelFingerprint&&String(profile.tts.modelFingerprint)!==String(id.fingerprint||''))return{ok:false,reason:'fingerprint del modelo cambió'};
+    if(id.mode!=='finetuned'&&String(profile.tts?.referenceVoiceId||'')!==String(tts.referenceVoiceId||''))return{ok:false,reason:'referencia Qwen distinta'};
   }
+  if(engine==='chatterbox'&&String(profile.tts?.referenceVoiceId||'')!==String(tts.referenceVoiceId||''))return{ok:false,reason:'voz de referencia Chatterbox distinta'};
   return{ok:true,reason:''};
 }
 function hydrateSettings(settings={},root=dataRoot()){
@@ -162,7 +172,10 @@ function hydrateSettings(settings={},root=dataRoot()){
   }
   if(profile.tts?.engine==='qwen3tts'){
     s.tts.engineParams.qwen3tts={...(s.tts.engineParams.qwen3tts||{}),...(profile.tts.runtimeParams||{})};
+  }else if(profile.tts?.engine==='chatterbox'){
+    s.tts.engineParams.chatterbox={...(s.tts.engineParams.chatterbox||{}),...(profile.tts.runtimeParams||{})};
   }
+  s.tts.speed=1;
   if(s.optimization0321){
     s.optimization0321={...s.optimization0321,version:PROFILE_VERSION,productionProfileId:profile.id,local:{...(s.optimization0321.local||{}),coexistenceMode:String(profile.pipeline?.mode||'gpu-coordinated')}};
   }
@@ -173,7 +186,7 @@ function migrateLegacy(settings={},root=dataRoot()){
   const o=settings?.optimization0321,local=settings?.ai?.localTunedConfig;
   if(!o||!settings?.ai?.localAutoTuned||!local)return null;
   const p=buildProfile(settings,{
-    source:'legacy-lab14-migration',
+    source:'legacy-lab15-migration',
     fingerprint:o.fingerprint||'',
     hardwareLabel:o.hardwareLabel||'',
     localResult:{recommendedConfig:local,summary:settings?.ai?.lastLocalBenchmark||o.local||{},recommendedId:settings?.ai?.lastLocalBenchmark?.recommendedId||'',recommendedLabel:settings?.ai?.lastLocalBenchmark?.recommendedLabel||''},
@@ -240,7 +253,7 @@ async function preflightAutomation(engine){
   const s=engine.getSettings?.()||{},rawProfile=s.activeOptimizationV2||null,profile=productionProfileFrom(s);
   engine.__v2ProductionProfile=profile||null;
   if(rawProfile&&rawProfile.valid===false){const e=new Error(`El perfil optimizado necesita revalidación antes de producción: ${rawProfile.invalidReason||'ejecuta Optimizar GEC'}`);e.code='PRODUCTION_PROFILE_INVALID';throw e;}
-  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.15. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
+  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.16. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
   if(!profile)return{ok:true,optimized:false,pipeline:resolvePipelineMode(s),reason:'sin perfil previo; modo coordinado seguro explícito'};
   if(profile.localAi?.required){
     const local=engine.localRuntime||global.__ec0320LocalRuntime;
