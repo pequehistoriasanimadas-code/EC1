@@ -284,4 +284,4 @@ function installIpc(){
   bind('optimization-v2:clear',()=>{try{fs.rmSync(profileFile(),{force:true});}catch{}return{ok:true};});
 }
 function installV2ProductionFidelity(){installSettingsHydration();installAutomationFidelity();installIpc();}
-module.exports={PROFILE_SCHEMA,PROFILE_VERSION,PROFILE_FILE,buildProfile,compatibility,hydrateSettings,migrateLegacy,resolvePipelineMode,expectedVsRuntime,productionProfileFrom,installV2ProductionFidelity};
+module.exports={PROFILE_SCHEMA,PROFILE_VERSION,PROFILE_FILE,profileFile,buildProfile,compatibility,hydrateSettings,migrateLegacy,resolvePipelineMode,expectedVsRuntime,productionProfileFrom,normalizeLocalConfig,sameConfig,installV2ProductionFidelity};
