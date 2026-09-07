@@ -16,11 +16,12 @@ app.whenReady().then(async()=>{let tmp='';try{
   const fine={id:'ft-aurelio',name:'AURELIO_GEC_Qwen3TTS',path:path.join(tmp,'aurelio'),speaker:'aurelio',fingerprint:'aurelio-fp'};
   rt.fineTunedModel=id=>id===fine.id?fine:null;
   const calls=[];
-  rt.command=async(id,payload)=>{calls.push(payload);if(payload.cmd==='validate_qwen')return{validated:true,repaired:['speech_tokenizer/preprocessor_config.json'],shared_assets_ok:true};if(payload.cmd==='prepare')return{prepared:true,device:'cuda',gpu_name:'RTX TEST',gpu_vram_mb:12288,torch_version:'2.6.0',torch_cuda:'12.4',cuda_available:true};throw new Error('unexpected '+payload.cmd);};
+  rt.command=async(id,payload)=>{calls.push(payload);if(payload.cmd==='prepare')return{prepared:true,device:'cuda',gpu_name:'RTX TEST',gpu_vram_mb:12288,torch_version:'2.6.0',torch_cuda:'12.4',cuda_available:true,repaired_assets:['overlay:speech_tokenizer/preprocessor_config.json']};throw new Error('unexpected '+payload.cmd);};
   const params={voiceMode:'finetuned',fineTunedModelId:fine.id};
   const out=await rt.prepare('qwen3tts',{params});
   const prep=calls.find(x=>x.cmd==='prepare'),val=calls.find(x=>x.cmd==='validate_qwen');
-  assert(prep&&val,'El paquete no ejecuta preflight + prepare');
+  assert(prep,'El paquete no ejecuta prepare del fine-tuned');
+  assert.strictEqual(val,undefined,'Lab.14 no debe ejecutar el preflight duplicado antes de prepare');
   assert.strictEqual(prep.qwen_mode,'finetuned');
   assert.strictEqual(prep.model_path,fine.path,'El paquete cayó al Qwen Base en vez de Aurelio');
   assert.strictEqual(prep.speaker,'aurelio');
@@ -33,12 +34,12 @@ app.whenReady().then(async()=>{let tmp='';try{
   const automation=fs.readFileSync(path.join(appRoot,'src','services','automation0325.js'),'utf8');
   const ui=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8');
   assert(worker.includes('speech_tokenizer/preprocessor_config.json')&&worker.includes('force_download=True'),'Autorreparación Qwen no está empaquetada');
-  assert(release.includes('ttsModelFingerprint')&&release.includes("tts-lab:validateSelected"),'Fingerprint/preflight no está empaquetado');
+  assert(release.includes('ttsModelFingerprint')&&release.includes("tts-lab:validateSelected")&&release.includes('QWEN_ASSET_REVISION'),'Fingerprint/asset identity no está empaquetado');
   assert(opt.includes("mode:'gpu-swap'")&&opt.includes('swapValidated:true'),'GPU SWAP validado no está empaquetado');
   assert(automation.includes('releaseOppositeForGpuSwap')&&automation.includes('stopAndWait'),'GPU SWAP real no está empaquetado');
-  assert(ui.includes('currentOptimizationKey')&&ui.includes('ttsLabValidateSelected'),'UI fine-tuned no está empaquetada');
+  assert(ui.includes('currentOptimizationKey')&&!ui.includes('ttsLabValidateSelected')&&ui.includes('v2InstallProgress'),'UI fine-tuned lab.14 no está empaquetada');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 QWEN FINE-TUNED lab.14 OK · Aurelio exacto · repair · fingerprint · GPU SWAP');
+  console.log('PACKAGED V2 QWEN FINE-TUNED lab.14 OK · Aurelio exacto · overlay inmutable · fingerprint · GPU SWAP');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
