@@ -2,6 +2,7 @@
 const {LocalRuntime}=require('./localRuntime');
 const LABELS={chatterbox:'Chatterbox V3',qwen3tts:'Qwen3-TTS 0.6B'};
 const SWAP_VOICE_TEXT='EC Automatic News verifica el modo seguro de memoria. La inteligencia artificial de texto libera la GPU y el motor de voz genera esta locución antes de devolver el turno.';
+const COORDINATED_TEXT='Devuelve únicamente JSON válido con title, summary y script. title debe ser "Prueba coordinada". summary debe indicar que GEC verifica rendimiento. script debe tener unas ochenta palabras sobre una prueba técnica de producción, sin markdown.';
 
 function installV2Optimization(){
   const p=LocalRuntime.prototype;
@@ -44,10 +45,26 @@ function installV2Optimization(){
     if(!tpsSafe)reasons.push(`Qwen cayó de ${isolated.toFixed(1)} a ${overlapTps.toFixed(1)} tok/s`);
     if(!vramSafe)reasons.push(`VRAM ${Math.round(used)}/${Math.round(total)} MB`);
 
-    // If both models actually coexisted in VRAM and only performance degraded,
-    // serialize their heavy sections while keeping them resident.
-    if(isolated>0&&errorFree&&rtf>0&&vramSafe){
-      const coordinationReason=reasons.join(' · ')||'la ejecución simultánea degradó el rendimiento';
+    // Lab.15: "GPU coordinada" is no longer inferred merely because both
+    // models fit in VRAM. Prove the real production pattern: both remain
+    // resident, but their heavy generations run one after the other.
+    let coordinated=null;
+    if(isolated>0&&errorFree&&rtf>0&&vramSafe&&args?.kokoro?.generate&&typeof this.__ec0320Request==='function'){
+      try{
+        const q=await this.__ec0320Request(COORDINATED_TEXT,{maxTokens:180,timeoutMs:180000});
+        const coordinatedTps=Number(q?.metrics?.tokensPerSec||0);
+        const audio=await args.kokoro.generate(SWAP_VOICE_TEXT,{voice:args.voice||'ef_dora',speed:Number(args.speed)||1});
+        const coordinatedRtf=Number(audio?.steadyRealtimeFactor||audio?.realtimeFactor||0);
+        try{if(audio?.path)args.kokoro.cleanupAudio?.(audio.path);}catch{}
+        const tpsRatio=isolated>0?coordinatedTps/isolated:0;
+        const tpsOk=coordinatedTps>0&&tpsRatio>=.70;
+        const voiceOk=coordinatedRtf>0&&coordinatedRtf<=2.20;
+        coordinated={safe:tpsOk&&voiceOk,tokensPerSec:coordinatedTps,rtf:coordinatedRtf,tpsRatio,reason:!tpsOk?`Qwen coordinado conservó solo ${Math.round(tpsRatio*100)}% del rendimiento aislado`:!voiceOk?`TTS coordinado RTF ${coordinatedRtf.toFixed(2)} > 2.20`:''};
+      }catch(e){coordinated={safe:false,error:String(e?.message||e)};}
+    }
+
+    if(coordinated?.safe){
+      const coordinationReason=(reasons.join(' · ')||'la ejecución simultánea degradó el rendimiento')+` · secuencial residente validado: Qwen ${coordinated.tokensPerSec.toFixed(1)} tok/s, voz RTF ${coordinated.rtf.toFixed(2)}`;
       return{
         ...result,
         ok:true,
@@ -55,9 +72,13 @@ function installV2Optimization(){
           safe:true,
           mode:'gpu-coordinated',
           engine,
-          rtf,
+          rtf:coordinated.rtf,
           isolatedTps:isolated,
           overlapTps,
+          coordinatedTps:coordinated.tokensPerSec,
+          coordinatedRtf:coordinated.rtf,
+          coordinatedTpsRatio:coordinated.tpsRatio,
+          coordinatedValidated:true,
           vramUsedMb:used,
           vramTotalMb:total,
           simultaneousSafe:false,
@@ -66,16 +87,22 @@ function installV2Optimization(){
         },
         summary:{
           ...(result.summary||{}),
-          voiceLimit:1.6,
+          voiceLimit:2.20,
           ttsEngine:engine,
           coexistenceMode:'gpu-coordinated',
           simultaneousSafe:false,
+          coordinatedValidated:true,
+          coordinatedTps:coordinated.tokensPerSec,
+          coordinatedRtf:coordinated.rtf,
+          coordinatedTpsRatio:coordinated.tpsRatio,
           coordinationReason
         }
       };
     }
+    if(coordinated&&!coordinated.safe)reasons.push(coordinated.error?`GPU coordinada falló: ${coordinated.error}`:`GPU coordinada descartada: ${coordinated.reason||'rendimiento insuficiente'}`);
 
-    // An overlap error or VRAM pressure must never be reported as
+    // An overlap error, VRAM pressure, or failed coordinated validation must
+    // prove a true unload/reload path before enabling GPU SWAP.
     // "GPU coordinada" merely because local Qwen worked in isolation.
     // Prove a true unload/reload path before enabling GPU SWAP.
     let swap=null;
