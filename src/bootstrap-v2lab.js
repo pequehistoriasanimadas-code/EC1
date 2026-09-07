@@ -13,4 +13,5 @@ if(!gotLock){app.quit();}else{
   require('./bootstrap-0332');
   require('./services/releaseV2Lab').installReleaseV2Lab();
   require('./services/releaseV2Optimization').installV2Optimization();
+  require('./services/releaseV2ProductionFidelity').installV2ProductionFidelity();
 }
