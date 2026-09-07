@@ -64,7 +64,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     const settings={
       ai:{primary:'local',backup1:'none',backup2:'none',lastLocalBenchmark:{coexistenceMode:'gpu-swap',swapValidated:false}},
       tts:{engine:'chatterbox',engineParams:{chatterbox:{variant:'latam'}}},
-      activeOptimizationV2:{valid:true,pipeline:{mode:'gpu-coordinated',validated:true,swapValidated:false}}
+      activeOptimizationV2:{valid:true,pipeline:{mode:'gpu-coordinated',validated:true,swapValidated:false,coordinatedValidated:true}}
     };
     assert.strictEqual(resolvePipelineMode(settings),'gpu-coordinated');
     settings.activeOptimizationV2.pipeline.mode='gpu-swap';
@@ -83,7 +83,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
       runtimeSignature:ttsRuntimeSignature(profileSettings.tts),
       tts:{engine:'chatterbox',runtimeParams:{},expectedRtf:1.5},
       localAi:{required:true,mode:'tuned',config:normalizeLocalConfig({gpuLayers:48,ctx:4096,batch:384,ubatch:192,threads:4}),expectedTokensPerSec:100},
-      pipeline:{mode:'gpu-coordinated',validated:true,swapValidated:false},
+      pipeline:{mode:'gpu-coordinated',validated:true,swapValidated:false,coordinatedValidated:true},
       voiceConsistency:{mode:'default'}
     };
     fs.mkdirSync(path.dirname(profileFile(tmp)),{recursive:true});
