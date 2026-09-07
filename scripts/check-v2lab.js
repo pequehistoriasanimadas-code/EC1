@@ -21,7 +21,7 @@ assert(runtime.includes('download.pytorch.org/whl/cu124')&&runtime.includes('sha
 assert(runtime.includes('removeTorchShadow')&&runtime.includes('cudaRuntimeRevision'),'Los motores experimentales no deben sombrear el PyTorch CUDA compartido');
 assert(runtime.includes("Qwen3-TTS 0.6B")&&runtime.includes("Chatterbox V3"),'Catálogo TTS Lab incompleto');
 assert(renderer.includes('Motor de voz')&&renderer.includes('Chatterbox V3')&&renderer.includes('Qwen3-TTS 0.6B'),'Selector de motor no está en Audio y locución');
-assert(renderer.includes('Runtime CUDA instalado')&&renderer.includes('gpuName')&&renderer.includes('Torch'),'La UI debe mostrar CUDA/GPU real para motores experimentales');
+assert(renderer.includes('Runtime CUDA v2 verificado')&&renderer.includes('gpuName')&&renderer.includes('Torch'),'La UI debe mostrar CUDA/GPU real para motores experimentales');
 assert(renderer.includes('Voz de referencia')&&renderer.includes('Noticias / Informativo'),'UX de voz/estilo incompleta');
 assert(renderer.includes('Velocidad de lectura')&&renderer.includes('Personalizado')&&renderer.includes('CHATTER_PRESETS')&&renderer.includes('CFG / adherencia'),'Presets/velocidad Chatterbox no están completos');
 assert(renderer.includes('Latinoamérica · recomendado')&&renderer.includes('v2ChatterVariant')&&renderer.includes('QWEN_PRESETS'),'La UI debe permitir LatAm/Multilingual y presets Qwen visibles');
