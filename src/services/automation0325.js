@@ -22,7 +22,7 @@ class AutomationEngine extends Automation0324{
     super(args);
     this.aiStageTail=Promise.resolve();this.voiceStageTail=Promise.resolve();this.aiStageBusy=false;this.voiceStageBusy=false;
     this.gpuStageQueue=[];this.gpuStageBusy=false;this.gpuStageCurrent='';this.gpuVoiceBurst=0;this.gpuMaxVoiceBurst=2;this.gpuQueueTimeoutMs=180000;
-    this.performanceSamples=[];
+    this.performanceSamples=[];this.localRuntime=args?.localRuntime||null;this.__v2ProductionProfile=null;this.__v2Preflight=null;
     this.selectionRecent=[];this.urlFailures=new Map();this.feedFailures=new Map();this.liveBaseCooldown=new Map();
     if(!Number.isFinite(Number(this.newsSinceExclusive)))this.newsSinceExclusive=0;
   }
@@ -95,12 +95,18 @@ class AutomationEngine extends Automation0324{
   async releaseOppositeForGpuSwap(kind,holder=null){
     if(kind==='ai'){
       if(holder)holder.stage='gpu-swap-release-voice';this.state();
-      try{await this.kokoro?.stopAndWait?.('gpu-swap-before-ai',5000);}catch{}
-      await wait(250);
+      if(typeof this.kokoro?.stopAndWait!=='function'){const e=new Error('GPU SWAP no puede confirmar que el motor de voz liberó la GPU');e.code='GPU_SWAP_TTS_RELEASE_UNAVAILABLE';throw e;}
+      await this.kokoro.stopAndWait('gpu-swap-before-ai',7000);
+      await wait(300);
       return;
     }
     if(holder)holder.stage='gpu-swap-release-ai';this.state();
-    try{const local=global.__ec0320LocalRuntime;if(local?.stopAndWait)await local.stopAndWait('gpu-swap-before-voice',5000);else{local?.stop?.('gpu-swap-before-voice');await wait(700);}}catch{await wait(700);}
+    const local=this.localRuntime;
+    if(!local||typeof local.stopAndWait!=='function'){const e=new Error('GPU SWAP no tiene una referencia directa al runtime local');e.code='GPU_SWAP_LOCAL_RUNTIME_MISSING';throw e;}
+    await local.stopAndWait('gpu-swap-before-voice',7000);
+    const st=await local.status().catch(()=>null);
+    if(st?.running){const e=new Error('Qwen local siguió activo después de solicitar GPU SWAP');e.code='GPU_SWAP_LOCAL_STILL_RUNNING';throw e;}
+    await wait(350);
   }
   async pumpGpuCoordinated(){
     if(this.gpuStageBusy)return;const req=this.nextGpuRequest();if(!req)return;if(req.queueTimer)clearTimeout(req.queueTimer);
