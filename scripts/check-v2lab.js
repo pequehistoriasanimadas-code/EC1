@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),queueRenderer=read('src/renderer-0332.js'),baseOptimizerUi=read('src/renderer-0321.js'),automation=read('src/services/automation0325.js'),localRuntime=read('src/services/localRuntime.js'),localPolicy=read('src/services/version0320LocalPolicy.js'),providers=read('src/services/providers.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
+const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),production=read('src/services/releaseV2ProductionFidelity.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),queueRenderer=read('src/renderer-0332.js'),baseOptimizerUi=read('src/renderer-0321.js'),automation=read('src/services/automation0325.js'),localRuntime=read('src/services/localRuntime.js'),localPolicy=read('src/services/version0320LocalPolicy.js'),providers=read('src/services/providers.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
 require(path.join(root,'src','services','releaseV2Optimization.js'));
 assert.strictEqual(pkg.version,'2.0.0-lab.15','La build debe identificarse como 2.0.0-lab.15');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
@@ -15,6 +15,8 @@ assert(release.includes('optimizationKey')&&release.includes('chatterbox:multili
 assert(release.includes('p.generate=async function')&&release.includes("engine==='kokoro'")&&release.includes('labRuntime().generate'),'Routing multi-TTS incompleto');
 assert(optimizer.includes('qwenTokensPerSec')&&optimizer.includes('vramSafe')&&optimizer.includes('voiceSafe'),'La optimización no valida Qwen + TTS por RTF/tok/s/VRAM');
 assert(optimizer.includes("coexistenceMode:'gpu-coordinated'")&&optimizer.includes("mode:'simultaneous'")&&optimizer.includes("mode:'gpu-swap'"),'El optimizador V2 debe elegir entre simultáneo, GPU coordinada y GPU SWAP validado');
+assert(boot.includes('releaseV2ProductionFidelity')&&production.includes('active-production-profile.json'),'Lab.15 debe instalar una fuente única de verdad del perfil de producción');
+assert(production.includes('PRODUCTION_PROFILE_MISMATCH')&&production.includes("return'gpu-coordinated'"),'Lab.15 debe verificar perfil activo y evitar GPU SWAP silencioso');
 assert(runtime.includes("chatterbox-tts")&&runtime.includes("qwen-tts"),'Instaladores de motores experimentales ausentes');
 assert(runtime.includes("setuptools<81")&&runtime.includes("resemble-perth")&&runtime.includes('installRevision:3'),'Chatterbox debe reparar Perth/setuptools en instalaciones existentes');
 assert(runtime.includes('download.pytorch.org/whl/cu124')&&runtime.includes('shared-cuda')&&runtime.includes('torch==')&&runtime.includes('torchaudio=='),'TTS Lab debe instalar PyTorch CUDA compartido bajo demanda');
@@ -41,6 +43,8 @@ assert(worker.includes('gpu_name')&&worker.includes('torch_cuda')&&worker.includ
 assert(worker.includes('time_stretch_preserve_pitch')&&worker.includes('phase_vocoder')&&worker.includes('speed'),'Worker debe aplicar velocidad conservando tono');
 assert(worker.includes('ResembleAI/Chatterbox-Multilingual-es-mx-latam')&&worker.includes('t3_es_mx_latam.safetensors')&&worker.includes('s3gen_v3.pt'),'Worker debe integrar el pack oficial LatAm de Chatterbox');
 assert(worker.includes('chunk-start')&&worker.includes('chunk-heartbeat')&&worker.includes('chunk-done')&&worker.includes('postprocess'),'Worker debe enviar heartbeats de progreso TTS');
+assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('stable-v1')&&worker.includes('chunk_diagnostics'),'Lab.15 debe estabilizar y diagnosticar la voz fine-tuned por chunks');
+assert(runtime.includes('chunkDiagnostics:Array.isArray(r.chunk_diagnostics)'),'Runtime debe propagar diagnóstico de chunks a producción');
 assert(renderer.includes('Voz predeterminada de Chatterbox'),'La UI debe ofrecer la voz predeterminada de Chatterbox');
 assert(renderer.includes('Modelo entrenado / Fine-tuned')&&renderer.includes('Importar modelo entrenado')&&renderer.includes('Transcripción Qwen'),'La UI no expone referencia completa y fine-tuning Qwen');
 assert(renderer.includes('v2TranscriptModal')&&renderer.includes('openTranscriptModal')&&!renderer.includes("prompt('Transcripción exacta"),'Qwen debe usar editor integrado y no prompt del navegador');
@@ -85,4 +89,4 @@ assert(renderer.includes('currentOptimizationKey')&&renderer.includes('selectedF
 assert(prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
 assert(workflow.includes('Packaged 0.3.32 queue planner and stable renderer test'),'V2 Lab debe conservar el smoke 0.3.32');
 assert(workflow.includes('GEC-V2.0-TTS-Lab-Windows-Portable-EXE'),'Workflow no distingue el artefacto V2');
-console.log('check-v2lab: OK · lab.15 · UI responsiva · CUDA health async/cache · q fixed · import async · aislamiento Chatterbox/Qwen · GPU SWAP');
+console.log('check-v2lab: OK · lab.15 · production profile · tuned fidelity · stable voice chunks · UI responsiva · CUDA isolation');
