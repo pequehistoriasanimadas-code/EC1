@@ -34,6 +34,41 @@ QWEN_SHARED_FILES = [
     "speech_tokenizer/preprocessor_config.json",
 ]
 QWEN_BASE_MODEL_FILES = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
+QWEN_PERF_REVISION = 1
+
+
+def qwen_runtime_params(params=None):
+    params = params or {}
+    dtype_mode = str(params.get("dtypeMode") or "bf16").lower()
+    if dtype_mode not in ("bf16", "fp16"):
+        dtype_mode = "bf16"
+    attention_mode = str(params.get("attentionMode") or "auto").lower()
+    if attention_mode not in ("auto", "sdpa", "eager", "flash_attention_2"):
+        attention_mode = "auto"
+    chunk_chars = max(240, min(900, int(params.get("chunkChars") or 360)))
+    return {"dtypeMode": dtype_mode, "attentionMode": attention_mode, "chunkChars": chunk_chars}
+
+
+def qwen_capabilities():
+    info = torch_runtime_info()
+    flash_available = False
+    flash_version = ""
+    try:
+        import flash_attn
+        flash_available = True
+        flash_version = str(getattr(flash_attn, "__version__", ""))
+    except Exception:
+        pass
+    return {
+        **info,
+        "flash_attention_2": flash_available,
+        "flash_attention_version": flash_version,
+        "sdpa": True,
+        "fp16": True,
+        "bf16": True,
+        "performance_revision": QWEN_PERF_REVISION,
+    }
+
 
 
 def emit(payload):
@@ -256,19 +291,27 @@ def load_chatterbox_latam(device):
     return ChatterboxMultilingualTTS(t3, s3gen, ve, tokenizer, device, conds=None)
 
 
-def load_model(model_path="", chatterbox_variant="latam"):
+def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
     global MODEL, MODEL_DEVICE, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
     import torch
 
     runtime = ensure_cuda_consistency()
     use_cuda = bool(runtime["cuda_available"])
+    if use_cuda:
+        try:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.benchmark = True
+        except Exception:
+            pass
     requested = ""
+    perf = qwen_runtime_params(qwen_params) if ENGINE == "qwen3tts" else None
     if ENGINE == "qwen3tts":
         requested, _ = ensure_qwen_assets(os.path.abspath(model_path) if model_path else "")
     else:
         chatterbox_variant = "multilingual" if str(chatterbox_variant) == "multilingual" else "latam"
         requested = "chatterbox-" + chatterbox_variant
-    key = f"{ENGINE}:{requested}"
+    key = f"{ENGINE}:{requested}:{perf['dtypeMode']}:{perf['attentionMode']}" if ENGINE == "qwen3tts" else f"{ENGINE}:{requested}"
     if MODEL is not None and MODEL_KEY == key:
         return MODEL
 
@@ -306,11 +349,21 @@ def load_model(model_path="", chatterbox_variant="latam"):
     elif ENGINE == "qwen3tts":
         from qwen_tts import Qwen3TTSModel
 
+        dtype = torch.float32
+        if use_cuda:
+            dtype = torch.float16 if perf["dtypeMode"] == "fp16" else torch.bfloat16
         kwargs = {
             "device_map": "cuda:0" if use_cuda else "cpu",
-            "dtype": torch.bfloat16 if use_cuda else torch.float32,
+            "dtype": dtype,
         }
-        MODEL = Qwen3TTSModel.from_pretrained(requested, **kwargs)
+        if perf["attentionMode"] != "auto":
+            if perf["attentionMode"] == "flash_attention_2" and not qwen_capabilities().get("flash_attention_2"):
+                raise RuntimeError("Flash Attention 2 no está disponible en este runtime de Windows")
+            kwargs["attn_implementation"] = perf["attentionMode"]
+        try:
+            MODEL = Qwen3TTSModel.from_pretrained(requested, **kwargs)
+        except Exception as exc:
+            raise RuntimeError(f"Qwen3-TTS no pudo cargar con {perf['dtypeMode']} / {perf['attentionMode']}: {exc}") from exc
     else:
         raise RuntimeError(f"Motor no soportado: {ENGINE}")
 
@@ -371,7 +424,7 @@ def _pack_qwen_prompt(items):
     }
 
 
-def qwen_prompt(ref_audio, ref_text, cache_path=""):
+def qwen_prompt(ref_audio, ref_text, cache_path="", params=None):
     import torch
 
     if not ref_audio or not os.path.isfile(ref_audio):
@@ -402,7 +455,7 @@ def qwen_prompt(ref_audio, ref_text, cache_path=""):
                 pass
 
     if packed is None:
-        items = load_model().create_voice_clone_prompt(
+        items = load_model(qwen_params=params).create_voice_clone_prompt(
             ref_audio=ref_audio,
             ref_text=ref_text,
             x_vector_only_mode=False,
@@ -436,8 +489,8 @@ def prepare_reference(payload):
         }
 
     if ENGINE == "qwen3tts":
-        load_model()
-        qwen_prompt(ref_audio, ref_text, cache_path)
+        load_model(qwen_params=params)
+        qwen_prompt(ref_audio, ref_text, cache_path, params)
         info = torch_runtime_info()
         return {
             "prepared_reference": True,
@@ -485,7 +538,7 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                 raise RuntimeError("Selecciona un modelo Qwen3-TTS entrenado")
             if not speaker:
                 raise RuntimeError("El modelo entrenado no declara un speaker válido")
-            model = load_model(model_path)
+            model = load_model(model_path, qwen_params=params)
             wavs, sr = model.generate_custom_voice(
                 text=text,
                 language="Spanish",
@@ -498,11 +551,11 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                 repetition_penalty=1.05,
             )
         else:
-            model = load_model()
+            model = load_model(qwen_params=params)
             wavs, sr = model.generate_voice_clone(
                 text=text,
                 language="Spanish",
-                voice_clone_prompt=qwen_prompt(ref_audio, ref_text, cache_path),
+                voice_clone_prompt=qwen_prompt(ref_audio, ref_text, cache_path, params),
                 max_new_tokens=2048,
                 do_sample=True,
                 top_k=50,
@@ -583,7 +636,7 @@ def generate(payload):
 
     started = time.perf_counter()
     pieces, sample_rate = [], 0
-    text_chunks = chunks(text)
+    text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else 360)
     request_id = str(payload.get("id") or "")
     for idx, part in enumerate(text_chunks):
         emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
@@ -625,6 +678,7 @@ def generate(payload):
         "device": MODEL_DEVICE,
         "chunks": len(text_chunks),
         "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "",
+        "qwen_runtime": qwen_runtime_params(params) if ENGINE == "qwen3tts" else {},
         "speed": round(speed, 3),
         "variant": ("multilingual" if str(params.get("variant") or "") == "multilingual" else "latam") if ENGINE == "chatterbox" else "",
         **info,
@@ -642,6 +696,8 @@ def handle(payload):
             "device": MODEL_DEVICE,
             **info,
         }
+    if cmd == "capabilities":
+        return {"engine": ENGINE, **qwen_capabilities()} if ENGINE == "qwen3tts" else {"engine": ENGINE, **torch_runtime_info()}
     if cmd == "prepare":
         params = payload.get("params") or {}
         variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
@@ -655,10 +711,10 @@ def handle(payload):
             if qwen_mode == "finetuned":
                 validated = validate_qwen_model(model_path, speaker)
                 repaired = validated.get("repaired") or []
-                load_model(validated["model_path"])
+                load_model(validated["model_path"], qwen_params=params)
             else:
                 validated = validate_qwen_model("", "")
-                load_model(validated["model_path"])
+                load_model(validated["model_path"], qwen_params=params)
         else:
             raise RuntimeError("Motor no soportado")
         info = torch_runtime_info()
