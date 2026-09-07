@@ -72,7 +72,7 @@ class AutomationEngine extends Automation0324{
   markStageWait(holder,kind,ms,mode){if(!holder)return;holder.metrics={...(holder.metrics||{}),[this.stageMetric(kind,'QueueWaitMs')]:Math.max(0,Number(ms)||0),pipelineMode:mode};}
   markStageElapsed(holder,kind,ms,mode){if(!holder)return;holder.metrics={...(holder.metrics||{}),[this.stageMetric(kind,'StageElapsedMs')]:Math.max(0,Number(ms)||0),pipelineMode:mode};}
   async runStage(kind,fn,holder=null,options={}){
-    const mode=this.coexistenceMode();if(mode==='gpu-coordinated'&&(kind==='ai'||kind==='voice'))return this.runGpuCoordinated(kind,fn,holder,options);
+    const mode=this.coexistenceMode();if((mode==='gpu-coordinated'||mode==='gpu-swap')&&(kind==='ai'||kind==='voice'))return this.runGpuCoordinated(kind,fn,holder,{...options,mode});
     const tailKey=kind==='ai'?'aiStageTail':'voiceStageTail',busyKey=kind==='ai'?'aiStageBusy':'voiceStageBusy',previous=this[tailKey]||Promise.resolve(),queuedAt=Date.now();
     if(holder){holder.stage=kind==='ai'?'ai-wait':'tts-wait';this.state();}
     const task=previous.then(async()=>{this.markStageWait(holder,kind,Date.now()-queuedAt,mode);this[busyKey]=true;if(kind==='voice')this.localHeavyRunning=true;if(holder)holder.stage=kind;this.state();const started=Date.now();try{return await fn();}finally{this.markStageElapsed(holder,kind,Date.now()-started,mode);this[busyKey]=false;if(kind==='voice')this.localHeavyRunning=false;this.state();}});
@@ -80,11 +80,11 @@ class AutomationEngine extends Automation0324{
   }
   runGpuCoordinated(kind,fn,holder=null,options={}){
     return new Promise((resolve,reject)=>{
-      const req={kind,fn,holder,resolve,reject,queuedAt:Date.now(),retry:!!options.retry,queueTimer:null};
-      if(holder){holder.stage=kind==='ai'?'ai-wait':'tts-wait';holder.metrics={...(holder.metrics||{}),pipelineMode:'gpu-coordinated'};this.state();}
+      const req={kind,fn,holder,resolve,reject,queuedAt:Date.now(),retry:!!options.retry,mode:String(options.mode||'gpu-coordinated'),queueTimer:null};
+      if(holder){holder.stage=kind==='ai'?'ai-wait':'tts-wait';holder.metrics={...(holder.metrics||{}),pipelineMode:req.mode};this.state();}
       req.queueTimer=setTimeout(()=>{
         const idx=this.gpuStageQueue.indexOf(req);if(idx<0)return;this.gpuStageQueue.splice(idx,1);
-        const waited=Date.now()-req.queuedAt;this.markStageWait(holder,kind,waited,'gpu-coordinated');
+        const waited=Date.now()-req.queuedAt;this.markStageWait(holder,kind,waited,req.mode);
         if(holder){holder.metrics={...(holder.metrics||{}),gpuQueueWatchdog:true,gpuQueueTimeoutMs:this.gpuQueueTimeoutMs};holder.stage=kind==='ai'?'ai-queue-timeout':'tts-queue-timeout';}
         const err=new Error(`La etapa ${kind==='voice'?'de voz':'de IA'} esperó demasiado por la GPU (${Math.round(waited/1000)} s)`);err.code='GPU_QUEUE_TIMEOUT';err.timeoutMs=this.gpuQueueTimeoutMs;reject(err);this.state();
       },this.gpuQueueTimeoutMs);
@@ -92,13 +92,24 @@ class AutomationEngine extends Automation0324{
     });
   }
   nextGpuRequest(){const idx=selectGpuRequestIndex(this.gpuStageQueue,this.gpuVoiceBurst,this.gpuMaxVoiceBurst);if(idx<0)return null;const [req]=this.gpuStageQueue.splice(idx,1);return req||null;}
+  async releaseOppositeForGpuSwap(kind,holder=null){
+    if(kind==='ai'){
+      if(holder)holder.stage='gpu-swap-release-voice';this.state();
+      try{await this.kokoro?.stopAndWait?.('gpu-swap-before-ai',5000);}catch{}
+      await wait(250);
+      return;
+    }
+    if(holder)holder.stage='gpu-swap-release-ai';this.state();
+    try{global.__ec0320LocalRuntime?.stop?.('gpu-swap-before-voice');}catch{}
+    await wait(700);
+  }
   async pumpGpuCoordinated(){
     if(this.gpuStageBusy)return;const req=this.nextGpuRequest();if(!req)return;if(req.queueTimer)clearTimeout(req.queueTimer);
     this.gpuStageBusy=true;this.gpuStageCurrent=req.kind;this.gpuVoiceBurst=req.kind==='voice'?this.gpuVoiceBurst+1:0;
     const busyKey=req.kind==='ai'?'aiStageBusy':'voiceStageBusy';this[busyKey]=true;if(req.kind==='voice')this.localHeavyRunning=true;
-    this.markStageWait(req.holder,req.kind,Date.now()-req.queuedAt,'gpu-coordinated');if(req.holder)req.holder.stage=req.kind;this.state();
-    const started=Date.now();try{req.resolve(await req.fn());}catch(e){req.reject(e);}finally{
-      this.markStageElapsed(req.holder,req.kind,Date.now()-started,'gpu-coordinated');this[busyKey]=false;if(req.kind==='voice')this.localHeavyRunning=false;
+    this.markStageWait(req.holder,req.kind,Date.now()-req.queuedAt,req.mode);if(req.holder)req.holder.stage=req.kind;this.state();
+    const started=Date.now();try{if(req.mode==='gpu-swap')await this.releaseOppositeForGpuSwap(req.kind,req.holder);if(req.holder)req.holder.stage=req.kind;this.state();req.resolve(await req.fn());}catch(e){req.reject(e);}finally{
+      this.markStageElapsed(req.holder,req.kind,Date.now()-started,req.mode);this[busyKey]=false;if(req.kind==='voice')this.localHeavyRunning=false;
       this.gpuStageBusy=false;this.gpuStageCurrent='';this.state();queueMicrotask(()=>this.pumpGpuCoordinated());
     }
   }
@@ -175,7 +186,7 @@ class AutomationEngine extends Automation0324{
   displayQueue(settings){
     const rows=super.displayQueue(settings),active=new Map((this.queue||[]).map(x=>[x.id,x]));return rows.filter(row=>{const item=row.id?active.get(row.id):null;return !(item&&item.status==='PROCESANDO'&&!item.uiVisible);}).map(row=>{const item=row.id?active.get(row.id):null;if(item){return{...row,isExclusive:!!(item.result?.isExclusive||item.isExclusive),accessStatus:item.result?.accessStatus||item.accessStatus||item.article?.access?.status||'',feedName:sourceName(item.story),feedId:String(item.story?.feedId||''),category:sectionName(item),storyKey:storyKey(item.story),baseKey:baseStoryKey(item.story),storyUrl:String(item.story?.link||''),selectionScore:Number(item.selectionScore)||0,selectionReason:String(item.selectionReason||'')};}return row;});
   }
-  snapshot(extra={}){const s=super.snapshot(extra),mode=this.coexistenceMode();return{...s,processing:{...s.processing,pipelineWorkers:this.inFlight.size,aiBusy:this.aiStageBusy,voiceBusy:this.voiceStageBusy,pipelineMode:mode==='gpu-coordinated'?'staggered-2-gpu-coordinated':'staggered-2',gpuStageBusy:this.gpuStageBusy,gpuStageCurrent:this.gpuStageCurrent,gpuQueue:this.gpuStageQueue.length,gpuVoiceBurst:this.gpuVoiceBurst,gpuQueueWatchdogMs:this.gpuQueueTimeoutMs,voiceBacklog:this.gpuStageQueue.filter(x=>x.kind==='voice').length},performance:this.performanceSummary(),selector:{recentFeeds:this.selectionRecent.slice(-8),urlCooldowns:[...this.urlFailures.values()].filter(x=>Number(x.until)>Date.now()).length,feedCooldowns:[...this.feedFailures.values()].filter(x=>Number(x.until)>Date.now()).length}};}
+  snapshot(extra={}){const s=super.snapshot(extra),mode=this.coexistenceMode();return{...s,processing:{...s.processing,pipelineWorkers:this.inFlight.size,aiBusy:this.aiStageBusy,voiceBusy:this.voiceStageBusy,pipelineMode:mode==='gpu-coordinated'?'staggered-2-gpu-coordinated':mode==='gpu-swap'?'staggered-2-gpu-swap':'staggered-2',gpuStageBusy:this.gpuStageBusy,gpuStageCurrent:this.gpuStageCurrent,gpuQueue:this.gpuStageQueue.length,gpuVoiceBurst:this.gpuVoiceBurst,gpuQueueWatchdogMs:this.gpuQueueTimeoutMs,voiceBacklog:this.gpuStageQueue.filter(x=>x.kind==='voice').length},performance:this.performanceSummary(),selector:{recentFeeds:this.selectionRecent.slice(-8),urlCooldowns:[...this.urlFailures.values()].filter(x=>Number(x.until)>Date.now()).length,feedCooldowns:[...this.feedFailures.values()].filter(x=>Number(x.until)>Date.now()).length}};}
   async consumer(epoch){
     while(this.emissionRunning&&epoch===this.emissionEpoch){
       if(this.emissionPaused){await wait(300);continue;}if(!this.isOutputReady()){this.emissionPaused=true;this.state({notice:'Abre Output para continuar la emisión'});continue;}
