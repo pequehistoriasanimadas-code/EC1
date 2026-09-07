@@ -24,7 +24,7 @@ function makeEnginePackage(rt,id){
   assert.strictEqual(CUDA_RUNTIME.slot,'shared-cuda-v2');
   assert(CUDA_CRITICAL_FILES.includes('torch/torch_version.py'));
 
-  const base=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO lab15 '));
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO lab16 '));
   try{
     const resources=path.join(base,'Portable Folder con Ñ'),data=path.join(base,'EC Automatic News Data');
     makePython(resources);
