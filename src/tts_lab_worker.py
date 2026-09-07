@@ -624,6 +624,16 @@ def generate(payload):
 
     if not text:
         raise RuntimeError("No hay texto para locutar")
+    benchmark_seed = int(params.get("benchmarkSeed") or 0)
+    if benchmark_seed:
+        try:
+            import torch
+            torch.manual_seed(benchmark_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(benchmark_seed)
+            np.random.seed(benchmark_seed % (2**32 - 1))
+        except Exception:
+            pass
     if ENGINE == "qwen3tts" and qwen_mode != "finetuned":
         if not ref_audio or not os.path.isfile(ref_audio):
             raise RuntimeError("Selecciona una voz de referencia antes de usar Qwen3-TTS")
