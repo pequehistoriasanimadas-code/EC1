@@ -53,7 +53,7 @@ try:
     finally:
         mod._qwen_base_snapshot = original_snapshot
 
-    assert pathlib.Path(resolved) == target.resolve()
+    assert pathlib.Path(resolved).resolve() == target.resolve()
     assert broken.exists(), "preprocessor_config.json was not repaired"
     assert "speech_tokenizer/preprocessor_config.json" in repaired
     assert (target / "speech_tokenizer" / "model.safetensors").exists()
