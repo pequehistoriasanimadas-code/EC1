@@ -8,7 +8,7 @@ function writeCritical(site,tag='v2'){for(const rel of CUDA_CRITICAL_FILES){cons
 function writeMarker(rt,rootDir=rt.cudaRoot){const site=path.join(rootDir,'site-packages'),manifest=rt.cudaManifestForSite(site);assert(manifest);fs.mkdirSync(rootDir,{recursive:true});fs.writeFileSync(rt.cudaMarker(rootDir),JSON.stringify({revision:CUDA_RUNTIME.revision,slot:CUDA_RUNTIME.slot,torch:CUDA_RUNTIME.torch,torchaudio:CUDA_RUNTIME.torchaudio,manifest},null,2));}
 
 (async()=>{
-  const pkg=JSON.parse(read('package.json')),runtimeSource=read('src/services/ttsLabRuntime.js'),worker=read('src/tts_lab_worker.py'),release=read('src/services/releaseV2Lab.js'),renderer=read('src/renderer-v2lab.js'),boot=read('src/bootstrap-v2lab.js');
+  const pkg=JSON.parse(read('package.json')),runtimeSource=read('src/services/ttsLabRuntime.js'),worker=read('src/tts_lab_worker.py'),release=read('src/services/releaseV2Lab.js'),renderer=read('src/renderer-v2lab.js'),boot=read('src/bootstrap-v2lab.js'),main=read('src/main.js');
   assert.strictEqual(pkg.version,'2.0.0-lab.14');
   assert.strictEqual(QWEN_ASSET_REVISION,2);
   assert(boot.includes('requestSingleInstanceLock')&&boot.includes("if(!gotLock){app.quit();}else{")&&boot.indexOf("require('./bootstrap-0332')")>boot.indexOf("if(!gotLock)"),'Lab.14 debe impedir que una segunda instancia inicialice servicios');
@@ -21,6 +21,8 @@ function writeMarker(rt,rootDir=rt.cudaRoot){const site=path.join(rootDir,'site-
   assert(worker.includes('GEC_TTS_MODEL_OVERLAYS')&&worker.includes('QWEN_SHARED_REVISION = 2')&&worker.includes('return overlay, repaired'),'Qwen fine-tuned debe usar overlay sin modificar el checkpoint importado');
   assert(release.includes('fallbackToKokoro')&&release.includes('fallbackFrom:engine'),'Fallback Kokoro configurado no estaba conectado al routing real');
   assert(renderer.includes('v2InstallProgress')&&renderer.includes('Reintentar activación')&&renderer.includes('Instalación / preparación incompleta'),'UX de progreso/error persistente lab.14 incompleta');
+  assert(main.includes("show:false,title:'EC Automatic News'")&&main.includes('CONTROL_LOAD_SLOW')&&main.includes("controlWindow.on('unresponsive'")&&main.includes("did-finish-load"),'La ventana principal debe esperar al renderer y vigilar arranques negros');
+  assert(release.includes("browser-window-created")&&release.includes("control\\.html")&&release.includes("setTimeout(recover,8000)")&&!release.includes("setTimeout(recover,50)"),'La recuperación TTS debe esperar a la UI principal en lab.14');
 
   const base=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab14-hardening-'));
   try{
