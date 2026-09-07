@@ -634,6 +634,12 @@ def generate(payload):
     if not output:
         raise RuntimeError("Ruta de salida inválida")
 
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        pass
     started = time.perf_counter()
     pieces, sample_rate = [], 0
     text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else 360)
@@ -670,6 +676,15 @@ def generate(payload):
     elapsed = time.perf_counter() - started
     duration = len(audio) / float(sample_rate)
     info = torch_runtime_info()
+    peak_allocated_mb = 0
+    peak_reserved_mb = 0
+    try:
+        import torch
+        if torch.cuda.is_available():
+            peak_allocated_mb = int(torch.cuda.max_memory_allocated() / (1024 * 1024))
+            peak_reserved_mb = int(torch.cuda.max_memory_reserved() / (1024 * 1024))
+    except Exception:
+        pass
     return {
         "output": output,
         "duration_sec": round(duration, 3),
@@ -677,6 +692,8 @@ def generate(payload):
         "rtf": round(elapsed / duration, 3) if duration > 0 else 0,
         "device": MODEL_DEVICE,
         "chunks": len(text_chunks),
+        "cuda_peak_allocated_mb": peak_allocated_mb,
+        "cuda_peak_reserved_mb": peak_reserved_mb,
         "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "",
         "qwen_runtime": qwen_runtime_params(params) if ENGINE == "qwen3tts" else {},
         "speed": round(speed, 3),
