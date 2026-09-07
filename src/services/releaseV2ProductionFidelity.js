@@ -67,7 +67,7 @@ function buildProfile(settings={},payload={}){
   const tts=settings.tts||{},engine=String(tts.engine||'kokoro'),identity=engine==='qwen3tts'?qwenModelIdentity(tts):{mode:'',id:'',fingerprint:'',name:''};
   const q=tts.engineParams?.qwen3tts||{},localConfig=normalizeLocalConfig(payload?.localResult?.recommendedConfig||settings?.ai?.localTunedConfig||{});
   const pipelineMode=selectedPipeline(payload,settings),swapValidated=pipelineMode==='gpu-swap'&&!!(payload?.localResult?.summary?.swapValidated||payload?.localResult?.coexistence?.swapValidated||settings?.ai?.lastLocalBenchmark?.swapValidated);
-  const expectedTps=Number(payload?.localResult?.summary?.tokensPerSec||settings?.ai?.lastLocalBenchmark?.tokensPerSec||0);
+  const localSummary=payload?.localResult?.summary||settings?.ai?.lastLocalBenchmark||{},expectedTps=Number(pipelineMode==='gpu-coordinated'?(localSummary.coordinatedTps||localSummary.tokensPerSec||0):(localSummary.tokensPerSec||0));
   const expectedRtf=Number(payload?.ttsResult?.stableRealtimeFactor||payload?.ttsResult?.bestRealtimeFactor||payload?.ttsResult?.realtimeFactor||settings?.optimization0321?.voice?.medianRtf||0);
   const baseTemp=clamp(q.temperature,0.1,1.5,.78),stableTemp=engine==='qwen3tts'&&identity.mode==='finetuned'?Math.min(baseTemp,.55):baseTemp;
   const productionSeed=intSeed(identity.fingerprint||identity.id||identity.name||engine);
