@@ -40,10 +40,10 @@ assert(worker.includes('ensure_cuda_consistency')&&worker.includes('nvidia-smi')
 assert(worker.includes('attn_implementation')&&worker.includes('torch.float16')&&worker.includes('torch.bfloat16')&&worker.includes('allow_tf32'),'Qwen debe probar dtype/atención y optimizaciones CUDA seguras');
 assert(worker.includes('chunkChars')&&worker.includes('benchmarkSeed')&&worker.includes('audio_rms'),'Qwen debe comparar chunks de forma determinista y validar señal de audio');
 assert(worker.includes('gpu_name')&&worker.includes('torch_cuda')&&worker.includes('cuda_available'),'Worker debe reportar diagnóstico CUDA');
-assert(worker.includes('time_stretch_preserve_pitch')&&worker.includes('phase_vocoder')&&worker.includes('speed'),'Worker debe aplicar velocidad conservando tono');
+assert(!worker.includes('time_stretch_preserve_pitch')&&!worker.includes('phase_vocoder')&&worker.includes('speed = 1.0'),'Lab.16 debe generar a velocidad natural sin time-stretch ni phase-vocoder');
 assert(worker.includes('ResembleAI/Chatterbox-Multilingual-es-mx-latam')&&worker.includes('t3_es_mx_latam.safetensors')&&worker.includes('s3gen_v3.pt'),'Worker debe integrar el pack oficial LatAm de Chatterbox');
 assert(worker.includes('chunk-start')&&worker.includes('chunk-heartbeat')&&worker.includes('chunk-done')&&worker.includes('postprocess'),'Worker debe enviar heartbeats de progreso TTS');
-assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('stable-v1')&&worker.includes('chunk_diagnostics'),'Lab.15 debe estabilizar y diagnosticar la voz fine-tuned por chunks');
+assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('stable-v1')&&worker.includes('chunk_diagnostics'),'Lab.16 debe estabilizar y diagnosticar Qwen/Chatterbox por chunks');
 assert(runtime.includes('chunkDiagnostics:Array.isArray(r.chunk_diagnostics)'),'Runtime debe propagar diagnóstico de chunks a producción');
 assert(renderer.includes('Voz predeterminada de Chatterbox'),'La UI debe ofrecer la voz predeterminada de Chatterbox');
 assert(renderer.includes('Modelo entrenado / Fine-tuned')&&renderer.includes('Importar modelo entrenado')&&renderer.includes('Transcripción Qwen'),'La UI no expone referencia completa y fine-tuning Qwen');
