@@ -544,10 +544,13 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         model = load_model(chatterbox_variant=variant)
         exaggeration = float(params.get("exaggeration", 0.42))
         cfg = float(params.get("cfgWeight", 0.35))
-        temperature = float(params.get("temperature", 0.8))
-        # Estilo is resolved by the UI as a visible preset. The worker always
-        # respects the values displayed to the user instead of silently
-        # overriding Exaggeration / CFG.
+        configured_temperature = float(params.get("temperature", 0.8))
+        stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
+        production_temperature = float(params.get("productionTemperature", 0.60 if stable_mode else configured_temperature))
+        temperature = max(0.10, min(1.50, production_temperature if stable_mode else configured_temperature))
+        # La referencia/conditionals queda fijada para toda la locución. Los
+        # parámetros técnicos de consistencia son internos y no forman parte
+        # del flujo normal de usuario.
         chatterbox_conditionals(ref_audio, cache_path, exaggeration, variant)
         try:
             wav = model.generate(
@@ -610,47 +613,6 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
     raise RuntimeError("Motor no soportado")
 
 
-def time_stretch_preserve_pitch(audio, sample_rate, speed):
-    speed = max(0.85, min(1.25, float(speed or 1.0)))
-    if abs(speed - 1.0) < 0.001 or len(audio) < 2048:
-        return np.asarray(audio, dtype=np.float32)
-    try:
-        import torch
-        import torchaudio.functional as AF
-
-        wav = torch.as_tensor(np.asarray(audio, dtype=np.float32))
-        n_fft = 1024
-        hop = 256
-        window = torch.hann_window(n_fft, dtype=wav.dtype)
-        spec = torch.stft(
-            wav,
-            n_fft=n_fft,
-            hop_length=hop,
-            win_length=n_fft,
-            window=window,
-            return_complex=True,
-        )
-        phase_advance = torch.linspace(
-            0,
-            math.pi * hop,
-            spec.shape[-2],
-            dtype=wav.dtype,
-        )[:, None]
-        stretched = AF.phase_vocoder(spec, rate=speed, phase_advance=phase_advance)
-        target = max(1, int(round(len(wav) / speed)))
-        out = torch.istft(
-            stretched,
-            n_fft=n_fft,
-            hop_length=hop,
-            win_length=n_fft,
-            window=window,
-            length=target,
-        )
-        return out.detach().cpu().numpy().astype(np.float32)
-    except Exception as exc:
-        raise RuntimeError(f"No se pudo aplicar la velocidad de lectura {speed:.2f}x conservando el tono: {exc}") from exc
-
-
 def generate(payload):
     text = str(payload.get("text") or "").strip()
     ref_audio = str(payload.get("reference") or "").strip()
@@ -662,7 +624,7 @@ def generate(payload):
     qwen_mode = str(payload.get("qwen_mode") or "reference")
     model_path = str(payload.get("model_path") or "").strip()
     speaker = str(payload.get("speaker") or "").strip()
-    speed = max(0.85, min(1.25, float(params.get("speed", 1.0) or 1.0)))
+    speed = 1.0
 
     if not text:
         raise RuntimeError("No hay texto para locutar")
@@ -710,6 +672,16 @@ def generate(payload):
                 emit({"type": "progress", "id": request_id, "phase": "chunk-heartbeat", "label": f"Generando fragmento {idx + 1}/{len(text_chunks)}…", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_sec": elapsed})
         chunk_beat = threading.Thread(target=chunk_heartbeat, daemon=True)
         chunk_beat.start()
+        chunk_seed = active_seed + idx * 1009 if active_seed else 0
+        if chunk_seed:
+            try:
+                import torch
+                torch.manual_seed(chunk_seed)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed_all(chunk_seed)
+                np.random.seed(chunk_seed % (2**32 - 1))
+            except Exception:
+                pass
         try:
             audio, sr = generate_piece(
                 part,
@@ -733,8 +705,9 @@ def generate(payload):
             "chars": len(part),
             "elapsed_ms": chunk_elapsed_ms,
             "audio_sec": chunk_audio_sec,
-            "seed": active_seed,
-            "temperature": round(float(params.get("productionTemperature", params.get("temperature", 0.78))), 3) if ENGINE == "qwen3tts" else 0,
+            "seed": chunk_seed,
+            "temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
+            "consistency_mode": str(params.get("consistencyMode") or "automatic"),
         })
         if pieces and sr:
             pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
@@ -748,8 +721,6 @@ def generate(payload):
     audio = np.concatenate(pieces)
     if not np.isfinite(audio).all():
         raise RuntimeError("Qwen3-TTS produjo muestras de audio no válidas con esta configuración")
-    if abs(speed - 1.0) >= 0.001:
-        audio = time_stretch_preserve_pitch(audio, sample_rate, speed)
     os.makedirs(os.path.dirname(output), exist_ok=True)
     sf.write(output, audio, sample_rate)
     elapsed = time.perf_counter() - started
@@ -779,11 +750,11 @@ def generate(payload):
         "cuda_peak_reserved_mb": peak_reserved_mb,
         "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "",
         "qwen_runtime": qwen_runtime_params(params) if ENGINE == "qwen3tts" else {},
-        "production_seed": active_seed if ENGINE == "qwen3tts" else 0,
-        "production_temperature": round(float(params.get("productionTemperature", params.get("temperature", 0.78))), 3) if ENGINE == "qwen3tts" else 0,
-        "consistency_mode": str(params.get("consistencyMode") or "") if ENGINE == "qwen3tts" else "",
+        "production_seed": active_seed,
+        "production_temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
+        "consistency_mode": str(params.get("consistencyMode") or "automatic"),
         "chunk_diagnostics": chunk_diagnostics,
-        "speed": round(speed, 3),
+        "speed": 1.0,
         "variant": ("multilingual" if str(params.get("variant") or "") == "multilingual" else "latam") if ENGINE == "chatterbox" else "",
         **info,
     }
