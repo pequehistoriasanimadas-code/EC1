@@ -669,12 +669,16 @@ def generate(payload):
 
     emit({"type": "progress", "id": request_id, "phase": "postprocess", "chunks": len(text_chunks)})
     audio = np.concatenate(pieces)
+    if not np.isfinite(audio).all():
+        raise RuntimeError("Qwen3-TTS produjo muestras de audio no válidas con esta configuración")
     if abs(speed - 1.0) >= 0.001:
         audio = time_stretch_preserve_pitch(audio, sample_rate, speed)
     os.makedirs(os.path.dirname(output), exist_ok=True)
     sf.write(output, audio, sample_rate)
     elapsed = time.perf_counter() - started
     duration = len(audio) / float(sample_rate)
+    audio_peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
+    audio_rms = float(np.sqrt(np.mean(np.square(audio.astype(np.float64))))) if len(audio) else 0.0
     info = torch_runtime_info()
     peak_allocated_mb = 0
     peak_reserved_mb = 0
@@ -689,6 +693,8 @@ def generate(payload):
         "output": output,
         "duration_sec": round(duration, 3),
         "elapsed_ms": round(elapsed * 1000),
+        "audio_peak": round(audio_peak, 6),
+        "audio_rms": round(audio_rms, 6),
         "rtf": round(elapsed / duration, 3) if duration > 0 else 0,
         "device": MODEL_DEVICE,
         "chunks": len(text_chunks),
