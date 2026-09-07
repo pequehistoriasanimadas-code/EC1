@@ -81,6 +81,7 @@ function buildProfile(settings={},payload={}){
     productionSeed,
     consistencyMode:'stable-v1'
   }:engine==='chatterbox'?{
+    chunkChars:540,
     productionTemperature:stableTemp,
     productionSeed,
     consistencyMode:'stable-v1'
