@@ -4,7 +4,7 @@ const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p
 const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','ttsLabRuntime.js'));
 
 (async()=>{
-  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-qwen-lab10-'));
+  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-qwen-lab11-'));
   try{
     const rt=new TTSLabRuntime({resourcesDir:tmp,dataDir:tmp});
     rt.installed=()=>true;
@@ -37,7 +37,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
     assert(prepared.repairedAssets.includes('speech_tokenizer/preprocessor_config.json'));
     assert.strictEqual(rt.prepared('qwen3tts',{params}),true,'El checkpoint exacto debe quedar preparado');
     assert.strictEqual(rt.prepared('qwen3tts',{params:{voiceMode:'finetuned',fineTunedModelId:'ft-b'}}),false,'Otro fine-tuned no puede heredar estado preparado');
-    assert.strictEqual(CACHE_REVISION,'lab10-r1');
+    assert.strictEqual(CACHE_REVISION,'lab11-r1');
 
     const marker=rt.preparedInfo('qwen3tts');
     assert.strictEqual(marker.selectionKey,'finetuned:ft-a:fp-a');
@@ -65,7 +65,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
 
     const ui=read('src/renderer-v2lab.js'),optimizerUi=read('src/renderer-0321.js');
     assert(ui.includes('ttsLabValidateSelected')&&ui.includes('currentOptimizationKey')&&ui.includes('ttsModelFingerprint'),'UI debe prevalidar e invalidar tuning al cambiar fine-tuned');
-    assert(optimizerUi.includes("version:'2.0-lab.10'")&&optimizerUi.includes('Qwen local (texto)')&&optimizerUi.includes('GPU SWAP'),'Optimizador lab.10 debe distinguir texto/voz y mostrar GPU SWAP');
+    assert(optimizerUi.includes("version:'2.0-lab.11'")&&optimizerUi.includes('Qwen local (texto)')&&optimizerUi.includes('GPU SWAP'),'Optimizador lab.11 debe distinguir texto/voz y mostrar GPU SWAP');
     assert(optimizerUi.includes('await window.ECAPI.ttsLabStop')&&optimizerUi.includes('await window.ECAPI.stopLocal'),'Optimización debe limpiar ambos runtimes al finalizar');
 
     console.log('check-v2lab-qwen-finetuned: OK · Aurelio exacto · reparación speech_tokenizer · tuning por fingerprint · GPU SWAP · cleanup');
