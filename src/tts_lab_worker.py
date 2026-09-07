@@ -9,6 +9,7 @@ import traceback
 import subprocess
 import shutil
 import gc
+import threading
 
 import numpy as np
 import soundfile as sf
@@ -35,6 +36,7 @@ QWEN_SHARED_FILES = [
 ]
 QWEN_BASE_MODEL_FILES = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
 QWEN_PERF_REVISION = 1
+QWEN_SHARED_REVISION = 2
 
 
 def qwen_runtime_params(params=None):
@@ -225,18 +227,44 @@ def ensure_qwen_assets(model_path=""):
     target = os.path.abspath(model_path)
     if not os.path.isdir(target):
         raise RuntimeError("El modelo Qwen3-TTS entrenado seleccionado ya no existe")
-    if not os.path.isfile(os.path.join(target, "config.json")) or not os.path.isfile(os.path.join(target, "model.safetensors")):
+    config_src = os.path.join(target, "config.json")
+    model_src = os.path.join(target, "model.safetensors")
+    if not os.path.isfile(config_src) or not os.path.isfile(model_src):
         raise RuntimeError("El modelo Qwen3-TTS entrenado está incompleto: faltan config.json o model.safetensors")
+    overlay_root = os.path.abspath(os.getenv("GEC_TTS_MODEL_OVERLAYS") or os.path.join(os.path.dirname(target), "_overlays"))
+    key_src = target + "|" + str(os.path.getsize(model_src)) + "|" + str(os.path.getmtime(config_src)) + "|r" + str(QWEN_SHARED_REVISION)
+    key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:20]
+    overlay = os.path.join(overlay_root, key + "-r" + str(QWEN_SHARED_REVISION))
+    os.makedirs(overlay, exist_ok=True)
     repaired = []
+    for rel, src in [("config.json", config_src), ("model.safetensors", model_src)]:
+        dst = os.path.join(overlay, *rel.split("/"))
+        if _link_or_copy(src, dst):
+            repaired.append("overlay:" + rel)
     for rel in QWEN_SHARED_FILES:
         src = os.path.join(base, *rel.split("/"))
-        dst = os.path.join(target, *rel.split("/"))
+        dst = os.path.join(overlay, *rel.split("/"))
+        if os.path.isfile(dst):
+            try:
+                if os.path.getsize(dst) != os.path.getsize(src):
+                    os.remove(dst)
+            except Exception:
+                try:
+                    os.remove(dst)
+                except Exception:
+                    pass
         if _link_or_copy(src, dst):
-            repaired.append(rel)
-    missing = [rel for rel in QWEN_SHARED_FILES if not os.path.isfile(os.path.join(target, *rel.split("/")))]
+            repaired.append("overlay:" + rel)
+    required = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
+    missing = [rel for rel in required if not os.path.isfile(os.path.join(overlay, *rel.split("/")))]
     if missing:
-        raise RuntimeError("El modelo Qwen3-TTS entrenado no pudo repararse: faltan " + ", ".join(missing[:4]))
-    return target, repaired
+        raise RuntimeError("El overlay seguro de Qwen3-TTS está incompleto: faltan " + ", ".join(missing[:4]))
+    for rel in QWEN_SHARED_FILES:
+        src = os.path.join(base, *rel.split("/"))
+        dst = os.path.join(overlay, *rel.split("/"))
+        if os.path.getsize(src) != os.path.getsize(dst):
+            raise RuntimeError("El overlay seguro de Qwen3-TTS tiene un componente inválido: " + rel)
+    return overlay, repaired
 
 
 def validate_qwen_model(model_path="", speaker=""):
@@ -668,17 +696,29 @@ def generate(payload):
     for idx, part in enumerate(text_chunks):
         emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
         chunk_started = time.perf_counter()
-        audio, sr = generate_piece(
-            part,
-            ref_audio,
-            ref_text,
-            cache_path,
-            style,
-            params,
-            qwen_mode,
-            model_path,
-            speaker,
-        )
+        stop_chunk_beat = threading.Event()
+        def chunk_heartbeat():
+            elapsed = 0
+            while not stop_chunk_beat.wait(8):
+                elapsed += 8
+                emit({"type": "progress", "id": request_id, "phase": "chunk-heartbeat", "label": f"Generando fragmento {idx + 1}/{len(text_chunks)}…", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_sec": elapsed})
+        chunk_beat = threading.Thread(target=chunk_heartbeat, daemon=True)
+        chunk_beat.start()
+        try:
+            audio, sr = generate_piece(
+                part,
+                ref_audio,
+                ref_text,
+                cache_path,
+                style,
+                params,
+                qwen_mode,
+                model_path,
+                speaker,
+            )
+        finally:
+            stop_chunk_beat.set()
+            chunk_beat.join(timeout=1)
         sample_rate = sr
         if pieces and sr:
             pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
@@ -749,20 +789,35 @@ def handle(payload):
         model_path = str(payload.get("model_path") or "").strip()
         speaker = str(payload.get("speaker") or "").strip()
         repaired = []
-        if ENGINE == "chatterbox":
-            load_model(chatterbox_variant=variant)
-        elif ENGINE == "qwen3tts":
-            if qwen_mode == "finetuned":
-                validated = validate_qwen_model(model_path, speaker)
-                repaired = validated.get("repaired") or []
-                load_model(validated["model_path"], qwen_params=params)
+        request_id = str(payload.get("id") or "")
+        stop_beat = threading.Event()
+        def prep_heartbeat():
+            elapsed = 0
+            while not stop_beat.wait(8):
+                elapsed += 8
+                emit({"type": "progress", "id": request_id, "phase": "model-heartbeat", "label": "Descargando / preparando modelo…", "elapsed_sec": elapsed})
+        beat = threading.Thread(target=prep_heartbeat, daemon=True)
+        emit({"type": "progress", "id": request_id, "phase": "model-start", "label": "Descargando / preparando modelo…"})
+        beat.start()
+        try:
+            if ENGINE == "chatterbox":
+                load_model(chatterbox_variant=variant)
+            elif ENGINE == "qwen3tts":
+                if qwen_mode == "finetuned":
+                    validated = validate_qwen_model(model_path, speaker)
+                    repaired = validated.get("repaired") or []
+                    load_model(validated["model_path"], qwen_params=params)
+                else:
+                    validated = validate_qwen_model("", "")
+                    load_model(validated["model_path"], qwen_params=params)
             else:
-                validated = validate_qwen_model("", "")
-                load_model(validated["model_path"], qwen_params=params)
-        else:
-            raise RuntimeError("Motor no soportado")
+                raise RuntimeError("Motor no soportado")
+        finally:
+            stop_beat.set()
+            beat.join(timeout=1)
+        emit({"type": "progress", "id": request_id, "phase": "model-loaded", "label": "Modelo cargado y validado ✓"})
         info = torch_runtime_info()
-        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, "variant": variant if ENGINE == "chatterbox" else "", "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "", "model_key": MODEL_KEY, "repaired_assets": repaired, **info}
+        return {"prepared": True, "engine": ENGINE, "device": MODEL_DEVICE, "variant": variant if ENGINE == "chatterbox" else "", "qwen_mode": qwen_mode if ENGINE == "qwen3tts" else "", "model_key": MODEL_KEY, "repaired_assets": repaired, "shared_revision": QWEN_SHARED_REVISION if ENGINE == "qwen3tts" else 0, **info}
     if cmd == "validate_qwen":
         model_path = str(payload.get("model_path") or "").strip()
         speaker = str(payload.get("speaker") or "").strip()
