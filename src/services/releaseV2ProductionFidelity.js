@@ -267,9 +267,10 @@ async function preflightAutomation(engine){
 }
 function installAutomationFidelity(){
   const p=AutomationEngine.prototype;if(p.__gecV2ProductionFidelity)return;Object.defineProperty(p,'__gecV2ProductionFidelity',{value:true});
-  const baseMode=p.coexistenceMode,baseStart=p.startProcessing,baseProcess=p.process;
+  const baseMode=p.coexistenceMode,baseStart=p.startProcessing,baseStop=p.stopProcessing,baseProcess=p.process;
   p.coexistenceMode=function(settings=this.getSettings?.()||{}){const mode=resolvePipelineMode(settings);return mode||baseMode.call(this,settings);};
   if(typeof baseStart==='function')p.startProcessing=async function(...args){const check=await preflightAutomation(this);this.__v2Preflight=check;return baseStart.apply(this,args);};
+  if(typeof baseStop==='function')p.stopProcessing=function(...args){const out=baseStop.apply(this,args);const queued=Array.isArray(this.gpuStageQueue)?this.gpuStageQueue.splice(0):[];for(const req of queued){try{clearTimeout(req.queueTimer);const e=new Error('Preparación detenida por el usuario');e.code='PROCESSING_CANCELLED';req.reject?.(e);}catch{}}this.processingNotice='Deteniendo motores y liberando GPU…';this.state?.();Promise.allSettled([Promise.resolve(this.kokoro?.stopAndWait?.('processing-stop-lab16',7000)),Promise.resolve(this.localRuntime?.stopAndWait?.('processing-stop-lab16',7000))]).then(()=>{if(!this.processingRunning){this.processingNotice='Preparación detenida · motores liberados ✓';this.state?.();}});return out;};
   if(typeof baseProcess==='function')p.process=async function(story,s,holder,epoch){
     const out=await baseProcess.call(this,story,s,holder,epoch);if(!out||out.omitted)return out;
     const active=productionProfileFrom(s)||this.__v2ProductionProfile,metrics={...(out.metrics||{})};
@@ -283,14 +284,16 @@ function installAutomationFidelity(){
         profileLocalConfigMatch:!active.localAi?.required||actualLayers===expectedLayers,
         profileExpectedTokensPerSec:expectedTps,
         profileTokensPerSecRatio:Number(ratio.toFixed(3)),
-        profilePerformanceDegraded:ratio>0&&ratio<0.35,
+        profilePerformanceDegraded:ratio>0&&ratio<0.55,
         pipelineModeExpected:String(active.pipeline?.mode||''),
         pipelineModeActive:this.coexistenceMode(s),
         ttsExpectedRtf:Number(active.tts?.expectedRtf||0),
         ttsExpectedChunkChars:Number(active.tts?.runtimeParams?.chunkChars||0),
         ttsProductionTemperature:Number(active.tts?.runtimeParams?.productionTemperature||0),
-        ttsProductionSeed:Number(active.tts?.runtimeParams?.productionSeed||0)
-      });
+        ttsProductionSeed:Number(active.tts?.runtimeParams?.productionSeed||0),
+        voiceConsistencyMode:String(active.voiceConsistency?.mode||'default'),
+        voiceConsistencySource:String(active.voiceConsistency?.source||'')
+      });const degraded=ratio>0&&ratio<0.55;this.__v2DegradedCount=degraded?Number(this.__v2DegradedCount||0)+1:0;if(this.__v2DegradedCount>=2){metrics.profilePerformanceWarning=`Rendimiento de IA local por debajo del perfil validado en ${this.__v2DegradedCount} noticias consecutivas`;this.processingNotice='Advertencia: el rendimiento real está por debajo del perfil optimizado. Revisa Detalles técnicos.';this.state?.();}
     }
     if(out.audio?.chunkDiagnostics)metrics.ttsChunkDiagnostics=clone(out.audio.chunkDiagnostics);
     out.metrics=metrics;if(holder)holder.metrics=metrics;return out;
