@@ -47,20 +47,32 @@ try:
     assert not broken.exists()
 
     original_snapshot = mod._qwen_base_snapshot
+    old_overlay = os.environ.get("GEC_TTS_MODEL_OVERLAYS")
+    overlay_root = tmp / "overlays"
+    os.environ["GEC_TTS_MODEL_OVERLAYS"] = str(overlay_root)
     mod._qwen_base_snapshot = lambda include_model=False: str(base)
     try:
         resolved, repaired = mod.ensure_qwen_assets(str(target))
     finally:
         mod._qwen_base_snapshot = original_snapshot
+        if old_overlay is None:
+            os.environ.pop("GEC_TTS_MODEL_OVERLAYS", None)
+        else:
+            os.environ["GEC_TTS_MODEL_OVERLAYS"] = old_overlay
 
-    assert pathlib.Path(resolved).resolve() == target.resolve()
-    assert broken.exists(), "preprocessor_config.json was not repaired"
-    assert "speech_tokenizer/preprocessor_config.json" in repaired
-    assert (target / "speech_tokenizer" / "model.safetensors").exists()
-    assert (target / "tokenizer_config.json").exists()
+    resolved_path = pathlib.Path(resolved).resolve()
+    assert resolved_path != target.resolve(), "Lab.14 must not repair files inside the imported checkpoint"
+    assert overlay_root.resolve() in resolved_path.parents
+    assert not broken.exists(), "The imported checkpoint must remain untouched"
+    assert "overlay:speech_tokenizer/preprocessor_config.json" in repaired
+    assert (resolved_path / "speech_tokenizer" / "preprocessor_config.json").exists()
+    assert (resolved_path / "speech_tokenizer" / "model.safetensors").exists()
+    assert (resolved_path / "tokenizer_config.json").exists()
 
-    # Existing fine-tuned weights/config must never be overwritten by Base.
+    # Existing fine-tuned weights/config remain byte-for-byte untouched while
+    # the runtime overlay points to them and supplies only shared assets.
     assert (target / "model.safetensors").read_bytes() == b"fine-model"
-    print("check-v2lab-qwen-repair: OK · missing speech_tokenizer/preprocessor_config.json repaired without replacing fine-tuned weights")
+    assert (resolved_path / "model.safetensors").read_bytes() == b"fine-model"
+    print("check-v2lab-qwen-repair: OK · shared Qwen assets materialized in safe overlay without modifying fine-tuned checkpoint")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
