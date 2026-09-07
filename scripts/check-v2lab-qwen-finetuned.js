@@ -18,7 +18,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
     rt.command=async(id,payload)=>{
       calls.push({id,payload});
       if(payload.cmd==='validate_qwen')return{validated:true,repaired:['speech_tokenizer/preprocessor_config.json'],shared_assets_ok:true};
-      if(payload.cmd==='prepare')return{prepared:true,device:'cuda',gpu_name:'RTX TEST',gpu_vram_mb:12288,torch_version:'2.6.0',torch_cuda:'12.4',cuda_available:true,repaired_assets:[]};
+      if(payload.cmd==='prepare')return{prepared:true,device:'cuda',gpu_name:'RTX TEST',gpu_vram_mb:12288,torch_version:'2.6.0',torch_cuda:'12.4',cuda_available:true,repaired_assets:['overlay:speech_tokenizer/preprocessor_config.json']};
       throw new Error('unexpected '+payload.cmd);
     };
 
@@ -27,14 +27,13 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
     const prepCall=calls.find(x=>x.payload.cmd==='prepare');
     const validateCall=calls.find(x=>x.payload.cmd==='validate_qwen');
     assert(prepCall,'Debe ejecutar prepare del modelo seleccionado');
-    assert(validateCall,'Debe validar componentes antes de preparar');
+    assert.strictEqual(validateCall,undefined,'Lab.14 evita una segunda validación redundante: prepare valida y materializa el overlay en el worker');
     assert.strictEqual(prepCall.payload.qwen_mode,'finetuned');
     assert.strictEqual(prepCall.payload.model_path,models['ft-a'].path,'Preparar no debe caer al modelo Base');
     assert.strictEqual(prepCall.payload.speaker,'aurelio');
-    assert.strictEqual(validateCall.payload.model_path,models['ft-a'].path);
     assert.strictEqual(prepared.fineTunedModelId,'ft-a');
     assert.strictEqual(prepared.fineTunedFingerprint,'fp-a');
-    assert(prepared.repairedAssets.includes('speech_tokenizer/preprocessor_config.json'));
+    assert(prepared.repairedAssets.includes('overlay:speech_tokenizer/preprocessor_config.json'));
     assert.strictEqual(rt.prepared('qwen3tts',{params}),true,'El checkpoint exacto debe quedar preparado');
     assert.strictEqual(rt.prepared('qwen3tts',{params:{voiceMode:'finetuned',fineTunedModelId:'ft-b'}}),false,'Otro fine-tuned no puede heredar estado preparado');
     assert.strictEqual(CACHE_REVISION,'lab11-r1');
@@ -47,7 +46,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
     assert(worker.includes('speech_tokenizer/preprocessor_config.json'),'Worker debe comprobar el feature extractor de speech_tokenizer');
     assert(worker.includes('force_download=True'),'Worker debe poder reparar un archivo faltante/corrupto');
     assert(worker.includes('QWEN_BASE_MODEL_FILES'),'Zero-shot debe descargar Base completo y fine-tuned solo activos compartidos');
-    assert(worker.includes('ensure_qwen_assets(model_path')&&worker.includes('_link_or_copy'),'Fine-tuned debe materializar dependencias compartidas sin reemplazar sus pesos');
+    assert(worker.includes('ensure_qwen_assets(model_path')&&worker.includes('GEC_TTS_MODEL_OVERLAYS')&&worker.includes('return overlay, repaired'),'Fine-tuned debe materializar un overlay separado sin modificar el checkpoint importado');
     assert(worker.includes('_release_model_memory()')&&worker.includes('torch.cuda.empty_cache()'),'Worker debe liberar memoria CUDA al cambiar/detener modelos');
 
     const release=read('src/services/releaseV2Lab.js');
@@ -64,7 +63,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
     assert(automation.includes("gpu-swap-before-ai")&&automation.includes("gpu-swap-before-voice"),'GPU SWAP debe liberar el motor opuesto en cada etapa');
 
     const ui=read('src/renderer-v2lab.js'),optimizerUi=read('src/renderer-0321.js');
-    assert(ui.includes('ttsLabValidateSelected')&&ui.includes('currentOptimizationKey')&&ui.includes('ttsModelFingerprint'),'UI debe prevalidar e invalidar tuning al cambiar fine-tuned');
+    assert(!ui.includes('ttsLabValidateSelected')&&ui.includes('currentOptimizationKey')&&ui.includes('ttsModelFingerprint'),'UI lab.14 debe evitar la prevalidación duplicada e invalidar tuning al cambiar fine-tuned');
     assert(optimizerUi.includes("version:'2.0-lab.14'")&&optimizerUi.includes('Qwen local (texto)')&&optimizerUi.includes('GPU SWAP'),'Optimizador lab.14 debe distinguir texto/voz y mostrar GPU SWAP');
     assert(optimizerUi.includes('await window.ECAPI.ttsLabStop')&&optimizerUi.includes('await window.ECAPI.stopLocal'),'Optimización debe limpiar ambos runtimes al finalizar');
 
