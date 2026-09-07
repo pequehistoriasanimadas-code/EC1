@@ -677,7 +677,7 @@ def generate(payload):
                 emit({"type": "progress", "id": request_id, "phase": "chunk-heartbeat", "label": f"Generando fragmento {idx + 1}/{len(text_chunks)}…", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_sec": elapsed})
         chunk_beat = threading.Thread(target=chunk_heartbeat, daemon=True)
         chunk_beat.start()
-        chunk_seed = active_seed + idx * 1009 if active_seed else 0
+        chunk_seed = active_seed if active_seed else 0
         if chunk_seed:
             try:
                 import torch
