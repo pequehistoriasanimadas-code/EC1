@@ -66,7 +66,7 @@ class AutomationEngine extends Automation0324{
   coexistenceMode(s=this.getSettings()||{}){
     const engine=String(s?.tts?.engine||'kokoro');if(engine==='kokoro')return'split';
     const usesLocal=[s?.ai?.primary,s?.ai?.backup1,s?.ai?.backup2].includes('local');if(!usesLocal)return'split';
-    return String(s?.ai?.lastLocalBenchmark?.coexistenceMode||s?.optimization0321?.local?.coexistenceMode||'gpu-coordinated');
+    const saved=String(s?.ai?.lastLocalBenchmark?.coexistenceMode||s?.optimization0321?.local?.coexistenceMode||'');if(saved)return saved;return engine==='qwen3tts'?'gpu-swap':'gpu-coordinated';
   }
   stageMetric(kind,suffix){return kind==='ai'?(`ai${suffix}`):(`tts${suffix}`);}
   markStageWait(holder,kind,ms,mode){if(!holder)return;holder.metrics={...(holder.metrics||{}),[this.stageMetric(kind,'QueueWaitMs')]:Math.max(0,Number(ms)||0),pipelineMode:mode};}
