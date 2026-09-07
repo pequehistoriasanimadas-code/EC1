@@ -37,10 +37,11 @@ function writePcm16Wav(file,{seconds=20,sampleRate=16000,amp=.18}={}){
   assert(worker.includes('speed = 1.0'),'Worker debe generar a velocidad natural');
   assert(worker.includes('0.60 if stable_mode else configured_temperature'),'Chatterbox debe tener consistencia automática interna');
   assert(worker.includes('chatter_chunk')&&worker.includes('540 if stable_mode else 360'),'Chatterbox estable debe reducir cambios de chunk');
-  assert(worker.includes('chunk_seed = active_seed + idx * 1009'),'Cada chunk debe ser reproducible');
+  assert(worker.includes('chunk_seed = active_seed if active_seed else 0'),'Cada chunk debe ser reproducible');
   assert(worker.includes('voice_session_id')&&worker.includes('voice_config_fingerprint'),'Falta sesión de voz fija por noticia');
 
   assert(routing.includes('fallbackExplicit:true'),'Fallback debe quedar marcado explícitamente');
+  assert(read('src/services/ttsLabRuntime.js').includes('automaticConsistency')&&read('src/services/ttsLabRuntime.js').includes("effectiveParams.productionSeed"),'La consistencia automática debe funcionar también antes de Optimizar GEC');
   assert(routing.includes("baseGenerate.call(this,text,{...options,speed:1})"),'Kokoro/fallback debe usar velocidad natural');
   assert(prod.includes("engine==='chatterbox'?{")&&prod.includes('chunkChars:540')&&prod.includes("consistencyMode:'stable-v1'"),'Perfil lab.16 debe estabilizar Chatterbox');
   assert(prod.includes("source:engine==='qwen3tts'&&identity.mode==='finetuned'?'fine-tuned-model':engine==='chatterbox'?'reference-audio'"),'Debe distinguir modelo entrenado vs referencia');
