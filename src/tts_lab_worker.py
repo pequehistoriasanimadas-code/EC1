@@ -596,6 +596,7 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         else:
             import torch
             model = load_model(qwen_params=params)
+            stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
             with torch.inference_mode():
                 wavs, sr = model.generate_voice_clone(
                     text=text,
@@ -603,8 +604,8 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                     voice_clone_prompt=qwen_prompt(ref_audio, ref_text, cache_path, params),
                     max_new_tokens=2048,
                     do_sample=True,
-                    top_k=50,
-                    top_p=1.0,
+                    top_k=20 if stable_mode else 50,
+                    top_p=0.90 if stable_mode else 1.0,
                     temperature=temperature,
                     repetition_penalty=1.05,
                 )
@@ -624,6 +625,8 @@ def generate(payload):
     qwen_mode = str(payload.get("qwen_mode") or "reference")
     model_path = str(payload.get("model_path") or "").strip()
     speaker = str(payload.get("speaker") or "").strip()
+    voice_session_id = str(payload.get("voice_session_id") or "")
+    voice_config_fingerprint = str(payload.get("voice_config_fingerprint") or "")
     speed = 1.0
 
     if not text:
@@ -659,7 +662,9 @@ def generate(payload):
     started = time.perf_counter()
     pieces, sample_rate = [], 0
     chunk_diagnostics = []
-    text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else 360)
+    stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
+    chatter_chunk = max(300, min(720, int(params.get("chunkChars") or (540 if stable_mode else 360))))
+    text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else chatter_chunk)
     request_id = str(payload.get("id") or "")
     for idx, part in enumerate(text_chunks):
         emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
@@ -708,6 +713,8 @@ def generate(payload):
             "seed": chunk_seed,
             "temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
             "consistency_mode": str(params.get("consistencyMode") or "automatic"),
+            "voice_session_id": voice_session_id,
+            "voice_config_fingerprint": voice_config_fingerprint,
         })
         if pieces and sr:
             pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
@@ -754,6 +761,8 @@ def generate(payload):
         "production_temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
         "consistency_mode": str(params.get("consistencyMode") or "automatic"),
         "chunk_diagnostics": chunk_diagnostics,
+        "voice_session_id": voice_session_id,
+        "voice_config_fingerprint": voice_config_fingerprint,
         "speed": 1.0,
         "variant": ("multilingual" if str(params.get("variant") or "") == "multilingual" else "latam") if ENGINE == "chatterbox" else "",
         **info,
