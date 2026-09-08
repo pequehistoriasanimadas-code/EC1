@@ -49,6 +49,8 @@ app.whenReady().then(async()=>{let tmp='';try{
   const p={localAi:{required:true,config:normalizeLocalConfig({gpuLayers:48,ctx:4096,batch:384,ubatch:192,threads:4})}};
   assert(expectedVsRuntime(p,{resourceMode:'tuned',profile:p.localAi.config}).ok);
   assert(!expectedVsRuntime(p,{resourceMode:'tuned',profile:{...p.localAi.config,gpuLayers:20}}).ok);
+  const chatter99={localAi:{required:true,config:normalizeLocalConfig({label:'GPU completa rápida',ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,prio:0,poll:25,warmup:true})}};
+  assert(expectedVsRuntime(chatter99,{resourceMode:'tuned',profile:{ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,parallel:1,prio:0,poll:25,warmup:true}}).ok,'Packaged Chatterbox 99-layer profile mismatch regression');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
   console.log('PACKAGED V2 PRODUCTION FIDELITY lab.16 OK · tuned 48 · profile/pipeline fidelity · strict swap · stable voice diagnostics');
