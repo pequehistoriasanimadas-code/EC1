@@ -16,11 +16,11 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
   assert(runtimeSource.includes('async runProcess(')&&runtimeSource.includes('cudaHealthPromise')&&runtimeSource.includes('cudaHealthTtlMs'),'Runtime debe usar procesos asíncronos y cachear el health check CUDA');
   assert(runtimeSource.includes('await this.waitForMaintenance()')&&runtimeSource.includes('if(existing?.child&&existing.ready)return existing')&&runtimeSource.includes('await this.ensureCudaRuntimeHealthy()'),'ensureWorker debe reutilizar primero un worker vivo antes de validar CUDA');
   assert(renderer.includes('qwenParams=settings?.tts?.engineParams?.qwen3tts')&&!renderer.includes(",q=settings?.tts?.engineParams?.qwen3tts"),'renderExternalPerformance no debe sombrear el helper q()');
-  assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab16'"),'Renderer debe identificar el hardening de responsividad lab.16');
+  assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab17'"),'Renderer debe identificar el hardening de responsividad lab.17');
   assert(optimizer.includes('GEC valida ambos motores')&&!optimizer.includes('EC valida también Qwen + Kokoro al mismo tiempo'),'El optimizador no debe mencionar Kokoro cuando hay otro motor seleccionado');
   assert(release.includes("const item=await labRuntime().importFineTunedZip")&&release.includes("event.sender.send('tts-lab:event',p)"),'Importación fine-tuned debe ser asíncrona y reportar progreso');
 
-  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab16-responsive-'));
+  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab17-responsive-'));
   try{
     const rt=new TTSLabRuntime({resourcesDir:temp,dataDir:temp});
 
