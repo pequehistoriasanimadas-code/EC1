@@ -35,7 +35,7 @@ QWEN_SHARED_FILES = [
     "speech_tokenizer/preprocessor_config.json",
 ]
 QWEN_BASE_MODEL_FILES = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
-QWEN_PERF_REVISION = 1
+QWEN_PERF_REVISION = 2
 QWEN_SHARED_REVISION = 2
 
 
@@ -48,7 +48,19 @@ def qwen_runtime_params(params=None):
     if attention_mode not in ("auto", "sdpa", "eager", "flash_attention_2"):
         attention_mode = "auto"
     chunk_chars = max(240, min(900, int(params.get("chunkChars") or 360)))
-    return {"dtypeMode": dtype_mode, "attentionMode": attention_mode, "chunkChars": chunk_chars}
+    non_streaming = params.get("nonStreamingMode", None)
+    use_cache = params.get("useCache", True) is not False
+    cache_impl = str(params.get("cacheImplementation") or "auto").lower()
+    if cache_impl not in ("auto", "dynamic", "static"):
+        cache_impl = "auto"
+    return {
+        "dtypeMode": dtype_mode,
+        "attentionMode": attention_mode,
+        "chunkChars": chunk_chars,
+        "nonStreamingMode": None if non_streaming is None else bool(non_streaming),
+        "useCache": use_cache,
+        "cacheImplementation": cache_impl,
+    }
 
 
 def qwen_capabilities():
@@ -118,6 +130,126 @@ def nvidia_gpu_name():
     except Exception:
         pass
     return ""
+
+
+def _gpu_sample_once():
+    try:
+        proc = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=utilization.gpu,memory.used,temperature.gpu,power.draw,clocks.current.graphics,pstate",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if proc.returncode != 0:
+            return None
+        row = (proc.stdout or "").strip().splitlines()[0].split(",")
+        if len(row) < 6:
+            return None
+        def number(value):
+            m = re.search(r"-?\d+(?:\.\d+)?", str(value or ""))
+            return float(m.group(0)) if m else 0.0
+        return {
+            "gpu_util_pct": number(row[0]),
+            "vram_used_mb": number(row[1]),
+            "temperature_c": number(row[2]),
+            "power_w": number(row[3]),
+            "graphics_clock_mhz": number(row[4]),
+            "pstate": str(row[5]).strip(),
+        }
+    except Exception:
+        return None
+
+
+def _gpu_sampler(enabled):
+    samples = []
+    stop = threading.Event()
+    if not enabled:
+        return stop, None, samples
+    def run():
+        deadline = time.time() + 600
+        while not stop.is_set() and time.time() < deadline:
+            sample = _gpu_sample_once()
+            if sample:
+                samples.append(sample)
+            stop.wait(0.8)
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return stop, thread, samples
+
+
+def _gpu_summary(samples):
+    if not samples:
+        return {"samples": 0}
+    def avg(key):
+        vals = [float(x.get(key) or 0) for x in samples]
+        return round(sum(vals) / len(vals), 2) if vals else 0
+    def peak(key):
+        vals = [float(x.get(key) or 0) for x in samples]
+        return round(max(vals), 2) if vals else 0
+    states = {}
+    for sample in samples:
+        state = str(sample.get("pstate") or "")
+        if state:
+            states[state] = states.get(state, 0) + 1
+    return {
+        "samples": len(samples),
+        "gpu_util_avg_pct": avg("gpu_util_pct"),
+        "gpu_util_max_pct": peak("gpu_util_pct"),
+        "power_avg_w": avg("power_w"),
+        "power_max_w": peak("power_w"),
+        "vram_max_mb": peak("vram_used_mb"),
+        "temperature_max_c": peak("temperature_c"),
+        "graphics_clock_avg_mhz": avg("graphics_clock_mhz"),
+        "graphics_clock_max_mhz": peak("graphics_clock_mhz"),
+        "pstates": states,
+    }
+
+
+def _timed_qwen_wrapper(model, call):
+    timings = {"autoregressive_ms": 0, "decode_ms": 0}
+    core = getattr(model, "model", None)
+    tokenizer = getattr(core, "speech_tokenizer", None) if core is not None else None
+    original_generate = getattr(core, "generate", None) if core is not None else None
+    original_decode = getattr(tokenizer, "decode", None) if tokenizer is not None else None
+    if not callable(original_generate) or not callable(original_decode):
+        started = time.perf_counter()
+        result = call()
+        timings["model_call_ms"] = round((time.perf_counter() - started) * 1000)
+        return result, timings
+
+    def timed_generate(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            return original_generate(*args, **kwargs)
+        finally:
+            timings["autoregressive_ms"] += round((time.perf_counter() - started) * 1000)
+
+    def timed_decode(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            return original_decode(*args, **kwargs)
+        finally:
+            timings["decode_ms"] += round((time.perf_counter() - started) * 1000)
+
+    core.generate = timed_generate
+    tokenizer.decode = timed_decode
+    started = time.perf_counter()
+    try:
+        result = call()
+    finally:
+        core.generate = original_generate
+        tokenizer.decode = original_decode
+    total = round((time.perf_counter() - started) * 1000)
+    timings["model_call_ms"] = total
+    timings["wrapper_overhead_ms"] = max(0, total - timings["autoregressive_ms"] - timings["decode_ms"])
+    return result, timings
 
 
 def torch_runtime_info():
@@ -529,6 +661,7 @@ def prepare_reference(payload):
 
 
 def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mode, model_path, speaker):
+    piece_started = time.perf_counter()
     if ENGINE == "chatterbox":
         variant = "latam"
         model = load_model(chatterbox_variant="latam")
@@ -538,10 +671,8 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
         production_temperature = float(params.get("productionTemperature", 0.60 if stable_mode else configured_temperature))
         temperature = max(0.10, min(1.50, production_temperature if stable_mode else configured_temperature))
-        # La referencia/conditionals queda fijada para toda la locución. Los
-        # parámetros técnicos de consistencia son internos y no forman parte
-        # del flujo normal de usuario.
         chatterbox_conditionals(ref_audio, cache_path, exaggeration, variant)
+        model_call_started = time.perf_counter()
         try:
             wav = model.generate(
                 text,
@@ -553,16 +684,30 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
             )
         except Exception as exc:
             raise RuntimeError(f"Chatterbox falló al sintetizar audio: {exc}") from exc
+        model_call_ms = round((time.perf_counter() - model_call_started) * 1000)
+        numpy_started = time.perf_counter()
         arr = wav.detach().float().cpu().numpy()
         if arr.ndim > 1:
             arr = arr[0]
-        return arr.astype(np.float32), int(model.sr)
+        numpy_ms = round((time.perf_counter() - numpy_started) * 1000)
+        return arr.astype(np.float32), int(model.sr), {
+            "piece_total_ms": round((time.perf_counter() - piece_started) * 1000),
+            "model_call_ms": model_call_ms,
+            "numpy_ms": numpy_ms,
+        }
 
     if ENGINE == "qwen3tts":
         configured_temperature = float(params.get("temperature", 0.78))
         production_temperature = float(params.get("productionTemperature", configured_temperature))
         temperature = max(0.10, min(1.50, production_temperature))
+        perf = qwen_runtime_params(params)
+        use_cache = bool(perf["useCache"])
+        cache_impl = str(perf["cacheImplementation"])
+        generation_extra = {"use_cache": use_cache}
+        if cache_impl != "auto":
+            generation_extra["cache_implementation"] = cache_impl
 
+        model_load_started = time.perf_counter()
         if qwen_mode == "finetuned":
             if not model_path or not os.path.isdir(model_path):
                 raise RuntimeError("Selecciona un modelo Qwen3-TTS entrenado")
@@ -571,38 +716,66 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
             import torch
             model = load_model(model_path, qwen_params=params)
             stable_mode = str(params.get("consistencyMode") or "") == "stable-v1"
-            with torch.inference_mode():
-                wavs, sr = model.generate_custom_voice(
-                    text=text,
-                    language="Spanish",
-                    speaker=speaker,
-                    max_new_tokens=2048,
-                    do_sample=True,
-                    top_k=20 if stable_mode else 50,
-                    top_p=0.90 if stable_mode else 1.0,
-                    temperature=temperature,
-                    repetition_penalty=1.05,
-                )
+            non_streaming = True if perf["nonStreamingMode"] is None else bool(perf["nonStreamingMode"])
+            model_load_ms = round((time.perf_counter() - model_load_started) * 1000)
+            def qwen_call():
+                with torch.inference_mode():
+                    return model.generate_custom_voice(
+                        text=text,
+                        language="Spanish",
+                        speaker=speaker,
+                        non_streaming_mode=non_streaming,
+                        max_new_tokens=2048,
+                        do_sample=True,
+                        top_k=20 if stable_mode else 50,
+                        top_p=0.90 if stable_mode else 1.0,
+                        temperature=temperature,
+                        repetition_penalty=1.05,
+                        **generation_extra,
+                    )
+            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call)
+            prompt_ms = 0
         else:
             import torch
             model = load_model(qwen_params=params)
             stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
-            with torch.inference_mode():
-                wavs, sr = model.generate_voice_clone(
-                    text=text,
-                    language="Spanish",
-                    voice_clone_prompt=qwen_prompt(ref_audio, ref_text, cache_path, params),
-                    max_new_tokens=2048,
-                    do_sample=True,
-                    top_k=20 if stable_mode else 50,
-                    top_p=0.90 if stable_mode else 1.0,
-                    temperature=temperature,
-                    repetition_penalty=1.05,
-                )
-        return np.asarray(wavs[0], dtype=np.float32), int(sr)
+            non_streaming = False if perf["nonStreamingMode"] is None else bool(perf["nonStreamingMode"])
+            model_load_ms = round((time.perf_counter() - model_load_started) * 1000)
+            prompt_started = time.perf_counter()
+            prompt = qwen_prompt(ref_audio, ref_text, cache_path, params)
+            prompt_ms = round((time.perf_counter() - prompt_started) * 1000)
+            def qwen_call():
+                with torch.inference_mode():
+                    return model.generate_voice_clone(
+                        text=text,
+                        language="Spanish",
+                        voice_clone_prompt=prompt,
+                        non_streaming_mode=non_streaming,
+                        max_new_tokens=2048,
+                        do_sample=True,
+                        top_k=20 if stable_mode else 50,
+                        top_p=0.90 if stable_mode else 1.0,
+                        temperature=temperature,
+                        repetition_penalty=1.05,
+                        **generation_extra,
+                    )
+            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call)
+
+        numpy_started = time.perf_counter()
+        arr = np.asarray(wavs[0], dtype=np.float32)
+        numpy_ms = round((time.perf_counter() - numpy_started) * 1000)
+        return arr, int(sr), {
+            "piece_total_ms": round((time.perf_counter() - piece_started) * 1000),
+            "model_load_ms": model_load_ms,
+            "prompt_ms": prompt_ms,
+            "numpy_ms": numpy_ms,
+            "non_streaming_mode": non_streaming,
+            "use_cache": use_cache,
+            "cache_implementation": cache_impl,
+            **call_timings,
+        }
 
     raise RuntimeError("Motor no soportado")
-
 
 def generate(payload):
     text = str(payload.get("text") or "").strip()
@@ -650,8 +823,11 @@ def generate(payload):
     except Exception:
         pass
     started = time.perf_counter()
+    gpu_stop, gpu_thread, gpu_samples = _gpu_sampler(ENGINE == "qwen3tts" and bool(params.get("profileGpu")))
     pieces, sample_rate = [], 0
     chunk_diagnostics = []
+    piece_stage_diagnostics = []
+    setup_ms = round((time.perf_counter() - started) * 1000)
     stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
     chatter_chunk = max(300, min(900, int(params.get("chunkChars") or (540 if stable_mode else 360))))
     if ENGINE == "chatterbox" and bool(params.get("forceSingleChunk")):
@@ -681,7 +857,7 @@ def generate(payload):
             except Exception:
                 pass
         try:
-            audio, sr = generate_piece(
+            audio, sr, piece_diag = generate_piece(
                 part,
                 ref_audio,
                 ref_text,
@@ -692,6 +868,12 @@ def generate(payload):
                 model_path,
                 speaker,
             )
+            piece_stage_diagnostics.append({"index": idx + 1, **piece_diag})
+        except Exception:
+            gpu_stop.set()
+            if gpu_thread is not None:
+                gpu_thread.join(timeout=4)
+            raise
         finally:
             stop_chunk_beat.set()
             chunk_beat.join(timeout=1)
@@ -718,11 +900,18 @@ def generate(payload):
         raise RuntimeError("El motor no produjo audio")
 
     emit({"type": "progress", "id": request_id, "phase": "postprocess", "chunks": len(text_chunks)})
+    concat_started = time.perf_counter()
     audio = np.concatenate(pieces)
+    concat_ms = round((time.perf_counter() - concat_started) * 1000)
     if not np.isfinite(audio).all():
         raise RuntimeError("Qwen3-TTS produjo muestras de audio no válidas con esta configuración")
     os.makedirs(os.path.dirname(output), exist_ok=True)
+    write_started = time.perf_counter()
     sf.write(output, audio, sample_rate)
+    write_wav_ms = round((time.perf_counter() - write_started) * 1000)
+    gpu_stop.set()
+    if gpu_thread is not None:
+        gpu_thread.join(timeout=4)
     elapsed = time.perf_counter() - started
     duration = len(audio) / float(sample_rate)
     audio_peak = float(np.max(np.abs(audio))) if len(audio) else 0.0
@@ -754,6 +943,20 @@ def generate(payload):
         "production_temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
         "consistency_mode": str(params.get("consistencyMode") or "automatic"),
         "chunk_diagnostics": chunk_diagnostics,
+        "stage_timings": {
+            "setup_ms": setup_ms,
+            "pieces": piece_stage_diagnostics,
+            "autoregressive_ms": sum(int(x.get("autoregressive_ms") or 0) for x in piece_stage_diagnostics),
+            "decode_ms": sum(int(x.get("decode_ms") or 0) for x in piece_stage_diagnostics),
+            "wrapper_overhead_ms": sum(int(x.get("wrapper_overhead_ms") or 0) for x in piece_stage_diagnostics),
+            "model_call_ms": sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics),
+            "prompt_ms": sum(int(x.get("prompt_ms") or 0) for x in piece_stage_diagnostics),
+            "numpy_ms": sum(int(x.get("numpy_ms") or 0) for x in piece_stage_diagnostics),
+            "concat_ms": concat_ms,
+            "write_wav_ms": write_wav_ms,
+            "total_ms": round(elapsed * 1000),
+        },
+        "gpu_telemetry": _gpu_summary(gpu_samples),
         "voice_session_id": voice_session_id,
         "voice_config_fingerprint": voice_config_fingerprint,
         "speed": 1.0,

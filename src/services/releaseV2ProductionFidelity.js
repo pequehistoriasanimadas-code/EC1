@@ -10,7 +10,7 @@ const {AutomationEngine}=require('./automation0325');
 const {optimizationKey,qwenModelIdentity,ttsRuntimeSignature}=require('./releaseV2Lab');
 
 const PROFILE_SCHEMA=1;
-const PROFILE_VERSION='2.0-lab.17';
+const PROFILE_VERSION='2.0-lab.18';
 const PROFILE_FILE='active-production-profile.json';
 const PIPELINE_MODES=new Set(['split','simultaneous','gpu-coordinated','gpu-swap']);
 const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
@@ -141,8 +141,8 @@ function compatibility(settings={},profile=null){
   if(!profile)return{ok:false,reason:'sin perfil de producción'};
   if(Number(profile.schemaVersion)!==PROFILE_SCHEMA)return{ok:false,reason:'perfil antiguo'};
   if(String(profile.version||'')!==PROFILE_VERSION)return{ok:false,reason:`perfil ${profile.version||'anterior'} pendiente de revalidación ${PROFILE_VERSION}`};
-  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.17'};
-  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.17'};
+  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.18'};
+  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.18'};
   if(profile.pipeline?.mode==='gpu-swap'&&profile.pipeline?.swapValidated!==true)return{ok:false,reason:'GPU SWAP no validado'};
   const tts=settings.tts||{},engine=String(tts.engine||'kokoro');
   if(String(profile.tts?.engine||'')!==engine)return{ok:false,reason:'motor TTS distinto'};
@@ -257,7 +257,7 @@ async function preflightAutomation(engine){
   const s=engine.getSettings?.()||{},rawProfile=s.activeOptimizationV2||null,profile=productionProfileFrom(s);
   engine.__v2ProductionProfile=profile||null;
   if(rawProfile&&rawProfile.valid===false){const e=new Error(`El perfil optimizado necesita revalidación antes de producción: ${rawProfile.invalidReason||'ejecuta Optimizar GEC'}`);e.code='PRODUCTION_PROFILE_INVALID';throw e;}
-  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.17. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
+  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.18. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
   if(!profile)return{ok:true,optimized:false,pipeline:resolvePipelineMode(s),reason:'sin perfil previo; modo coordinado seguro explícito'};
   if(profile.localAi?.required){
     const local=engine.localRuntime||global.__ec0320LocalRuntime;
