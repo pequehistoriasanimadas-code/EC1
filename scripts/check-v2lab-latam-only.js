@@ -43,7 +43,8 @@ const {PROFILE_VERSION}=require(path.join(root,'src','services','releaseV2Produc
   const consistencyText=runtimeSrc.match(/checkChatterboxConsistency[\s\S]*?const text='([^']+)'/);
   assert(consistencyText&&consistencyText[1].length>540,'La prueba B/C debe dividir realmente el texto con el chunk de producción');
   assert(routing.includes("bind('tts-lab:checkConsistency'"));
-  assert(ui.includes("await window.ECAPI.stopLocal?.()"),'La prueba de consistencia debe liberar Qwen local antes de medir Chatterbox');
+  const checkFn=ui.slice(ui.indexOf('async function checkConsistency()'),ui.indexOf('async function importReference()'));
+  assert(checkFn.includes("await window.ECAPI.stopLocal?.()"),'La prueba de consistencia debe liberar Qwen local antes de medir Chatterbox');
 
   const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab17-latam-'));
   try{
