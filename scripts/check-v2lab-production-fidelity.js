@@ -101,6 +101,16 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     const mismatch=expectedVsRuntime(profile,{resourceMode:'tuned',profile:{...profile.localAi.config,gpuLayers:20}});
     assert(!mismatch.ok,'20 capas no pueden aprobar un perfil que exige 48');
 
+    // Exact real-world regression: Chatterbox LatAm can select GPU completa
+    // (99 layers) with non-default prio/poll/warmup. Those fields must survive
+    // LocalRuntime.status() and must not create a false production mismatch.
+    const chatterFullProfile={localAi:{required:true,config:normalizeLocalConfig({label:'GPU completa rápida',ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,prio:0,poll:25,warmup:true})}};
+    const chatterFullStatus={resourceMode:'tuned',profile:{label:'GPU completa rápida',ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,parallel:1,prio:0,poll:25,warmup:true}};
+    const chatterFullMatch=expectedVsRuntime(chatterFullProfile,chatterFullStatus);
+    assert(chatterFullMatch.ok,'Chatterbox + GPU completa 99 capas no debe producir falso Perfil optimizado no aplicado');
+    const chatterMissingFields=expectedVsRuntime(chatterFullProfile,{resourceMode:'tuned',profile:{ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,parallel:1}});
+    assert(!chatterMissingFields.ok&&chatterMissingFields.differences.some(d=>d.field==='warmup'),'La regresión debe detectar exactamente los campos tuned omitidos');
+
     assert(sameConfig(profile.localAi.config,{...profile.localAi.config,label:'otro texto'}),'La etiqueta no debe invalidar la configuración física');
   }finally{fs.rmSync(tmp,{recursive:true,force:true});}
 
