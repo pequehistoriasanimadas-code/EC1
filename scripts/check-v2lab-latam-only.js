@@ -24,6 +24,7 @@ const {PROFILE_VERSION}=require(path.join(root,'src','services','releaseV2Produc
   const migrated=normalizeProfileTts({engine:'chatterbox',engineParams:{chatterbox:{variant:'multilingual'}}});
   assert.strictEqual(migrated.engineParams.chatterbox.variant,'latam','Un perfil antiguo Multilingual debe migrar automáticamente a LatAm');
   assert.strictEqual(optimizationKey(migrated),'chatterbox:latam');
+  assert(routing.includes("if(rawVariant==='latam'&&s.tts.engineOptimizations.chatterbox")&&routing.includes("else applyOptimization(s,null)"),'Una optimización antigua sin variante no puede ser reetiquetada silenciosamente como LatAm');
 
   assert(!ui.includes('id="v2ChatterVariant"'),'No debe existir selector de modelo de español');
   assert(!ui.includes('Multilingual V3'),'Multilingual no debe aparecer en la interfaz');
