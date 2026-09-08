@@ -10,6 +10,7 @@ import subprocess
 import shutil
 import gc
 import threading
+import ctypes
 
 import numpy as np
 import soundfile as sf
@@ -18,6 +19,7 @@ ENGINE = sys.argv[1] if len(sys.argv) > 1 else ""
 MODEL = None
 MODEL_DEVICE = ""
 MODEL_KEY = ""
+MODEL_REQUEST_KEY = ""
 VOICE_PROMPTS = {}
 CHATTERBOX_BUILTIN = None
 CHATTERBOX_ACTIVE_KEY = ""
@@ -35,7 +37,7 @@ QWEN_SHARED_FILES = [
     "speech_tokenizer/preprocessor_config.json",
 ]
 QWEN_BASE_MODEL_FILES = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
-QWEN_PERF_REVISION = 2
+QWEN_PERF_REVISION = 3
 QWEN_SHARED_REVISION = 2
 
 
@@ -58,8 +60,12 @@ def qwen_runtime_params(params=None):
         "attentionMode": attention_mode,
         "chunkChars": chunk_chars,
         "nonStreamingMode": None if non_streaming is None else bool(non_streaming),
+        # Kept for settings/backward compatibility. qwen_tts 0.1.1 drops these kwargs
+        # before they reach HuggingFace, so lab.19 no longer benchmarks them.
         "useCache": use_cache,
         "cacheImplementation": cache_impl,
+        "benchmarkDeterministic": bool(params.get("benchmarkDeterministic")),
+        "profileStages": bool(params.get("profileStages")),
     }
 
 
@@ -132,36 +138,97 @@ def nvidia_gpu_name():
     return ""
 
 
-def _gpu_sample_once():
+_NVML_LIB = None
+_NVML_HANDLE = None
+_NVML_INIT_ATTEMPTED = False
+
+
+class _NvmlUtilization(ctypes.Structure):
+    _fields_ = [("gpu", ctypes.c_uint), ("memory", ctypes.c_uint)]
+
+
+class _NvmlMemory(ctypes.Structure):
+    _fields_ = [("total", ctypes.c_ulonglong), ("free", ctypes.c_ulonglong), ("used", ctypes.c_ulonglong)]
+
+
+def _nvml_init():
+    global _NVML_LIB, _NVML_HANDLE, _NVML_INIT_ATTEMPTED
+    if _NVML_INIT_ATTEMPTED:
+        return _NVML_LIB is not None and _NVML_HANDLE is not None
+    _NVML_INIT_ATTEMPTED = True
+    if os.name != "nt" or not hasattr(ctypes, "WinDLL"):
+        return False
     try:
-        proc = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=utilization.gpu,memory.used,temperature.gpu,power.draw,clocks.current.graphics,pstate",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=3,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        if proc.returncode != 0:
-            return None
-        row = (proc.stdout or "").strip().splitlines()[0].split(",")
-        if len(row) < 6:
-            return None
-        def number(value):
-            m = re.search(r"-?\d+(?:\.\d+)?", str(value or ""))
-            return float(m.group(0)) if m else 0.0
+        lib = ctypes.WinDLL("nvml.dll")
+        lib.nvmlInit_v2.restype = ctypes.c_int
+        lib.nvmlDeviceGetHandleByIndex_v2.argtypes = [ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p)]
+        lib.nvmlDeviceGetHandleByIndex_v2.restype = ctypes.c_int
+        if lib.nvmlInit_v2() != 0:
+            return False
+        handle = ctypes.c_void_p()
+        if lib.nvmlDeviceGetHandleByIndex_v2(0, ctypes.byref(handle)) != 0:
+            return False
+        _NVML_LIB, _NVML_HANDLE = lib, handle
+        return True
+    except Exception:
+        _NVML_LIB, _NVML_HANDLE = None, None
+        return False
+
+
+def _gpu_sample_once():
+    if not _nvml_init():
+        return None
+    lib, handle = _NVML_LIB, _NVML_HANDLE
+    try:
+        util = _NvmlUtilization()
+        mem = _NvmlMemory()
+        temp = ctypes.c_uint(0)
+        power = ctypes.c_uint(0)
+        clock = ctypes.c_uint(0)
+        pstate = ctypes.c_uint(0)
+        gpu_util = 0.0
+        used_mb = 0.0
+        temperature = 0.0
+        power_w = 0.0
+        clock_mhz = 0.0
+        state = ""
+        try:
+            if lib.nvmlDeviceGetUtilizationRates(handle, ctypes.byref(util)) == 0:
+                gpu_util = float(util.gpu)
+        except Exception:
+            pass
+        try:
+            if lib.nvmlDeviceGetMemoryInfo(handle, ctypes.byref(mem)) == 0:
+                used_mb = float(mem.used) / (1024.0 * 1024.0)
+        except Exception:
+            pass
+        try:
+            if lib.nvmlDeviceGetTemperature(handle, 0, ctypes.byref(temp)) == 0:
+                temperature = float(temp.value)
+        except Exception:
+            pass
+        try:
+            if lib.nvmlDeviceGetPowerUsage(handle, ctypes.byref(power)) == 0:
+                power_w = float(power.value) / 1000.0
+        except Exception:
+            pass
+        try:
+            if lib.nvmlDeviceGetClockInfo(handle, 0, ctypes.byref(clock)) == 0:
+                clock_mhz = float(clock.value)
+        except Exception:
+            pass
+        try:
+            if lib.nvmlDeviceGetPerformanceState(handle, ctypes.byref(pstate)) == 0:
+                state = "P" + str(int(pstate.value))
+        except Exception:
+            pass
         return {
-            "gpu_util_pct": number(row[0]),
-            "vram_used_mb": number(row[1]),
-            "temperature_c": number(row[2]),
-            "power_w": number(row[3]),
-            "graphics_clock_mhz": number(row[4]),
-            "pstate": str(row[5]).strip(),
+            "gpu_util_pct": gpu_util,
+            "vram_used_mb": used_mb,
+            "temperature_c": temperature,
+            "power_w": power_w,
+            "graphics_clock_mhz": clock_mhz,
+            "pstate": state,
         }
     except Exception:
         return None
@@ -178,7 +245,7 @@ def _gpu_sampler(enabled):
             sample = _gpu_sample_once()
             if sample:
                 samples.append(sample)
-            stop.wait(0.8)
+            stop.wait(0.10)
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
     return stop, thread, samples
@@ -212,43 +279,118 @@ def _gpu_summary(samples):
     }
 
 
-def _timed_qwen_wrapper(model, call):
-    timings = {"autoregressive_ms": 0, "decode_ms": 0}
+def _cuda_sync():
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+    except Exception:
+        pass
+
+
+def _timed_qwen_wrapper(model, call, profile_steps=False):
+    timings = {
+        "autoregressive_ms": 0,
+        "decode_ms": 0,
+        "code_predictor_ms": 0,
+        "code_predictor_calls": 0,
+        "code_predictor_steps": 0,
+        "talker_steps": 0,
+        "prefill_tokens": 0,
+    }
     core = getattr(model, "model", None)
     tokenizer = getattr(core, "speech_tokenizer", None) if core is not None else None
+    talker = getattr(core, "talker", None) if core is not None else None
+    predictor = getattr(talker, "code_predictor", None) if talker is not None else None
     original_generate = getattr(core, "generate", None) if core is not None else None
     original_decode = getattr(tokenizer, "decode", None) if tokenizer is not None else None
+    original_talker_generate = getattr(talker, "generate", None) if talker is not None else None
+    original_predictor_generate = getattr(predictor, "generate", None) if predictor is not None else None
+
     if not callable(original_generate) or not callable(original_decode):
+        _cuda_sync()
         started = time.perf_counter()
         result = call()
+        _cuda_sync()
         timings["model_call_ms"] = round((time.perf_counter() - started) * 1000)
         return result, timings
 
     def timed_generate(*args, **kwargs):
+        _cuda_sync()
         started = time.perf_counter()
         try:
             return original_generate(*args, **kwargs)
         finally:
+            _cuda_sync()
             timings["autoregressive_ms"] += round((time.perf_counter() - started) * 1000)
 
     def timed_decode(*args, **kwargs):
+        _cuda_sync()
         started = time.perf_counter()
         try:
             return original_decode(*args, **kwargs)
         finally:
+            _cuda_sync()
             timings["decode_ms"] += round((time.perf_counter() - started) * 1000)
+
+    def timed_talker_generate(*args, **kwargs):
+        for key in ("inputs_embeds", "input_ids"):
+            value = kwargs.get(key)
+            shape = getattr(value, "shape", None)
+            if shape is not None and len(shape) >= 2:
+                try:
+                    timings["prefill_tokens"] = max(timings["prefill_tokens"], int(shape[1]))
+                except Exception:
+                    pass
+                break
+        return original_talker_generate(*args, **kwargs)
+
+    def timed_predictor_generate(*args, **kwargs):
+        _cuda_sync()
+        started = time.perf_counter()
+        result = original_predictor_generate(*args, **kwargs)
+        _cuda_sync()
+        timings["code_predictor_ms"] += round((time.perf_counter() - started) * 1000)
+        timings["code_predictor_calls"] += 1
+        timings["talker_steps"] += 1
+        seq = getattr(result, "sequences", None)
+        shape = getattr(seq, "shape", None)
+        if shape is not None and len(shape):
+            try:
+                timings["code_predictor_steps"] += int(shape[-1])
+            except Exception:
+                pass
+        return result
 
     core.generate = timed_generate
     tokenizer.decode = timed_decode
+    if profile_steps and callable(original_talker_generate):
+        talker.generate = timed_talker_generate
+    if profile_steps and callable(original_predictor_generate):
+        predictor.generate = timed_predictor_generate
+
+    _cuda_sync()
     started = time.perf_counter()
     try:
         result = call()
     finally:
+        _cuda_sync()
         core.generate = original_generate
         tokenizer.decode = original_decode
+        if profile_steps and callable(original_talker_generate):
+            talker.generate = original_talker_generate
+        if profile_steps and callable(original_predictor_generate):
+            predictor.generate = original_predictor_generate
+
     total = round((time.perf_counter() - started) * 1000)
     timings["model_call_ms"] = total
     timings["wrapper_overhead_ms"] = max(0, total - timings["autoregressive_ms"] - timings["decode_ms"])
+    if timings["code_predictor_steps"] > 0:
+        timings["code_predictor_ms_per_step"] = round(
+            timings["code_predictor_ms"] / timings["code_predictor_steps"], 3
+        )
+    else:
+        timings["code_predictor_ms_per_step"] = 0.0
     return result, timings
 
 
@@ -294,9 +436,10 @@ def _device_name():
 
 
 def _release_model_memory():
-    global MODEL, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
+    global MODEL, MODEL_KEY, MODEL_REQUEST_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
     MODEL = None
     MODEL_KEY = ""
+    MODEL_REQUEST_KEY = ""
     VOICE_PROMPTS = {}
     CHATTERBOX_BUILTIN = None
     CHATTERBOX_ACTIVE_KEY = ""
@@ -452,7 +595,7 @@ def load_chatterbox_latam(device):
 
 
 def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
-    global MODEL, MODEL_DEVICE, MODEL_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
+    global MODEL, MODEL_DEVICE, MODEL_KEY, MODEL_REQUEST_KEY, VOICE_PROMPTS, CHATTERBOX_BUILTIN, CHATTERBOX_ACTIVE_KEY, CHATTERBOX_VARIANT
     import torch
 
     runtime = ensure_cuda_consistency()
@@ -461,7 +604,7 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
         try:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.benchmark = ENGINE != "qwen3tts"
             torch.set_float32_matmul_precision("high")
             try:
                 torch.backends.cuda.enable_flash_sdp(True)
@@ -473,14 +616,18 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
             pass
     requested = ""
     perf = qwen_runtime_params(qwen_params) if ENGINE == "qwen3tts" else None
+    request_hint = os.path.abspath(model_path) if (ENGINE == "qwen3tts" and model_path) else (QWEN_BASE_REPO if ENGINE == "qwen3tts" else "chatterbox-latam")
+    request_key = f"{ENGINE}:{request_hint}:{perf['dtypeMode']}:{perf['attentionMode']}" if ENGINE == "qwen3tts" else f"{ENGINE}:{request_hint}"
+    # Critical lab.19 fast path: do not resolve Hugging Face assets/network on every chunk
+    # when the exact model is already resident in this persistent worker.
+    if MODEL is not None and MODEL_REQUEST_KEY == request_key:
+        return MODEL
     if ENGINE == "qwen3tts":
         requested, _ = ensure_qwen_assets(os.path.abspath(model_path) if model_path else "")
     else:
         chatterbox_variant = "latam"
         requested = "chatterbox-latam"
     key = f"{ENGINE}:{requested}:{perf['dtypeMode']}:{perf['attentionMode']}" if ENGINE == "qwen3tts" else f"{ENGINE}:{requested}"
-    if MODEL is not None and MODEL_KEY == key:
-        return MODEL
 
     _release_model_memory()
     MODEL_DEVICE = "cuda" if use_cuda else "cpu"
@@ -525,6 +672,7 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
         raise RuntimeError(f"Motor no soportado: {ENGINE}")
 
     MODEL_KEY = key
+    MODEL_REQUEST_KEY = request_key
     return MODEL
 
 
@@ -701,11 +849,8 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         production_temperature = float(params.get("productionTemperature", configured_temperature))
         temperature = max(0.10, min(1.50, production_temperature))
         perf = qwen_runtime_params(params)
-        use_cache = bool(perf["useCache"])
-        cache_impl = str(perf["cacheImplementation"])
-        generation_extra = {"use_cache": use_cache}
-        if cache_impl != "auto":
-            generation_extra["cache_implementation"] = cache_impl
+        benchmark_deterministic = bool(perf["benchmarkDeterministic"])
+        profile_steps = bool(perf["profileStages"])
 
         model_load_started = time.perf_counter()
         if qwen_mode == "finetuned":
@@ -726,14 +871,13 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                         speaker=speaker,
                         non_streaming_mode=non_streaming,
                         max_new_tokens=2048,
-                        do_sample=True,
+                        do_sample=not benchmark_deterministic,
                         top_k=20 if stable_mode else 50,
                         top_p=0.90 if stable_mode else 1.0,
                         temperature=temperature,
                         repetition_penalty=1.05,
-                        **generation_extra,
                     )
-            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call)
+            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call, profile_steps=profile_steps)
             prompt_ms = 0
         else:
             import torch
@@ -752,26 +896,33 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                         voice_clone_prompt=prompt,
                         non_streaming_mode=non_streaming,
                         max_new_tokens=2048,
-                        do_sample=True,
+                        do_sample=not benchmark_deterministic,
                         top_k=20 if stable_mode else 50,
                         top_p=0.90 if stable_mode else 1.0,
                         temperature=temperature,
                         repetition_penalty=1.05,
-                        **generation_extra,
                     )
-            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call)
+            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call, profile_steps=profile_steps)
 
         numpy_started = time.perf_counter()
         arr = np.asarray(wavs[0], dtype=np.float32)
         numpy_ms = round((time.perf_counter() - numpy_started) * 1000)
+        audio_sec = (len(arr) / float(sr)) if sr else 0.0
+        core = getattr(model, "model", None)
+        cfg = getattr(core, "config", None)
+        code_groups = int(getattr(cfg, "num_code_groups", 16) or 16)
+        if int(call_timings.get("talker_steps") or 0) <= 0 and audio_sec > 0:
+            call_timings["talker_steps"] = max(1, int(round(audio_sec * 12.5)))
+        if int(call_timings.get("code_predictor_steps") or 0) <= 0:
+            call_timings["code_predictor_steps"] = int(call_timings.get("talker_steps") or 0) * max(0, code_groups - 1)
+        call_timings["num_code_groups"] = code_groups
         return arr, int(sr), {
             "piece_total_ms": round((time.perf_counter() - piece_started) * 1000),
             "model_load_ms": model_load_ms,
             "prompt_ms": prompt_ms,
             "numpy_ms": numpy_ms,
             "non_streaming_mode": non_streaming,
-            "use_cache": use_cache,
-            "cache_implementation": cache_impl,
+            "benchmark_deterministic": benchmark_deterministic,
             **call_timings,
         }
 
@@ -885,6 +1036,9 @@ def generate(payload):
             "chars": len(part),
             "elapsed_ms": chunk_elapsed_ms,
             "audio_sec": chunk_audio_sec,
+            "talker_steps": int(piece_diag.get("talker_steps") or 0),
+            "code_predictor_steps": int(piece_diag.get("code_predictor_steps") or 0),
+            "prefill_tokens": int(piece_diag.get("prefill_tokens") or 0),
             "seed": chunk_seed,
             "temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
             "consistency_mode": str(params.get("consistencyMode") or "automatic"),
@@ -933,6 +1087,7 @@ def generate(payload):
         "audio_peak": round(audio_peak, 6),
         "audio_rms": round(audio_rms, 6),
         "rtf": round(elapsed / duration, 3) if duration > 0 else 0,
+        "rtf_synthesis": round((sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics) / 1000.0) / duration, 3) if duration > 0 else 0,
         "device": MODEL_DEVICE,
         "chunks": len(text_chunks),
         "cuda_peak_allocated_mb": peak_allocated_mb,
@@ -948,12 +1103,21 @@ def generate(payload):
             "pieces": piece_stage_diagnostics,
             "autoregressive_ms": sum(int(x.get("autoregressive_ms") or 0) for x in piece_stage_diagnostics),
             "decode_ms": sum(int(x.get("decode_ms") or 0) for x in piece_stage_diagnostics),
+            "code_predictor_ms": sum(int(x.get("code_predictor_ms") or 0) for x in piece_stage_diagnostics),
+            "code_predictor_calls": sum(int(x.get("code_predictor_calls") or 0) for x in piece_stage_diagnostics),
+            "code_predictor_steps": sum(int(x.get("code_predictor_steps") or 0) for x in piece_stage_diagnostics),
+            "talker_steps": sum(int(x.get("talker_steps") or 0) for x in piece_stage_diagnostics),
+            "prefill_tokens_max": max([int(x.get("prefill_tokens") or 0) for x in piece_stage_diagnostics] or [0]),
+            "num_code_groups": max([int(x.get("num_code_groups") or 0) for x in piece_stage_diagnostics] or [0]),
             "wrapper_overhead_ms": sum(int(x.get("wrapper_overhead_ms") or 0) for x in piece_stage_diagnostics),
             "model_call_ms": sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics),
             "prompt_ms": sum(int(x.get("prompt_ms") or 0) for x in piece_stage_diagnostics),
             "numpy_ms": sum(int(x.get("numpy_ms") or 0) for x in piece_stage_diagnostics),
             "concat_ms": concat_ms,
             "write_wav_ms": write_wav_ms,
+            "synthesis_ms": sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics),
+            "rtf_e2e": round(elapsed / duration, 3) if duration > 0 else 0,
+            "rtf_synthesis": round((sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics) / 1000.0) / duration, 3) if duration > 0 else 0,
             "total_ms": round(elapsed * 1000),
         },
         "gpu_telemetry": _gpu_summary(gpu_samples),

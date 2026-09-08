@@ -19,8 +19,8 @@ function writePcm16Wav(file,{seconds=20,sampleRate=16000,amp=.18}={}){
 
 (async()=>{
   const pkg=JSON.parse(read('package.json')),ui=read('src/renderer-v2lab.js'),worker=read('src/tts_lab_worker.py'),routing=read('src/services/releaseV2Lab.js'),prod=read('src/services/releaseV2ProductionFidelity.js'),automation=read('src/services/automation0325.js');
-  assert.strictEqual(pkg.version,'2.0.0-lab.18');
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.18');
+  assert.strictEqual(pkg.version,'2.0.0-lab.19');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.19');
 
   assert(!ui.includes('id="v2ReadingSpeed"')&&!ui.includes('Velocidad de lectura'),'Lab.16 no debe mostrar velocidad de lectura');
   assert(ui.includes('Consistencia de voz: Automática ✓'),'La UI debe explicar consistencia sin parámetros técnicos');
@@ -43,7 +43,7 @@ function writePcm16Wav(file,{seconds=20,sampleRate=16000,amp=.18}={}){
   assert(routing.includes('fallbackExplicit:true'),'Fallback debe quedar marcado explícitamente');
   assert(read('src/services/ttsLabRuntime.js').includes('automaticConsistency')&&read('src/services/ttsLabRuntime.js').includes("effectiveParams.productionSeed"),'La consistencia automática debe funcionar también antes de Optimizar GEC');
   assert(routing.includes("baseGenerate.call(this,text,{...options,speed:1})"),'Kokoro/fallback debe usar velocidad natural');
-  assert(prod.includes("engine==='chatterbox'?{")&&prod.includes('chunkChars:540')&&prod.includes("consistencyMode:'stable-v1'"),'Perfil lab.18 debe estabilizar Chatterbox');
+  assert(prod.includes("engine==='chatterbox'?{")&&prod.includes('chunkChars:540')&&prod.includes("consistencyMode:'stable-v1'"),'Perfil lab.19 debe estabilizar Chatterbox');
   assert(prod.includes("source:engine==='qwen3tts'&&identity.mode==='finetuned'?'fine-tuned-model':engine==='chatterbox'?'reference-audio'"),'Debe distinguir modelo entrenado vs referencia');
   assert(prod.includes('processing-stop-lab17')&&prod.includes('Promise.allSettled'),'Detener preparación debe liberar motores/GPU');
   assert(automation.includes('ttsVoiceSessionId')&&automation.includes('ttsChunkDiagnostics'),'Producción debe conservar diagnóstico de sesión/chunks');
