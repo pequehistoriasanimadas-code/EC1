@@ -344,8 +344,8 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
     if ENGINE == "qwen3tts":
         requested, _ = ensure_qwen_assets(os.path.abspath(model_path) if model_path else "")
     else:
-        chatterbox_variant = "multilingual" if str(chatterbox_variant) == "multilingual" else "latam"
-        requested = "chatterbox-" + chatterbox_variant
+        chatterbox_variant = "latam"
+        requested = "chatterbox-latam"
     key = f"{ENGINE}:{requested}:{perf['dtypeMode']}:{perf['attentionMode']}" if ENGINE == "qwen3tts" else f"{ENGINE}:{requested}"
     if MODEL is not None and MODEL_KEY == key:
         return MODEL
@@ -366,19 +366,9 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         try:
-            if chatterbox_variant == "latam":
-                MODEL = load_chatterbox_latam(MODEL_DEVICE)
-            else:
-                try:
-                    MODEL = ChatterboxMultilingualTTS.from_pretrained(
-                        device=MODEL_DEVICE, t3_model="v3"
-                    )
-                except TypeError as exc:
-                    if "t3_model" not in str(exc):
-                        raise
-                    MODEL = ChatterboxMultilingualTTS.from_pretrained(device=MODEL_DEVICE)
+            MODEL = load_chatterbox_latam(MODEL_DEVICE)
         except Exception as exc:
-            raise RuntimeError(f"Chatterbox no pudo cargar el modelo {chatterbox_variant}: {exc}") from exc
+            raise RuntimeError(f"Chatterbox LatAm no pudo cargar el modelo: {exc}") from exc
         CHATTERBOX_BUILTIN = MODEL.conds
         CHATTERBOX_VARIANT = chatterbox_variant
     elif ENGINE == "qwen3tts":
@@ -408,8 +398,8 @@ def load_model(model_path="", chatterbox_variant="latam", qwen_params=None):
 
 def chatterbox_conditionals(ref_audio="", cache_path="", exaggeration=0.5, variant="latam"):
     global CHATTERBOX_ACTIVE_KEY
-    variant = "multilingual" if str(variant) == "multilingual" else "latam"
-    model = load_model(chatterbox_variant=variant)
+    variant = "latam"
+    model = load_model(chatterbox_variant="latam")
 
     if not ref_audio:
         if CHATTERBOX_BUILTIN is None:
@@ -511,8 +501,8 @@ def prepare_reference(payload):
     params = payload.get("params") or {}
 
     if ENGINE == "chatterbox":
-        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
-        chatterbox_conditionals(ref_audio, cache_path, 0.5, variant)
+        variant = "latam"
+        chatterbox_conditionals(ref_audio, cache_path, 0.5, "latam")
         info = torch_runtime_info()
         return {
             "prepared_reference": True,
@@ -540,8 +530,8 @@ def prepare_reference(payload):
 
 def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mode, model_path, speaker):
     if ENGINE == "chatterbox":
-        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
-        model = load_model(chatterbox_variant=variant)
+        variant = "latam"
+        model = load_model(chatterbox_variant="latam")
         exaggeration = float(params.get("exaggeration", 0.42))
         cfg = float(params.get("cfgWeight", 0.35))
         configured_temperature = float(params.get("temperature", 0.8))
@@ -663,8 +653,11 @@ def generate(payload):
     pieces, sample_rate = [], 0
     chunk_diagnostics = []
     stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
-    chatter_chunk = max(300, min(720, int(params.get("chunkChars") or (540 if stable_mode else 360))))
-    text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else chatter_chunk)
+    chatter_chunk = max(300, min(900, int(params.get("chunkChars") or (540 if stable_mode else 360))))
+    if ENGINE == "chatterbox" and bool(params.get("forceSingleChunk")):
+        text_chunks = [text]
+    else:
+        text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else chatter_chunk)
     request_id = str(payload.get("id") or "")
     for idx, part in enumerate(text_chunks):
         emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
