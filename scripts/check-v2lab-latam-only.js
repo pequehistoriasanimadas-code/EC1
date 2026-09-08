@@ -40,7 +40,7 @@ const {PROFILE_VERSION}=require(path.join(root,'src','services','releaseV2Produc
   assert(runtimeSrc.includes("chatterboxVariant(params={}){return'latam';}"));
   assert(runtimeSrc.includes('chatterbox.latam.')&&!runtimeSrc.includes('chatterboxPreparedMultilingual'));
   assert(runtimeSrc.includes('checkChatterboxConsistency'));
-  const consistencyText=runtimeSrc.match(/checkChatterboxConsistency[\\s\\S]*?const text='([^']+)'/);
+  const consistencyText=runtimeSrc.match(/checkChatterboxConsistency[\s\S]*?const text='([^']+)'/);
   assert(consistencyText&&consistencyText[1].length>540,'La prueba B/C debe dividir realmente el texto con el chunk de producción');
   assert(routing.includes("bind('tts-lab:checkConsistency'"));
   assert(ui.includes("await window.ECAPI.stopLocal?.()"),'La prueba de consistencia debe liberar Qwen local antes de medir Chatterbox');
