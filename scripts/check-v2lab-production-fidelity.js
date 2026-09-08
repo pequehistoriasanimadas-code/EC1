@@ -62,6 +62,12 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     assert.strictEqual(p.batch,384);
     assert.strictEqual(p.ubatch,192);
 
+    const ranked=rt.__ec0320RankCandidates([
+      {id:'gpu-48',safe:true,error:'',medianElapsedMs:2000,worstElapsedMs:2500,cpuAverage:6,vramMaxMb:7782,config:{gpuLayers:48}},
+      {id:'gpu-99',safe:true,error:'',medianElapsedMs:2000,worstElapsedMs:2500,cpuAverage:7,vramMaxMb:8602,config:{gpuLayers:99}}
+    ]);
+    assert.strictEqual(ranked[0].id,'gpu-48','Con rendimiento equivalente debe preferirse menor VRAM, no 99 capas');
+
     // Active production profile must override stale legacy gpu-swap.
     const settings={
       ai:{primary:'local',backup1:'none',backup2:'none',lastLocalBenchmark:{coexistenceMode:'gpu-swap',swapValidated:false}},
