@@ -10,7 +10,7 @@ const CUDA_CRITICAL_FILES=['torch/__init__.py','torch/torch_version.py','torchau
 const CACHE_REVISION='lab11-r1';
 const QWEN_ASSET_REVISION=2;
 const ENGINES={
-  chatterbox:{id:'chatterbox',label:'Chatterbox V3',package:'chatterbox-tts',installRevision:3,packages:['setuptools<81','resemble-perth','chatterbox-tts']},
+  chatterbox:{id:'chatterbox',label:'Chatterbox V3 · LatAm',package:'chatterbox-tts',installRevision:3,packages:['setuptools<81','resemble-perth','chatterbox-tts']},
   qwen3tts:{id:'qwen3tts',label:'Qwen3-TTS 0.6B',package:'qwen-tts',installRevision:2,packages:['qwen-tts']}
 };
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
