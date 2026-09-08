@@ -757,7 +757,7 @@ def generate(payload):
         "voice_session_id": voice_session_id,
         "voice_config_fingerprint": voice_config_fingerprint,
         "speed": 1.0,
-        "variant": ("multilingual" if str(params.get("variant") or "") == "multilingual" else "latam") if ENGINE == "chatterbox" else "",
+        "variant": "latam" if ENGINE == "chatterbox" else "",
         **info,
     }
 
@@ -777,7 +777,7 @@ def handle(payload):
         return {"engine": ENGINE, **qwen_capabilities()} if ENGINE == "qwen3tts" else {"engine": ENGINE, **torch_runtime_info()}
     if cmd == "prepare":
         params = payload.get("params") or {}
-        variant = "multilingual" if str(params.get("variant") or "") == "multilingual" else "latam"
+        variant = "latam"
         qwen_mode = str(payload.get("qwen_mode") or params.get("voiceMode") or "reference")
         model_path = str(payload.get("model_path") or "").strip()
         speaker = str(payload.get("speaker") or "").strip()
@@ -794,7 +794,7 @@ def handle(payload):
         beat.start()
         try:
             if ENGINE == "chatterbox":
-                load_model(chatterbox_variant=variant)
+                load_model(chatterbox_variant="latam")
             elif ENGINE == "qwen3tts":
                 if qwen_mode == "finetuned":
                     validated = validate_qwen_model(model_path, speaker)
