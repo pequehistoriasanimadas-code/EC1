@@ -27,6 +27,8 @@ app.whenReady().then(async()=>{try{
   assert.strictEqual(result.recommendedParams.dtypeMode,'fp16');
   assert.strictEqual(result.recommendedParams.attentionMode,'sdpa');
   assert.strictEqual(result.recommendedParams.chunkChars,600);
+  assert.strictEqual(result.recommendedParams.consistencyMode,'stable-v1');
+  assert(result.recommendedParams.productionTemperature<=0.55);
   assert(result.chunkResults.find(x=>x.id==='chunk-900')?.durationSafe===false);
 
   const worker=fs.readFileSync(path.join(appRoot,'src','tts_lab_worker.py'),'utf8');
