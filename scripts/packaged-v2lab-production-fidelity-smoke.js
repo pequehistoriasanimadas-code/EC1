@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.16');
+  assert.strictEqual(pkg.version,'2.0.0-lab.17');
 
   const servicePath=path.join(appRoot,'src','services','releaseV2ProductionFidelity.js');
   const localPath=path.join(appRoot,'src','services','localRuntime.js');
@@ -13,7 +13,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   const {resolvePipelineMode,normalizeLocalConfig,expectedVsRuntime,PROFILE_VERSION}=require(servicePath);
   const {LocalRuntime}=require(localPath);
   const {installVersion0320LocalPolicy}=require(policyPath);
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.16');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.17');
 
   const source=fs.readFileSync(servicePath,'utf8');
   const automation=fs.readFileSync(path.join(appRoot,'src','services','automation0325.js'),'utf8');
@@ -34,7 +34,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(preload.includes('optimizationV2Status')&&preload.includes('optimizationV2Commit'),'IPC production profile no empaquetado');
 
   installVersion0320LocalPolicy();
-  tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-packaged-lab16-'));
+  tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-packaged-lab17-'));
   const rt=new LocalRuntime({resourcesDir,dataDir:tmp});
   rt.configure('tuned',{label:'GPU alta',ctx:4096,gpuLayers:48,batch:384,ubatch:192,threads:4,prio:-1,poll:0,warmup:false});
   assert.strictEqual(rt.profile().gpuLayers,48,'Packaged LocalRuntime tuned cayó a safe_streaming');
@@ -53,6 +53,6 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(expectedVsRuntime(chatter99,{resourceMode:'tuned',profile:{ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,parallel:1,prio:0,poll:25,warmup:true}}).ok,'Packaged Chatterbox 99-layer profile mismatch regression');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 PRODUCTION FIDELITY lab.16 OK · tuned 48 · profile/pipeline fidelity · strict swap · stable voice diagnostics');
+  console.log('PACKAGED V2 PRODUCTION FIDELITY lab.17 OK · tuned 48 · profile/pipeline fidelity · strict swap · stable voice diagnostics');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
