@@ -14,6 +14,8 @@ assert(release.includes('engineOptimizations')&&release.includes('captureOptimiz
 assert(release.includes('optimizationKey')&&release.includes('chatterbox:multilingual')&&release.includes("variant:['latam','multilingual']"),'La optimización debe separarse por variante Chatterbox y migrar la configuración anterior');
 assert(release.includes('p.generate=async function')&&release.includes("engine==='kokoro'")&&release.includes('labRuntime().generate'),'Routing multi-TTS incompleto');
 assert(optimizer.includes('qwenTokensPerSec')&&optimizer.includes('vramSafe')&&optimizer.includes('voiceSafe'),'La optimización no valida Qwen + TTS por RTF/tok/s/VRAM');
+assert(baseOptimizerUi.includes('Liberando Qwen local y la VRAM antes de medir el TTS')&&baseOptimizerUi.includes('await window.ECAPI.stopLocal()'),'El benchmark de voz debe empezar con Qwen local realmente detenido');
+assert(localPolicy.includes("if(rel>.03)return sa-sb")&&localPolicy.includes("return va-vb"),'Perfiles locales equivalentes deben preferir menor VRAM');
 assert(optimizer.includes("coexistenceMode:'gpu-coordinated'")&&optimizer.includes("mode:'simultaneous'")&&optimizer.includes("mode:'gpu-swap'"),'El optimizador V2 debe elegir entre simultáneo, GPU coordinada y GPU SWAP validado');
 assert(boot.includes('releaseV2ProductionFidelity')&&production.includes('active-production-profile.json'),'Lab.15 debe instalar una fuente única de verdad del perfil de producción');
 assert(production.includes('PRODUCTION_PROFILE_MISMATCH')&&production.includes("return'gpu-coordinated'"),'Lab.15 debe verificar perfil activo y evitar GPU SWAP silencioso');
