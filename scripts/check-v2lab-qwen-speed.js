@@ -30,6 +30,8 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.resolve(__dirname,'..','src','
   assert.strictEqual(result.recommendedParams.dtypeMode,'fp16');
   assert.strictEqual(result.recommendedParams.attentionMode,'sdpa');
   assert.strictEqual(result.recommendedParams.chunkChars,600,'Chunk 900 truncado no debe ganar aunque sea más rápido');
+  assert.strictEqual(result.recommendedParams.consistencyMode,'stable-v1');
+  assert(result.recommendedParams.productionTemperature<=0.55);
   assert(result.gainPct>40,'Debe detectar una mejora importante sobre RTF 2.05');
   assert.strictEqual(result.capabilities.flash_attention_2,false,'No debe exigir Flash Attention si no existe');
   assert(result.chunkResults.find(x=>x.id==='chunk-900')?.durationSafe===false,'Debe marcar como insegura la duración truncada');
