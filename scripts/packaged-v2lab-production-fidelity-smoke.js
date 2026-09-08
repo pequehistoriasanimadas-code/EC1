@@ -24,6 +24,8 @@ app.whenReady().then(async()=>{let tmp='';try{
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
 
   assert(source.includes('active-production-profile.json')&&source.includes('PRODUCTION_PROFILE_MISMATCH'),'Production source of truth no empaquetado');
+  const localPolicy=fs.readFileSync(path.join(appRoot,'src','services','version0320LocalPolicy.js'),'utf8');
+  assert(localPolicy.includes('prio:p.prio,poll:p.poll,warmup:p.warmup===true'),'Perfil tuned completo no empaquetado');
   assert(main.includes('history,localRuntime,getSettings'),'LocalRuntime directo no empaquetado');
   assert(automation.includes('const local=this.localRuntime')&&automation.includes('GPU_SWAP_LOCAL_STILL_RUNNING'),'GPU SWAP estricto no empaquetado');
   assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('chunk_diagnostics'),'Consistencia Qwen no empaquetada');
