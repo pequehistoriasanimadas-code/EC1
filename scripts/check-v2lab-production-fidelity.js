@@ -33,6 +33,8 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   assert.strictEqual(pkg.version,'2.0.0-lab.16');
   assert.strictEqual(PROFILE_VERSION,'2.0-lab.16');
   assert(service.includes('active-production-profile.json'),'Falta fuente única de verdad persistente');
+  const localPolicy=read('src/services/version0320LocalPolicy.js');
+  assert(localPolicy.includes('prio:p.prio,poll:p.poll,warmup:p.warmup===true'),'LocalRuntime status debe exponer el perfil tuned completo para evitar falsos mismatch');
   assert(service.includes("s.ai.localResourceMode='tuned'")&&service.includes('s.ai.localTunedConfig=clone(profile.localAi.config)'),'El perfil no hidrata Qwen local');
   assert(service.includes("return'gpu-coordinated'")&&service.includes("legacy==='gpu-swap'&&settings?.ai?.lastLocalBenchmark?.swapValidated===true"),'GPU SWAP no está protegido contra fallback silencioso');
   assert(service.includes('PRODUCTION_PROFILE_MISMATCH')&&service.includes('expectedVsRuntime'),'Falta preflight Perfil esperado = Perfil activo');
