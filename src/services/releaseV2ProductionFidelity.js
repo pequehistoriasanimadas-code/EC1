@@ -199,11 +199,13 @@ function migrateLegacy(settings={},root=dataRoot()){
   return p;
 }
 function expectedVsRuntime(profile,status={}){
-  if(!profile?.localAi?.required)return{ok:true,reason:'IA local no requerida',expected:null,active:null};
+  if(!profile?.localAi?.required)return{ok:true,reason:'IA local no requerida',expected:null,active:null,differences:[]};
   const expected=configComparable(profile.localAi.config),active=configComparable(status.profile||{});
   const modeOk=String(status.resourceMode||'')==='tuned';
-  const ok=modeOk&&sameConfig(expected,active);
-  return{ok,reason:ok?'':!modeOk?`LocalRuntime activo en ${status.resourceMode||'desconocido'}, se esperaba tuned`:'La configuración local activa no coincide con el perfil optimizado',expected,active};
+  const differences=Object.keys(expected).filter(k=>expected[k]!==active[k]).map(k=>({field:k,expected:expected[k],active:active[k]}));
+  const ok=modeOk&&!differences.length;
+  const diffText=differences.map(d=>`${d.field}: esperado ${d.expected}, activo ${d.active}`).join(' · ');
+  return{ok,reason:ok?'':!modeOk?`LocalRuntime activo en ${status.resourceMode||'desconocido'}, se esperaba tuned`:`La configuración local activa no coincide con el perfil optimizado${diffText?`: ${diffText}`:''}`,expected,active,differences};
 }
 async function currentStatus(root=dataRoot()){
   const store=new SettingsStore(root),settings=store.load(),profile=settings.activeOptimizationV2||null,cmp=profile?{ok:profile.valid!==false,reason:profile.invalidReason||''}:{ok:false,reason:'sin perfil de producción'};
