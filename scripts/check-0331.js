@@ -10,7 +10,7 @@ const hotfix=require(path.join(root,'src','services','release0331Hotfix.js'));
 assert(boot.includes("require('./bootstrap-0330')"),'0.3.31 must layer on stable 0.3.30');
 assert(boot.includes("autoplay-policy")&&boot.includes('no-user-gesture-required'),'Output audio autoplay policy missing');
 assert(boot.includes('release0331Hotfix'),'0.3.31 queue identity hotfix not installed');
-assert(release.includes("since<every-1)return normal||null"),'exclusive scheduler must wait instead of emitting consecutive exclusives');
+assert(release.includes("exclusiveEligibilityState")&&release.includes("return baseChoose.call(this,queue,s)")&&!release.includes("if(!this.exclusiveHasEmitted)return ready[0]"),'exclusive scheduler must share the public-first eligibility rule and never bypass the first interval');
 assert(release.includes("this.__ec0331SkippedContent&&this.emissionRunning"),'skipped content must retain post-content handling');
 assert(release.includes('await this.playAdAfterCanned'),'skipped content must route to the post-content ad');
 assert(release.includes('adLocked=true'),'planned ads must expose a locked identity');
