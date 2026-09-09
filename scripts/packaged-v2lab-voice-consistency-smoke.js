@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.20');
+  assert.strictEqual(pkg.version,'2.0.0-lab.21');
   const ui=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8');
   const worker=fs.readFileSync(path.join(appRoot,'src','tts_lab_worker.py'),'utf8');
   const routing=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8');
@@ -20,10 +20,10 @@ app.whenReady().then(async()=>{try{
   assert(worker.includes('voice_session_id')&&worker.includes('540 if stable_mode else 360'));
   assert(worker.includes('def cleanup_chatterbox_tail')&&worker.includes('post_silence_residual')&&worker.includes('chatterbox_tail_cleanup_ms'),'Hotfix debe limpiar solo colas Chatterbox y reportarlo');
   assert(routing.includes('fallbackExplicit:true')&&routing.includes('speed:1'));
-  assert(prod.includes("const PROFILE_VERSION='2.0-lab.20'")&&prod.includes('chunkChars:540')&&prod.includes('processing-stop-lab17'));
+  assert(prod.includes("const PROFILE_VERSION='2.0-lab.21'")&&prod.includes('chunkChars:540')&&prod.includes('processing-stop-lab17'));
   assert(runtime.includes('inspectReferenceAudio')&&runtime.includes('audioInfo'));
   assert(automation.includes('ttsVoiceSessionId')&&automation.includes('ttsFallbackUsed'));
 
-  console.log('PACKAGED V2 VOICE CONSISTENCY lab.20 OK · natural speed · stable Chatterbox/Qwen · tail cleanup conservador · reference QA · safe cancel');
+  console.log('PACKAGED V2 VOICE CONSISTENCY lab.21 OK · natural speed · stable Chatterbox/Qwen · tail cleanup conservador · reference QA · safe cancel');
   app.exit(0);
 }catch(e){console.error(e.stack||e);app.exit(1);}});
