@@ -9,6 +9,10 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const isNews=x=>x&&['rss','generated'].includes(x.sourceType||'rss');
 const isLiveUrl=url=>/lbposting|liveblog|live-blog|live_blog/i.test(String(url||''));
 const clamp=(n,min,max,fallback)=>{n=Number(n);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;};
+function exclusiveEligibilityState(settings={},newsSinceExclusive=0){
+  const every=clamp(settings?.automation?.exclusiveEveryNews,0,20,4),required=every>1?every-1:0,since=Math.max(0,Number(newsSinceExclusive)||0);
+  return{everyNews:every,requiredPublic:required,newsSinceExclusive:since,nonExclusiveNeeded:every>0?Math.max(0,required-since):0,due:every===0||since>=required};
+}
 function selectGpuRequestIndex(queue=[],voiceBurst=0,maxVoiceBurst=2){if(!queue.length)return-1;const voiceIndex=queue.findIndex(x=>x?.kind==='voice'),aiIndex=queue.findIndex(x=>x?.kind==='ai');if(voiceIndex>=0&&(Number(voiceBurst)<Number(maxVoiceBurst)||aiIndex<0))return voiceIndex;if(aiIndex>=0)return aiIndex;return 0;}
 function locutionSource(title,script){const t=String(title||'').trim(),s=String(script||'').trim();if(!t)return s;if(!s)return t;const clean=x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),ct=clean(t),cs=clean(s.slice(0,Math.max(t.length*2,220)));return ct&&cs.startsWith(ct)?s:`${t}. ${s}`;}
 function feedFor(story,s){return(s?.rssFeeds||[]).find(f=>String(f.id)===String(story?.feedId))||{};}
@@ -24,6 +28,7 @@ class AutomationEngine extends Automation0324{
     this.gpuStageQueue=[];this.gpuStageBusy=false;this.gpuStageCurrent='';this.gpuVoiceBurst=0;this.gpuMaxVoiceBurst=2;this.gpuQueueTimeoutMs=180000;
     this.performanceSamples=[];this.localRuntime=args?.localRuntime||null;this.__v2ProductionProfile=null;this.__v2Preflight=null;
     this.selectionRecent=[];this.urlFailures=new Map();this.feedFailures=new Map();this.liveBaseCooldown=new Map();
+    this.exclusiveReserve=[];this.exclusiveReserveKeys=new Set();
     if(!Number.isFinite(Number(this.newsSinceExclusive)))this.newsSinceExclusive=0;
   }
   trimNewsStatuses(){while(this.newsStatuses.size>300){let key='',oldest=Infinity;for(const[k,v]of this.newsStatuses){const t=Number(v.updatedAt)||0;if(t<oldest){oldest=t;key=k;}}if(!key)break;this.newsStatuses.delete(key);}}
@@ -35,18 +40,35 @@ class AutomationEngine extends Automation0324{
     this.omissionStreak++;if(this.omissionStreak>=3)this.badSourceBackoffUntil=Date.now()+Math.min(5000,500*this.omissionStreak);
     this.addEmissionHistory(sourceType,story?.title||'Nota omitida','OMITIDA',{reason,feedName:sourceName(story),category:String(story?.category||'Actualidad'),storyKey:storyKey(story),baseKey:baseStoryKey(story),storyUrl:String(story?.link||''),isExclusive:!!story?.isExclusive});
   }
-  schedulerState(settings=this.getSettings()||{}){const every=clamp(settings.automation?.exclusiveEveryNews,0,20,4),needed=every>1?Math.max(0,(every-1)-Math.max(0,this.newsSinceExclusive)):0;return{everyNews:every,hasEmittedExclusive:this.exclusiveHasEmitted,newsSinceExclusive:this.newsSinceExclusive,nonExclusiveNeeded:needed,due:every>0&&this.newsSinceExclusive>=Math.max(0,every-1)};}
+  schedulerState(settings=this.getSettings()||{}){const x=exclusiveEligibilityState(settings,this.newsSinceExclusive);return{...x,hasEmittedExclusive:this.exclusiveHasEmitted,reservedCount:this.exclusiveReserve.length,reserveMax:clamp(settings?.automation?.exclusiveReserveMax,1,30,10),openExclusiveArticles:settings?.automation?.openExclusiveArticles===true};}
   recordExclusiveEmission(item){
     if(item?.result?.isExclusive||item?.isExclusive){this.exclusiveHasEmitted=true;this.newsSinceExclusive=0;}else this.newsSinceExclusive=Math.max(0,Number(this.newsSinceExclusive)||0)+1;
     try{this.history?.setAutomationState?.({exclusiveHasEmitted:this.exclusiveHasEmitted,newsSinceExclusive:this.newsSinceExclusive});}catch{}
   }
   knownExclusive(story,s){return accessForcedExclusive(story,s)||story?.isExclusive===true||String(story?.accessStatus||'')==='SUBSCRIBER_ONLY';}
   hasExclusiveInPipeline(){return(this.queue||[]).some(x=>isNews(x)&&!['EMITIDA','ERROR'].includes(x.status)&&!!(x.isExclusive||x.result?.isExclusive));}
-  needsExclusiveReserve(s){const every=clamp(s?.automation?.exclusiveEveryNews,0,20,4);return every>0&&!this.hasExclusiveInPipeline();}
+  exclusiveReserveKey(story={}){return baseStoryKey(story)||String(story?.link||'');}
+  isExclusiveReserved(story){return this.exclusiveReserveKeys.has(this.exclusiveReserveKey(story));}
+  reserveExclusive(story,s,extra={}){
+    if(!story?.link)return false;const key=this.exclusiveReserveKey(story);if(!key||this.exclusiveReserveKeys.has(key))return false;
+    const max=clamp(s?.automation?.exclusiveReserveMax,1,30,10),entry={key,story:{...story,isExclusive:true,accessStatus:'SUBSCRIBER_ONLY'},article:extra.article||null,accessStatus:'SUBSCRIBER_ONLY',reservedAt:Date.now(),selectionScore:Number(story.__ecSelectionScore)||Number(extra.selectionScore)||0};
+    this.exclusiveReserve.push(entry);this.exclusiveReserveKeys.add(key);this.queuedUrls.add(story.link);this.setNewsStatus(entry.story,'RESERVADA',{isExclusive:true,accessStatus:'SUBSCRIBER_ONLY'});
+    this.exclusiveReserve.sort((a,b)=>(Number(b.selectionScore)||0)-(Number(a.selectionScore)||0)||Date.parse(b.story?.pubDate||'')-Date.parse(a.story?.pubDate||'')||b.reservedAt-a.reservedAt);
+    while(this.exclusiveReserve.length>max){const dropped=this.exclusiveReserve.pop();if(dropped){this.exclusiveReserveKeys.delete(dropped.key);this.queuedUrls.delete(dropped.story?.link);}}
+    this.state();return true;
+  }
+  reserveKnownExclusives(items,s){
+    if(this.schedulerState(s).due)return;const max=clamp(s?.automation?.exclusiveReserveMax,1,30,10);if(this.exclusiveReserve.length>=max)return;
+    for(const story of items||[]){if(this.exclusiveReserve.length>=max)break;if(!this.knownExclusive(story,s)||this.isExclusiveReserved(story)||!this.eligible(story,s))continue;story.__ecSelectionScore=this.scoreCandidate(story,s);this.reserveExclusive(story,s);}
+  }
+  takeReservedExclusive(s){
+    while(this.exclusiveReserve.length){const entry=this.exclusiveReserve.shift();this.exclusiveReserveKeys.delete(entry.key);if(!this.isFeedActive(entry.story,s)){this.queuedUrls.delete(entry.story?.link);continue;}return entry;}return null;
+  }
+  needsDueExclusive(s){const sched=this.schedulerState(s);return sched.due&&!this.hasExclusiveInPipeline();}
   urlOnCooldown(story){const key=baseStoryKey(story),until=Number(this.urlFailures.get(key)?.until||0),liveUntil=Number(this.liveBaseCooldown.get(key)||0);return until>Date.now()||liveUntil>Date.now();}
   feedOnCooldown(story){return Number(this.feedFailures.get(String(story?.feedId||''))?.until||0)>Date.now();}
   eligible(story,s){
-    if(!story?.link||this.queuedUrls.has(story.link)||!this.isFeedActive(story,s)||this.isOmittedBlocked(story)||this.urlOnCooldown(story)||this.feedOnCooldown(story))return false;
+    if(!story?.link||this.queuedUrls.has(story.link)||this.isExclusiveReserved(story)||!this.isFeedActive(story,s)||this.isOmittedBlocked(story)||this.urlOnCooldown(story)||this.feedOnCooldown(story))return false;
     if((this.queue||[]).some(x=>baseStoryKey(x.story)===baseStoryKey(story)&&!['EMITIDA','ERROR'].includes(x.status)))return false;
     if(s.automation?.avoidRepeats&&this.history.has(story.link)&&!isLiveUrl(story.link))return false;
     const maxAge=(Number(s.automation?.maxAgeHours)||6)*3600000,now=Date.now(),t=Date.parse(story.pubDate||'');if(t&&t>now+10*60000)return false;if(t&&now-t>maxAge&&!isLiveUrl(story.link))return false;return true;
@@ -54,13 +76,13 @@ class AutomationEngine extends Automation0324{
   scoreCandidate(story,s){
     const now=Date.now(),t=Date.parse(story.pubDate||'')||now,ageMin=Math.max(0,(now-t)/60000),feedId=String(story.feedId||''),recent=this.selectionRecent.slice(-8),recentCount=recent.filter(x=>x===feedId).length,queuedCount=(this.queue||[]).filter(x=>String(x.story?.feedId||'')===feedId&&isNews(x)&&!['EMITIDA','ERROR'].includes(x.status)).length;
     let score=1000-Math.min(900,ageMin*.9)-recentCount*135-queuedCount*70;
-    const exclusive=this.knownExclusive(story,s),reserve=this.needsExclusiveReserve(s),sched=this.schedulerState(s);if(exclusive&&reserve)score+=650;if(exclusive&&sched.due)score+=260;if(recent.at(-1)===feedId)score-=100;
+    const exclusive=this.knownExclusive(story,s),sched=this.schedulerState(s);if(exclusive&&sched.due)score+=420;if(exclusive&&!sched.due)score-=900;if(recent.at(-1)===feedId)score-=100;
     return score;
   }
   candidateFrom(items,s,options={}){
-    const eligible=(items||[]).filter(x=>this.eligible(x,s)&&(!options.exclusiveOnly||this.knownExclusive(x,s)));if(!eligible.length)return null;
+    const eligible=(items||[]).filter(x=>this.eligible(x,s)&&(!options.exclusiveOnly||this.knownExclusive(x,s))&&(!options.publicOnly||!this.knownExclusive(x,s)));if(!eligible.length)return null;
     let best=null,bestScore=-Infinity;for(const x of eligible){const score=this.scoreCandidate(x,s);if(score>bestScore){best=x;bestScore=score;}}
-    if(best){best.__ecSelectionScore=Math.round(bestScore);best.__ecSelectionReason=this.knownExclusive(best,s)&&this.needsExclusiveReserve(s)?'reserva exclusiva':'actualidad + variedad de fuente';}
+    if(best){best.__ecSelectionScore=Math.round(bestScore);best.__ecSelectionReason=this.knownExclusive(best,s)?'exclusiva elegible':'actualidad + variedad de fuente';}
     return best;
   }
   coexistenceMode(s=this.getSettings()||{}){
