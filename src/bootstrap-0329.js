@@ -1,8 +1,13 @@
 'use strict';
 const {app,BrowserWindow}=require('electron');
-const locked=app.requestSingleInstanceLock();
+const inheritedLock=global.__ecSingleInstanceLockOwned===true;
+const locked=inheritedLock?true:app.requestSingleInstanceLock();
 if(!locked){app.quit();}else{
-  app.on('second-instance',()=>{try{const w=BrowserWindow.getAllWindows().find(x=>!x.isDestroyed()&&!/OUTPUT/i.test(x.getTitle?.()||''));if(w){if(w.isMinimized())w.restore();w.show();w.focus();w.webContents?.focus?.();}}catch{}});
+  if(!inheritedLock)global.__ecSingleInstanceLockOwned=true;
+  if(global.__ecSecondInstanceHandlerOwned!==true){
+    global.__ecSecondInstanceHandlerOwned=true;
+    app.on('second-instance',()=>{try{const w=BrowserWindow.getAllWindows().find(x=>!x.isDestroyed()&&!/OUTPUT/i.test(x.getTitle?.()||''));if(w){if(w.isMinimized())w.restore();w.show();w.focus();w.webContents?.focus?.();}}catch{}});
+  }
   const stability=require('./services/profileStability0329');
   stability.installLegacyWatcherSuppression();
   require('./bootstrap-0328');
