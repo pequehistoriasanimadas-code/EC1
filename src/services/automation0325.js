@@ -13,6 +13,12 @@ function exclusiveEligibilityState(settings={},newsSinceExclusive=0){
   const every=clamp(settings?.automation?.exclusiveEveryNews,0,20,4),required=every>1?every-1:0,since=Math.max(0,Number(newsSinceExclusive)||0);
   return{everyNews:every,requiredPublic:required,newsSinceExclusive:since,nonExclusiveNeeded:every>0?Math.max(0,required-since):0,due:every===0||since>=required};
 }
+function exclusiveSourceArticle(story,article,wantsFull=false){
+  const fullUsable=wantsFull&&['COMPLETE','PARTIAL'].includes(String(article?.contentState||''))&&String(article?.body||'').trim().length>=250;
+  if(fullUsable)return{sourceArticle:{...article,protectedBodyOmitted:false,exclusiveContentMode:'full'},mode:'full',sufficient:true};
+  const sufficient=exclusiveContextSufficient(story,article),sourceArticle=buildExclusivePublicArticle(story,article);
+  return{sourceArticle,mode:'public-preview',sufficient};
+}
 function selectGpuRequestIndex(queue=[],voiceBurst=0,maxVoiceBurst=2){if(!queue.length)return-1;const voiceIndex=queue.findIndex(x=>x?.kind==='voice'),aiIndex=queue.findIndex(x=>x?.kind==='ai');if(voiceIndex>=0&&(Number(voiceBurst)<Number(maxVoiceBurst)||aiIndex<0))return voiceIndex;if(aiIndex>=0)return aiIndex;return 0;}
 function locutionSource(title,script){const t=String(title||'').trim(),s=String(script||'').trim();if(!t)return s;if(!s)return t;const clean=x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),ct=clean(t),cs=clean(s.slice(0,Math.max(t.length*2,220)));return ct&&cs.startsWith(ct)?s:`${t}. ${s}`;}
 function feedFor(story,s){return(s?.rssFeeds||[]).find(f=>String(f.id)===String(story?.feedId))||{};}
@@ -184,11 +190,7 @@ class AutomationEngine extends Automation0324{
     const schedAtClassification=this.schedulerState(s);if(access.exclusive&&!holder.forceExclusiveDue&&!schedAtClassification.due)return{reserved:true,article,accessStatus:access.status};
     if(article.isLiveBlog&&article.liveblogNoEvent)return{omitted:true,reason:'liveblog sin evento factual nuevo'};if(['DEFECTIVE','INSUFFICIENT'].includes(article.contentState)&&!(article.isLiveBlog&&article.liveEvent)&&!access.exclusive)return{omitted:true,reason:'extracción de artículo insuficiente'};
     if(article.eventId){const original=story.link,eventLink=`${original}#ec-event=${encodeURIComponent(article.eventId)}`;if(s.automation?.avoidRepeats&&this.history.has(eventLink))return{omitted:true,reason:'evento del liveblog ya emitido'};holder.originalLink=original;holder.story={...holder.story,link:eventLink};story=holder.story;}
-    let sourceArticle=article;holder.exclusiveContentMode='public';if(access.exclusive){
-      const wantsFull=holder.exclusiveContentModeRequested==='full',fullUsable=wantsFull&&['COMPLETE','PARTIAL'].includes(String(article.contentState||''))&&String(article.body||'').trim().length>=250;
-      if(fullUsable){sourceArticle={...article,protectedBodyOmitted:false,exclusiveContentMode:'full'};holder.exclusiveContentMode='full';}
-      else{if(!exclusiveContextSufficient(story,article))return{omitted:true,reason:'información pública insuficiente'};sourceArticle=buildExclusivePublicArticle(story,article);holder.exclusiveContentMode='public-preview';}
-    }
+    let sourceArticle=article;holder.exclusiveContentMode='public';if(access.exclusive){const selected=exclusiveSourceArticle(story,article,holder.exclusiveContentModeRequested==='full');if(!selected.sufficient)return{omitted:true,reason:'información pública insuficiente'};sourceArticle=selected.sourceArticle;holder.exclusiveContentMode=selected.mode;}
     holder.uiVisible=true;holder.stage='ai';this.setNewsStatus(story,'PROCESANDO',{isExclusive:access.exclusive,accessStatus:access.status,eventId:article.eventId||''});this.state();
     const image=story.image||article.image||this.getFallbackUrl();let editorial;try{
       editorial=await this.runStage('ai',async()=>{
@@ -246,4 +248,4 @@ class AutomationEngine extends Automation0324{
 }
 
 function URLSafe(value){try{return new URL(String(value||''));}catch{return{hash:''};}}
-module.exports={AutomationEngine,selectGpuRequestIndex,exclusiveEligibilityState};
+module.exports={AutomationEngine,selectGpuRequestIndex,exclusiveEligibilityState,exclusiveSourceArticle};
