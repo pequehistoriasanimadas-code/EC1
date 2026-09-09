@@ -43,7 +43,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   assert(automation.includes('const local=this.localRuntime')&&!automation.includes('const local=global.__ec0320LocalRuntime'),'GPU SWAP sigue dependiendo del global heredado');
   assert(automation.includes('GPU_SWAP_LOCAL_STILL_RUNNING'),'GPU SWAP no verifica cierre real');
   assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('stable-v1'),'Falta consistencia Qwen de producción');
-  assert(worker.includes('top_k=20 if stable_mode else 50')&&worker.includes('top_p=0.90 if stable_mode else 1.0'),'Sampling fine-tuned estable no aplicado');
+  assert(worker.includes('talker_top_k = perf["talkerTopK"] or (20 if stable_mode else 50)')&&worker.includes('talker_top_p = perf["talkerTopP"] or (0.90 if stable_mode else 1.0)')&&worker.includes('subtalker_top_k'),'Sampling fine-tuned lab.20 no aplicado');
   assert(worker.includes('chunk_diagnostics')&&runtime.includes('chunkDiagnostics:Array.isArray(r.chunk_diagnostics)'),'Diagnóstico de chunks no cruza worker/runtime');
   assert(renderer.includes('optimizationV2Commit')&&renderer.includes('REOPTIMIZAR PRODUCCIÓN')&&renderer.includes('Perfil de producción:'),'UI no está vinculada al perfil de producción');
   assert(preload.includes('optimizationV2Status')&&preload.includes('optimizationV2Commit'),'Bridge lab.20 incompleto');
