@@ -11,6 +11,9 @@ app.whenReady().then(()=>{let tmp='';try{
   assert(pkg.name==='ec-automatic-news','Identidad interna del paquete cambió');
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
   assert(preload.indexOf('renderer-v2lab.js')>preload.indexOf('renderer-0332.js'),'V2 UI debe cargarse después de 0.3.32');
+  const mainSource=fs.readFileSync(path.join(appRoot,'src','main.js'),'utf8'),actionsSource=fs.readFileSync(path.join(appRoot,'src','renderer-actions.js'),'utf8');
+  assert(mainSource.includes('const persisted=settingsStore.load()')&&mainSource.includes('path:persistedPath'),'La música empaquetada debe devolver la ruta definitiva del perfil');
+  assert(actionsSource.includes('queueDesignAutosave')&&actionsSource.includes('Música cargada y guardada en este perfil'),'El diseño y los volúmenes deben autoguardarse por perfil');
   const worker=path.join(resourcesDir,'runtime','tts-lab','tts_lab_worker.py');assert(fs.existsSync(worker),'Worker de TTS Lab no está incluido en runtime');assert(fs.statSync(worker).size>1000,'Worker TTS Lab parece incompleto');
   tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-v2tts-0332-'));
   const {TTSLabRuntime,ENGINES}=require(path.join(appRoot,'src','services','ttsLabRuntime.js'));const rt=new TTSLabRuntime({resourcesDir,dataDir:tmp});const st=rt.status('kokoro');
