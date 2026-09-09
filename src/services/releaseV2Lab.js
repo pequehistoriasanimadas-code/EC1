@@ -13,7 +13,7 @@ const VALID_ENGINES=new Set(['kokoro',...Object.keys(ENGINES)]);
 const VALID_STYLES=new Set(['news','neutral','expressive','custom']);
 const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
 
-function labDataRoot(){const base=process.env.PORTABLE_EXECUTABLE_DIR||(!app.isPackaged?path.join(__dirname,'..','..'):path.dirname(process.execPath));return path.join(base,'EC Automatic News Data');}
+function labDataRoot(){const base=process.env.GEC_V2_TTS_LAB_ROOT||process.env.PORTABLE_EXECUTABLE_DIR||(!app.isPackaged?path.join(__dirname,'..','..'):path.dirname(process.execPath));return path.join(base,'EC Automatic News Data');}
 function resourcesRoot(){return app.isPackaged?process.resourcesPath:path.join(__dirname,'..','..');}
 let runtime=null;
 function labRuntime(){if(!runtime)runtime=new TTSLabRuntime({resourcesDir:resourcesRoot(),dataDir:labDataRoot()});return runtime;}
