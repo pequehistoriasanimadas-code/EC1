@@ -9,20 +9,20 @@ function writeMarker(rt,rootDir=rt.cudaRoot){const site=path.join(rootDir,'site-
 
 (async()=>{
   const pkg=JSON.parse(read('package.json')),runtimeSource=read('src/services/ttsLabRuntime.js'),worker=read('src/tts_lab_worker.py'),release=read('src/services/releaseV2Lab.js'),renderer=read('src/renderer-v2lab.js'),boot=read('src/bootstrap-v2lab.js'),main=read('src/main.js');
-  assert.strictEqual(pkg.version,'2.0.0-lab.19');
+  assert.strictEqual(pkg.version,'2.0.0-lab.20');
   assert.strictEqual(QWEN_ASSET_REVISION,2);
   assert(boot.includes('requestSingleInstanceLock')&&boot.includes("if(!gotLock){app.quit();}else{")&&boot.indexOf("require('./bootstrap-0332')")>boot.indexOf("if(!gotLock)"),'Lab.14 debe impedir que una segunda instancia inicialice servicios');
   assert(runtimeSource.includes('withMaintenance')&&runtimeSource.includes('waitForWorkersIdle')&&runtimeSource.includes('workerStops'),'Falta coordinador global de mantenimiento/lifecycle TTS');
-  assert(runtimeSource.includes('cuda-transaction.json')&&runtimeSource.includes('activation-pending')&&runtimeSource.includes('recoverLegacyCudaOrphans'),'Falta journal/recovery CUDA lab.19');
+  assert(runtimeSource.includes('cuda-transaction.json')&&runtimeSource.includes('activation-pending')&&runtimeSource.includes('recoverLegacyCudaOrphans'),'Falta journal/recovery CUDA lab.20');
   assert(runtimeSource.includes('site-packages.candidate')&&runtimeSource.includes('site-packages.backup')&&runtimeSource.includes('requireMarker:false'),'Instalación de motores debe validar staging antes del marcador');
   assert(runtimeSource.includes("['EPERM','EBUSY','EACCES']")&&runtimeSource.includes('renameWithRetry'),'Faltan reintentos Windows EPERM/EBUSY/EACCES');
   assert(runtimeSource.includes("PYTHONPATH:[engineSite,cudaSite]")&&!runtimeSource.includes('engineSite,cudaSite,existingPy'),'Workers TTS no deben heredar PYTHONPATH externo');
   assert(runtimeSource.includes('expectedRtf')&&runtimeSource.includes('420000')&&worker.includes('chunk-heartbeat'),'Watchdog de voz debe usar RTF y heartbeat');
   assert(worker.includes('GEC_TTS_MODEL_OVERLAYS')&&worker.includes('QWEN_SHARED_REVISION = 2')&&worker.includes('return overlay, repaired'),'Qwen fine-tuned debe usar overlay sin modificar el checkpoint importado');
   assert(release.includes('fallbackToKokoro')&&release.includes('fallbackFrom:engine'),'Fallback Kokoro configurado no estaba conectado al routing real');
-  assert(renderer.includes('v2InstallProgress')&&renderer.includes('Reintentar activación')&&renderer.includes('Instalación / preparación incompleta'),'UX de progreso/error persistente lab.19 incompleta');
+  assert(renderer.includes('v2InstallProgress')&&renderer.includes('Reintentar activación')&&renderer.includes('Instalación / preparación incompleta'),'UX de progreso/error persistente lab.20 incompleta');
   assert(main.includes("show:false,title:'EC Automatic News'")&&main.includes('CONTROL_LOAD_SLOW')&&main.includes("controlWindow.on('unresponsive'")&&main.includes("did-finish-load"),'La ventana principal debe esperar al renderer y vigilar arranques negros');
-  assert(release.includes("browser-window-created")&&release.includes("control\\.html")&&release.includes("setTimeout(recover,8000)")&&!release.includes("setTimeout(recover,50)"),'La recuperación TTS debe esperar a la UI principal en lab.19');
+  assert(release.includes("browser-window-created")&&release.includes("control\\.html")&&release.includes("setTimeout(recover,8000)")&&!release.includes("setTimeout(recover,50)"),'La recuperación TTS debe esperar a la UI principal en lab.20');
 
   const base=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab17-hardening-'));
   try{
@@ -95,7 +95,7 @@ function writeMarker(rt,rootDir=rt.cudaRoot){const site=path.join(rootDir,'site-
       assert(!fs.existsSync(rt.cudaJournal()),'Journal CUDA debe cerrarse después del reintento exitoso');
     }
 
-    // Upgrade from lab.13: orphan backup is recovered even without lab.19 journal.
+    // Upgrade from lab.13: orphan backup is recovered even without lab.20 journal.
     {
       const data=path.join(base,'legacy-data'),res=path.join(base,'legacy-res');fs.mkdirSync(data,{recursive:true});fs.mkdirSync(res,{recursive:true});makePython(res);
       const rt=new TTSLabRuntime({resourcesDir:res,dataDir:data}),backup=path.join(rt.root,CUDA_RUNTIME.slot+'.backup-12345'),site=path.join(backup,'site-packages');

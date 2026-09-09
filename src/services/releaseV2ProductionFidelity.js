@@ -10,7 +10,7 @@ const {AutomationEngine}=require('./automation0325');
 const {optimizationKey,qwenModelIdentity,ttsRuntimeSignature}=require('./releaseV2Lab');
 
 const PROFILE_SCHEMA=1;
-const PROFILE_VERSION='2.0-lab.19';
+const PROFILE_VERSION='2.0-lab.20';
 const PROFILE_FILE='active-production-profile.json';
 const PIPELINE_MODES=new Set(['split','simultaneous','gpu-coordinated','gpu-swap']);
 const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
@@ -76,6 +76,17 @@ function buildProfile(settings={},payload={}){
     dtypeMode:String(q.dtypeMode||payload?.qwenPerf?.recommendedParams?.dtypeMode||'bf16'),
     attentionMode:String(q.attentionMode||payload?.qwenPerf?.recommendedParams?.attentionMode||'auto'),
     chunkChars:Math.round(clamp(q.chunkChars||payload?.qwenPerf?.recommendedParams?.chunkChars,240,900,360)),
+    batchSize:Math.round(clamp(q.batchSize||payload?.qwenPerf?.recommendedParams?.batchSize,1,8,1)),
+    nonStreamingMode:(q.nonStreamingMode??payload?.qwenPerf?.recommendedParams?.nonStreamingMode)!==false,
+    predictorHiddenStates:(q.predictorHiddenStates??payload?.qwenPerf?.recommendedParams?.predictorHiddenStates)!==false,
+    talkerDoSample:(q.talkerDoSample??payload?.qwenPerf?.recommendedParams?.talkerDoSample)!==false,
+    talkerTopK:Math.round(clamp(q.talkerTopK||payload?.qwenPerf?.recommendedParams?.talkerTopK,1,100,20)),
+    talkerTopP:clamp(q.talkerTopP||payload?.qwenPerf?.recommendedParams?.talkerTopP,.01,1,.90),
+    repetitionPenalty:clamp(q.repetitionPenalty||payload?.qwenPerf?.recommendedParams?.repetitionPenalty,.5,2,1.05),
+    subtalkerDoSample:(q.subtalkerDoSample??payload?.qwenPerf?.recommendedParams?.subtalkerDoSample)!==false,
+    subtalkerTopK:Math.round(clamp(q.subtalkerTopK||payload?.qwenPerf?.recommendedParams?.subtalkerTopK,1,100,50)),
+    subtalkerTopP:clamp(q.subtalkerTopP||payload?.qwenPerf?.recommendedParams?.subtalkerTopP,.01,1,1.0),
+    subtalkerTemperature:clamp(q.subtalkerTemperature||payload?.qwenPerf?.recommendedParams?.subtalkerTemperature,.05,2,.9),
     temperature:qBaseTemp,
     productionTemperature:stableTemp,
     productionSeed,
@@ -141,8 +152,8 @@ function compatibility(settings={},profile=null){
   if(!profile)return{ok:false,reason:'sin perfil de producción'};
   if(Number(profile.schemaVersion)!==PROFILE_SCHEMA)return{ok:false,reason:'perfil antiguo'};
   if(String(profile.version||'')!==PROFILE_VERSION)return{ok:false,reason:`perfil ${profile.version||'anterior'} pendiente de revalidación ${PROFILE_VERSION}`};
-  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.19'};
-  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.19'};
+  if(profile.pipeline?.validated!==true)return{ok:false,reason:'perfil pendiente de revalidación lab.20'};
+  if(profile.pipeline?.mode==='gpu-coordinated'&&profile.pipeline?.coordinatedValidated!==true)return{ok:false,reason:'GPU coordinada no fue validada con la prueba secuencial lab.20'};
   if(profile.pipeline?.mode==='gpu-swap'&&profile.pipeline?.swapValidated!==true)return{ok:false,reason:'GPU SWAP no validado'};
   const tts=settings.tts||{},engine=String(tts.engine||'kokoro');
   if(String(profile.tts?.engine||'')!==engine)return{ok:false,reason:'motor TTS distinto'};
@@ -257,7 +268,7 @@ async function preflightAutomation(engine){
   const s=engine.getSettings?.()||{},rawProfile=s.activeOptimizationV2||null,profile=productionProfileFrom(s);
   engine.__v2ProductionProfile=profile||null;
   if(rawProfile&&rawProfile.valid===false){const e=new Error(`El perfil optimizado necesita revalidación antes de producción: ${rawProfile.invalidReason||'ejecuta Optimizar GEC'}`);e.code='PRODUCTION_PROFILE_INVALID';throw e;}
-  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.19. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
+  if(!profile&&s.optimization0321){const e=new Error('Existe una optimización anterior, pero falta el perfil de producción lab.20. Ejecuta Optimizar GEC una vez.');e.code='PRODUCTION_PROFILE_REOPTIMIZE_REQUIRED';throw e;}
   if(!profile)return{ok:true,optimized:false,pipeline:resolvePipelineMode(s),reason:'sin perfil previo; modo coordinado seguro explícito'};
   if(profile.localAi?.required){
     const local=engine.localRuntime||global.__ec0320LocalRuntime;
@@ -293,6 +304,9 @@ function installAutomationFidelity(){
         pipelineModeActive:this.coexistenceMode(s),
         ttsExpectedRtf:Number(active.tts?.expectedRtf||0),
         ttsExpectedChunkChars:Number(active.tts?.runtimeParams?.chunkChars||0),
+        ttsExpectedBatchSize:Number(active.tts?.runtimeParams?.batchSize||1),
+        ttsPredictorHiddenStates:active.tts?.runtimeParams?.predictorHiddenStates!==false,
+        ttsSubtalkerTopK:Number(active.tts?.runtimeParams?.subtalkerTopK||50),
         ttsProductionTemperature:Number(active.tts?.runtimeParams?.productionTemperature||0),
         ttsProductionSeed:Number(active.tts?.runtimeParams?.productionSeed||0),
         voiceConsistencyMode:String(active.voiceConsistency?.mode||'default'),

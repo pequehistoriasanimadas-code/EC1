@@ -18,8 +18,8 @@ const {PROFILE_VERSION}=require(path.join(root,'src','services','releaseV2Produc
   const routing=read('src/services/releaseV2Lab.js');
   const optimizer=read('src/renderer-0321.js');
 
-  assert.strictEqual(pkg.version,'2.0.0-lab.19');
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.19');
+  assert.strictEqual(pkg.version,'2.0.0-lab.20');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.20');
 
   const migrated=normalizeProfileTts({engine:'chatterbox',engineParams:{chatterbox:{variant:'multilingual'}}});
   assert.strictEqual(migrated.engineParams.chatterbox.variant,'latam','Un perfil antiguo Multilingual debe migrar automáticamente a LatAm');
