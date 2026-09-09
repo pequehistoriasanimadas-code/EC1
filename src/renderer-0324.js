@@ -1,6 +1,6 @@
 'use strict';
 (function installEc0324(){
-  if(typeof renderFeeds!=='function'||typeof refreshRuntimeStatus!=='function'||typeof refreshPronunciationStatus!=='function'||typeof readDesignControls!=='function'||typeof renderQueue!=='function'||!window.__ec0316UiPatchesInstalled){setTimeout(installEc0324,80);return;}
+  if(typeof renderFeeds!=='function'||typeof refreshRuntimeStatus!=='function'||typeof refreshPronunciationStatus!=='function'||typeof readDesignControls!=='function'||typeof renderQueue!=='function'||!window.__ec0323UiInstalled){setTimeout(installEc0324,80);return;}
   if(window.__ec0324Installed)return;window.__ec0324Installed=true;
 
   const $id=id=>document.getElementById(id),fmtDuration=sec=>{const n=Math.max(0,Math.round(Number(sec)||0));if(!n)return'--:--';const h=Math.floor(n/3600),m=Math.floor((n%3600)/60),s=n%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;};

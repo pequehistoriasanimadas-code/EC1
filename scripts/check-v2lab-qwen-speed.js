@@ -5,7 +5,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
 
 (async()=>{
   const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.22');
+  assert.strictEqual(pkg.version,'2.0.0-lab.23');
   const rt=Object.create(TTSLabRuntime.prototype);
   rt.qwenCapabilities=async()=>({flash_attention_2:false,sdpa:true,fp16:true,bf16:true,gpu_name:'RTX TEST',gpu_vram_mb:12288});
   rt.stopAndWait=async()=>true;
@@ -59,8 +59,8 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
   assert.strictEqual(CACHE_REVISION,'lab11-r1');
   const worker=fs.readFileSync(path.join(root,'src','tts_lab_worker.py'),'utf8');
   const runtime=fs.readFileSync(path.join(root,'src','services','ttsLabRuntime.js'),'utf8');
-  for(const token of ['QWEN_PERF_REVISION = 4','predictorHiddenStates','subtalkerTopK','batchSize','generate_qwen_finetuned_batch','kwargs["output_hidden_states"] = False','code_predictor_ms_per_step'])assert(worker.includes(token),`Worker lab.22 missing ${token}`);
-  for(const token of ['sampleCount=5','batchSampleCount=2','subtalkerTopK:20','subtalkerTopK:10','batchSizes=String(params.voiceMode||\'reference\')===\'finetuned\'?[1,2,4,8]','batchVramHeadroomMb','stableRuns=id===\'qwen3tts\'?5:3'])assert(runtime.includes(token),`Runtime lab.22 missing ${token}`);
+  for(const token of ['QWEN_PERF_REVISION = 4','predictorHiddenStates','subtalkerTopK','batchSize','generate_qwen_finetuned_batch','kwargs["output_hidden_states"] = False','code_predictor_ms_per_step'])assert(worker.includes(token),`Worker lab.23 missing ${token}`);
+  for(const token of ['sampleCount=5','batchSampleCount=2','subtalkerTopK:20','subtalkerTopK:10','batchSizes=String(params.voiceMode||\'reference\')===\'finetuned\'?[1,2,4,8]','batchVramHeadroomMb','stableRuns=id===\'qwen3tts\'?5:3'])assert(runtime.includes(token),`Runtime lab.23 missing ${token}`);
   assert(!runtime.includes("add('fp16-sdpa'"),'Lab.20 no debe reintroducir FP16');
-  console.log('check-v2lab-qwen-speed: OK · lab.22 · sampling audit · hidden-state optimization · batching · VRAM guard');
+  console.log('check-v2lab-qwen-speed: OK · lab.23 · sampling audit · hidden-state optimization · batching · VRAM guard');
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
