@@ -71,7 +71,7 @@ try{
     optimization0321:{fingerprint:'FOREIGN-PC'}
   }}));
   const ar=pack.importFile(allFile,'keep');assert(ar.ok);global=m.globalSettings(defaults);
-  assert.equal(global.optimization0321.fingerprint,'THIS-PC');assert.equal(global.ai.localTunedConfig.gpuLayers,99);assert.equal(global.tts.performanceThreads,24);assert.deepStrictEqual(global.tts.engineOptimizations,{machine:{keep:true}});
+  assert.equal(global.optimization0321.fingerprint,'THIS-PC');assert.equal(global.ai.localTunedConfig.gpuLayers,99);assert.equal(global.tts.performanceThreads,24);assert.deepStrictEqual(global.tts.engineOptimizations.machine,{keep:true});assert.deepStrictEqual(global.tts.engineOptimizations['qwen3tts:finetuned:a'],{marker:'machine'});assert.equal(global.tts.engineOptimizations.foreign,undefined,'el gecpack no puede importar optimizaciones TTS de otra PC');
 
   // Un package schema realmente más nuevo se rechaza con explicación clara.
   const futurePackage=path.join(root,'future-package.gecprofile');writePackage(futurePackage,payload({name:'Incompatible',packageSchemaVersion:2}));
