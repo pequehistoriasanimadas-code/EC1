@@ -30,8 +30,8 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   const preload=read('src/preload.js');
   const bootstrap=read('src/bootstrap-v2lab.js');
 
-  assert.strictEqual(pkg.version,'2.0.0-lab.21');
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.21');
+  assert.strictEqual(pkg.version,'2.0.0-lab.22');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.22');
   assert(service.includes('active-production-profile.json'),'Falta fuente única de verdad persistente');
   const localPolicy=read('src/services/version0320LocalPolicy.js');
   assert(localPolicy.includes('prio:p.prio,poll:p.poll,warmup:p.warmup===true'),'LocalRuntime status debe exponer el perfil tuned completo para evitar falsos mismatch');
@@ -43,11 +43,11 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   assert(automation.includes('const local=this.localRuntime')&&!automation.includes('const local=global.__ec0320LocalRuntime'),'GPU SWAP sigue dependiendo del global heredado');
   assert(automation.includes('GPU_SWAP_LOCAL_STILL_RUNNING'),'GPU SWAP no verifica cierre real');
   assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('stable-v1'),'Falta consistencia Qwen de producción');
-  assert(worker.includes('talker_top_k = perf["talkerTopK"] or (20 if stable_mode else 50)')&&worker.includes('talker_top_p = perf["talkerTopP"] or (0.90 if stable_mode else 1.0)')&&worker.includes('subtalker_top_k'),'Sampling fine-tuned lab.21 no aplicado');
+  assert(worker.includes('talker_top_k = perf["talkerTopK"] or (20 if stable_mode else 50)')&&worker.includes('talker_top_p = perf["talkerTopP"] or (0.90 if stable_mode else 1.0)')&&worker.includes('subtalker_top_k'),'Sampling fine-tuned lab.22 no aplicado');
   assert(worker.includes('chunk_diagnostics')&&runtime.includes('chunkDiagnostics:Array.isArray(r.chunk_diagnostics)'),'Diagnóstico de chunks no cruza worker/runtime');
   assert(renderer.includes('optimizationV2Commit')&&renderer.includes('REOPTIMIZAR PRODUCCIÓN')&&renderer.includes('Perfil de producción:'),'UI no está vinculada al perfil de producción');
-  assert(preload.includes('optimizationV2Status')&&preload.includes('optimizationV2Commit'),'Bridge lab.21 incompleto');
-  assert(bootstrap.includes('releaseV2ProductionFidelity'),'Capa lab.21 no instalada');
+  assert(preload.includes('optimizationV2Status')&&preload.includes('optimizationV2Commit'),'Bridge lab.22 incompleto');
+  assert(bootstrap.includes('releaseV2ProductionFidelity'),'Capa lab.22 no instalada');
 
   // Tuned mode must really expose the optimized 48 GPU layers rather than
   // falling through to safe_streaming.
@@ -86,7 +86,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
       tts:{engine:'chatterbox',engineParams:{chatterbox:{variant:'latam'}}}
     };
     const profile={
-      schemaVersion:1,version:'2.0-lab.21',id:'test-profile',at:new Date().toISOString(),
+      schemaVersion:1,version:'2.0-lab.22',id:'test-profile',at:new Date().toISOString(),
       fingerprint:'hw-test',hardwareLabel:'test',
       runtimeSignature:ttsRuntimeSignature(profileSettings.tts),
       tts:{engine:'chatterbox',runtimeParams:{},expectedRtf:1.5},
