@@ -31,8 +31,8 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   const preload=read('src/preload.js');
   const bootstrap=read('src/bootstrap-v2lab.js');
 
-  assert.strictEqual(pkg.version,'2.0.0-lab.23');
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.23');
+  assert.strictEqual(pkg.version,'2.0.0-lab.24');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.24');
   assert(service.includes('active-production-profile.json'),'Falta fuente única de verdad persistente');
   const localPolicy=read('src/services/version0320LocalPolicy.js');
   assert(localPolicy.includes('prio:p.prio,poll:p.poll,warmup:p.warmup===true'),'LocalRuntime status debe exponer el perfil tuned completo para evitar falsos mismatch');
@@ -87,7 +87,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
       tts:{engine:'chatterbox',engineParams:{chatterbox:{variant:'latam'}}}
     };
     const profile={
-      schemaVersion:1,version:'2.0-lab.23',id:'test-profile',at:new Date().toISOString(),
+      schemaVersion:1,version:'2.0-lab.24',id:'test-profile',at:new Date().toISOString(),
       fingerprint:'hw-test',hardwareLabel:'test',
       runtimeSignature:ttsRuntimeSignature(profileSettings.tts),
       tts:{engine:'chatterbox',runtimeParams:{},expectedRtf:1.5},
