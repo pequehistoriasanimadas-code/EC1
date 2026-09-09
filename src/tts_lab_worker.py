@@ -1114,6 +1114,8 @@ def generate(payload):
     chatter_chunk = max(300, min(900, int(params.get("chunkChars") or (540 if stable_mode else 360))))
     if ENGINE == "chatterbox" and bool(params.get("forceSingleChunk")):
         text_chunks = [text]
+    elif ENGINE == "qwen3tts" and bool(params.get("batchBenchmarkMode")):
+        text_chunks = [part.strip() for part in text.split("|||") if part.strip()]
     else:
         text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else chatter_chunk)
     request_id = str(payload.get("id") or "")
