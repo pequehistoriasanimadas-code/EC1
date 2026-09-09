@@ -1117,69 +1117,148 @@ def generate(payload):
     else:
         text_chunks = chunks(text, qwen_runtime_params(params)["chunkChars"] if ENGINE == "qwen3tts" else chatter_chunk)
     request_id = str(payload.get("id") or "")
-    for idx, part in enumerate(text_chunks):
-        emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
-        chunk_started = time.perf_counter()
-        stop_chunk_beat = threading.Event()
-        def chunk_heartbeat():
-            elapsed = 0
-            while not stop_chunk_beat.wait(8):
-                elapsed += 8
-                emit({"type": "progress", "id": request_id, "phase": "chunk-heartbeat", "label": f"Generando fragmento {idx + 1}/{len(text_chunks)}…", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_sec": elapsed})
-        chunk_beat = threading.Thread(target=chunk_heartbeat, daemon=True)
-        chunk_beat.start()
-        chunk_seed = active_seed if active_seed else 0
-        if chunk_seed:
-            try:
-                import torch
-                torch.manual_seed(chunk_seed)
-                if torch.cuda.is_available():
-                    torch.cuda.manual_seed_all(chunk_seed)
-                np.random.seed(chunk_seed % (2**32 - 1))
-            except Exception:
-                pass
+    qwen_perf = qwen_runtime_params(params) if ENGINE == "qwen3tts" else {}
+    requested_batch_size = int(qwen_perf.get("batchSize") or 1) if ENGINE == "qwen3tts" else 1
+    batch_enabled = ENGINE == "qwen3tts" and qwen_mode == "finetuned" and requested_batch_size > 1
+
+    def apply_seed(seed_value):
+        if not seed_value:
+            return
         try:
-            audio, sr, piece_diag = generate_piece(
-                part,
-                ref_audio,
-                ref_text,
-                cache_path,
-                style,
-                params,
-                qwen_mode,
-                model_path,
-                speaker,
-            )
-            piece_stage_diagnostics.append({"index": idx + 1, **piece_diag})
+            import torch
+            torch.manual_seed(seed_value)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed_value)
+            np.random.seed(seed_value % (2**32 - 1))
         except Exception:
-            gpu_stop.set()
-            if gpu_thread is not None:
-                gpu_thread.join(timeout=4)
-            raise
-        finally:
-            stop_chunk_beat.set()
-            chunk_beat.join(timeout=1)
-        sample_rate = sr
-        chunk_elapsed_ms = round((time.perf_counter() - chunk_started) * 1000)
-        chunk_audio_sec = round(len(audio) / float(sr), 3) if sr else 0
-        chunk_diagnostics.append({
-            "index": idx + 1,
-            "chars": len(part),
-            "elapsed_ms": chunk_elapsed_ms,
-            "audio_sec": chunk_audio_sec,
-            "talker_steps": int(piece_diag.get("talker_steps") or 0),
-            "code_predictor_steps": int(piece_diag.get("code_predictor_steps") or 0),
-            "prefill_tokens": int(piece_diag.get("prefill_tokens") or 0),
-            "seed": chunk_seed,
-            "temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
-            "consistency_mode": str(params.get("consistencyMode") or "automatic"),
-            "voice_session_id": voice_session_id,
-            "voice_config_fingerprint": voice_config_fingerprint,
-        })
-        if pieces and sr:
-            pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
-        pieces.append(audio)
-        emit({"type": "progress", "id": request_id, "phase": "chunk-done", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_ms": chunk_elapsed_ms, "audio_sec": chunk_audio_sec, "seed": active_seed})
+            pass
+
+    if batch_enabled:
+        total_groups = int(math.ceil(len(text_chunks) / float(requested_batch_size)))
+        for group_idx, group_start in enumerate(range(0, len(text_chunks), requested_batch_size)):
+            group = text_chunks[group_start:group_start + requested_batch_size]
+            emit({
+                "type": "progress", "id": request_id, "phase": "batch-start",
+                "batch": group_idx + 1, "batches": total_groups,
+                "batch_size": len(group), "chunk": group_start + 1, "chunks": len(text_chunks),
+            })
+            group_started = time.perf_counter()
+            stop_group_beat = threading.Event()
+            def batch_heartbeat():
+                elapsed_h = 0
+                while not stop_group_beat.wait(8):
+                    elapsed_h += 8
+                    emit({
+                        "type": "progress", "id": request_id, "phase": "batch-heartbeat",
+                        "label": f"Generando batch {group_idx + 1}/{total_groups} · {len(group)} fragmentos…",
+                        "batch": group_idx + 1, "batches": total_groups,
+                        "elapsed_sec": elapsed_h,
+                    })
+            group_beat = threading.Thread(target=batch_heartbeat, daemon=True)
+            group_beat.start()
+            apply_seed(active_seed)
+            try:
+                audios, sr, batch_diag = generate_qwen_finetuned_batch(group, params, model_path, speaker)
+                piece_stage_diagnostics.append({"index": group_idx + 1, "batch_start": group_start + 1, **batch_diag})
+            except Exception:
+                gpu_stop.set()
+                if gpu_thread is not None:
+                    gpu_thread.join(timeout=4)
+                raise
+            finally:
+                stop_group_beat.set()
+                group_beat.join(timeout=1)
+            sample_rate = sr
+            group_elapsed_ms = round((time.perf_counter() - group_started) * 1000)
+            total_batch_audio_sec = sum((len(a) / float(sr)) for a in audios) if sr else 0.0
+            for offset, (part, audio_item) in enumerate(zip(group, audios)):
+                idx = group_start + offset
+                chunk_audio_sec = round(len(audio_item) / float(sr), 3) if sr else 0
+                estimated_talker = max(1, int(round(chunk_audio_sec * 12.5))) if chunk_audio_sec else 0
+                chunk_diagnostics.append({
+                    "index": idx + 1,
+                    "chars": len(part),
+                    "elapsed_ms": round(group_elapsed_ms / max(1, len(group))),
+                    "batch_elapsed_ms": group_elapsed_ms,
+                    "batch_index": group_idx + 1,
+                    "batch_size": len(group),
+                    "audio_sec": chunk_audio_sec,
+                    "talker_steps": estimated_talker,
+                    "code_predictor_steps": estimated_talker * 15,
+                    "prefill_tokens": int(batch_diag.get("prefill_tokens") or 0),
+                    "seed": active_seed,
+                    "temperature": round(float(params.get("productionTemperature", params.get("temperature", 0.78))), 3),
+                    "consistency_mode": str(params.get("consistencyMode") or "automatic"),
+                    "voice_session_id": voice_session_id,
+                    "voice_config_fingerprint": voice_config_fingerprint,
+                })
+                if pieces and sr:
+                    pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
+                pieces.append(audio_item)
+                emit({
+                    "type": "progress", "id": request_id, "phase": "chunk-done",
+                    "chunk": idx + 1, "chunks": len(text_chunks),
+                    "elapsed_ms": group_elapsed_ms, "audio_sec": chunk_audio_sec,
+                    "batch": group_idx + 1, "batch_size": len(group), "seed": active_seed,
+                })
+            emit({
+                "type": "progress", "id": request_id, "phase": "batch-done",
+                "batch": group_idx + 1, "batches": total_groups,
+                "batch_size": len(group), "elapsed_ms": group_elapsed_ms,
+                "audio_sec": round(total_batch_audio_sec, 3),
+            })
+    else:
+        for idx, part in enumerate(text_chunks):
+            emit({"type": "progress", "id": request_id, "phase": "chunk-start", "chunk": idx + 1, "chunks": len(text_chunks)})
+            chunk_started = time.perf_counter()
+            stop_chunk_beat = threading.Event()
+            def chunk_heartbeat():
+                elapsed_h = 0
+                while not stop_chunk_beat.wait(8):
+                    elapsed_h += 8
+                    emit({"type": "progress", "id": request_id, "phase": "chunk-heartbeat", "label": f"Generando fragmento {idx + 1}/{len(text_chunks)}…", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_sec": elapsed_h})
+            chunk_beat = threading.Thread(target=chunk_heartbeat, daemon=True)
+            chunk_beat.start()
+            chunk_seed = active_seed if active_seed else 0
+            apply_seed(chunk_seed)
+            try:
+                audio_item, sr, piece_diag = generate_piece(
+                    part, ref_audio, ref_text, cache_path, style, params,
+                    qwen_mode, model_path, speaker,
+                )
+                piece_stage_diagnostics.append({"index": idx + 1, **piece_diag})
+            except Exception:
+                gpu_stop.set()
+                if gpu_thread is not None:
+                    gpu_thread.join(timeout=4)
+                raise
+            finally:
+                stop_chunk_beat.set()
+                chunk_beat.join(timeout=1)
+            sample_rate = sr
+            chunk_elapsed_ms = round((time.perf_counter() - chunk_started) * 1000)
+            chunk_audio_sec = round(len(audio_item) / float(sr), 3) if sr else 0
+            chunk_diagnostics.append({
+                "index": idx + 1,
+                "chars": len(part),
+                "elapsed_ms": chunk_elapsed_ms,
+                "batch_elapsed_ms": chunk_elapsed_ms,
+                "batch_index": idx + 1,
+                "batch_size": 1,
+                "audio_sec": chunk_audio_sec,
+                "talker_steps": int(piece_diag.get("talker_steps") or 0),
+                "code_predictor_steps": int(piece_diag.get("code_predictor_steps") or 0),
+                "prefill_tokens": int(piece_diag.get("prefill_tokens") or 0),
+                "seed": chunk_seed,
+                "temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
+                "consistency_mode": str(params.get("consistencyMode") or "automatic"),
+                "voice_session_id": voice_session_id,
+                "voice_config_fingerprint": voice_config_fingerprint,
+            })
+            if pieces and sr:
+                pieces.append(np.zeros(int(sr * 0.13), dtype=np.float32))
+            pieces.append(audio_item)
+            emit({"type": "progress", "id": request_id, "phase": "chunk-done", "chunk": idx + 1, "chunks": len(text_chunks), "elapsed_ms": chunk_elapsed_ms, "audio_sec": chunk_audio_sec, "seed": active_seed})
 
     if not pieces or not sample_rate:
         raise RuntimeError("El motor no produjo audio")
