@@ -58,6 +58,7 @@
       "scripts/check-v2lab-production-fidelity.js",
       "scripts/check-v2lab-voice-consistency.js",
       "scripts/check-v2lab-latam-only.js",
+      "scripts/check-v2lab-chatterbox-tail.py",
       "scripts/packaged-v2lab-smoke.js",
       "scripts/packaged-v2lab-pipeline-smoke.js",
       "scripts/packaged-v2lab-qwen-finetuned-smoke.js",

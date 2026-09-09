@@ -39,6 +39,8 @@ function writePcm16Wav(file,{seconds=20,sampleRate=16000,amp=.18}={}){
   assert(worker.includes('chatter_chunk')&&worker.includes('540 if stable_mode else 360'),'Chatterbox estable debe reducir cambios de chunk');
   assert(worker.includes('chunk_seed = active_seed if active_seed else 0'),'Cada chunk debe ser reproducible');
   assert(worker.includes('voice_session_id')&&worker.includes('voice_config_fingerprint'),'Falta sesión de voz fija por noticia');
+  assert(worker.includes('def cleanup_chatterbox_tail')&&worker.includes('post_silence_residual')&&worker.includes('low_level_tail'),'Chatterbox debe limpiar solo la cola de cada chunk');
+  assert(worker.includes('chatterbox_tail_cleanup_ms')&&worker.includes('tail_cleanup_reason'),'La limpieza Chatterbox debe ser auditable por diagnóstico');
 
   assert(routing.includes('fallbackExplicit:true'),'Fallback debe quedar marcado explícitamente');
   assert(read('src/services/ttsLabRuntime.js').includes('automaticConsistency')&&read('src/services/ttsLabRuntime.js').includes("effectiveParams.productionSeed"),'La consistencia automática debe funcionar también antes de Optimizar GEC');
@@ -78,5 +80,5 @@ function writePcm16Wav(file,{seconds=20,sampleRate=16000,amp=.18}={}){
     assert.strictEqual(profile.voiceConsistency.naturalSpeed,true);
   }finally{fs.rmSync(tmp,{recursive:true,force:true});}
 
-  console.log('check-v2lab-voice-consistency: OK · no speed control · natural audio · Chatterbox/Qwen consistency · reference quality · safe cancel · explicit fallback');
+  console.log('check-v2lab-voice-consistency: OK · no speed control · natural audio · Chatterbox/Qwen consistency · reference quality · tail cleanup conservador · safe cancel · explicit fallback');
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});

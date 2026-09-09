@@ -51,6 +51,8 @@ assert(!worker.includes('time_stretch_preserve_pitch')&&!worker.includes('phase_
 assert(worker.includes('ResembleAI/Chatterbox-Multilingual-es-mx-latam')&&worker.includes('t3_es_mx_latam.safetensors')&&worker.includes('s3gen_v3.pt'),'Worker debe integrar el pack oficial LatAm de Chatterbox');
 assert(worker.includes('chunk-start')&&worker.includes('chunk-heartbeat')&&worker.includes('chunk-done')&&worker.includes('postprocess'),'Worker debe enviar heartbeats de progreso TTS');
 assert(worker.includes('productionSeed')&&worker.includes('productionTemperature')&&worker.includes('stable-v1')&&worker.includes('chunk_diagnostics'),'Lab.17 debe estabilizar y diagnosticar Qwen/Chatterbox por chunks');
+assert(worker.includes('def cleanup_chatterbox_tail')&&worker.includes('post_silence_residual')&&worker.includes('chatterbox_tail_cleanup_ms'),'Hotfix lab.20 debe limpiar colas Chatterbox de forma conservadora y auditable');
+assert(read('src/main.js').includes('const persisted=settingsStore.load()')&&read('src/renderer-actions.js').includes('queueDesignAutosave'),'Hotfix lab.20 debe persistir música, diseño y volúmenes por perfil');
 assert(runtime.includes('chunkDiagnostics:Array.isArray(r.chunk_diagnostics)'),'Runtime debe propagar diagnóstico de chunks a producción');
 assert(renderer.includes('Selecciona una voz de referencia…')&&renderer.includes('Chatterbox LatAm necesita una voz de referencia'),'Chatterbox LatAm debe exigir una referencia explícita');
 assert(renderer.includes('Modelo entrenado / Fine-tuned')&&renderer.includes('Importar modelo entrenado')&&renderer.includes('Transcripción Qwen'),'La UI no expone referencia completa y fine-tuning Qwen');
