@@ -91,6 +91,6 @@
   window.ECAPI.on('tts-lab:event',e=>acceptProgress(e));
   window.addEventListener('gec:settings-updated',async()=>{try{settings=await window.ECAPI.getSettings();labStatus=await window.ECAPI.ttsLabStatus();render();}catch{}});
   if(typeof refreshRuntimeStatus==='function'){const baseRefreshRuntimeStatusV2=refreshRuntimeStatus;refreshRuntimeStatus=async function(){await baseRefreshRuntimeStatusV2();renderExternalPerformance();};}
-  window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab20';
+  window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab24';
   refreshLab();setInterval(()=>{if(!document.hidden&&q('#tab-audio')?.classList.contains('show'))refreshLab();},10000);
 })();
