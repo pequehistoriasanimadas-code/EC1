@@ -4,7 +4,7 @@ const fs=require('fs');
 const path=require('path');
 const {pathToFileURL}=require('url');
 const {ipcMain,dialog}=require('electron');
-const {AutomationEngine}=require('./automation0325');
+const {AutomationEngine,exclusiveEligibilityState}=require('./automation0325');
 const {SettingsStore}=require('./settings');
 
 const clamp=(v,min,max,fallback=min)=>{const n=Number(v);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;};
@@ -15,7 +15,7 @@ function mediaExists(media,manager,folder){if(!media?.path)return false;try{cons
 function mediaByPath(manager,folder,wanted){if(!wanted)return null;try{const scan=manager?.list?.(folder);return scan?.files?.find(x=>keyPath(x.path)===keyPath(wanted))||null;}catch{return null;}}
 function mediaByName(manager,folder,name){if(!name)return null;try{const scan=manager?.list?.(folder);return scan?.files?.find(x=>String(x.name||'')===String(name||''))||null;}catch{return null;}}
 function safePeek(manager,folder){try{return manager?.peek?.(folder)||null;}catch{return null;}}
-function rowFor(item){return{id:item.id||'',title:item.story?.title||item.result?.title||'',status:item.status,sourceType:item.sourceType||'rss',provider:item.provider||'',model:item.model||'',attempts:item.attempts||[],metrics:item.metrics||null,error:item.error||'',stage:item.stage||'',outputRetries:item.outputRetries||0,priority:item.priority||'normal',isExclusive:isExclusive(item),accessStatus:item.result?.accessStatus||item.accessStatus||item.article?.access?.status||'',feedName:String(item.story?.feedName||''),feedId:String(item.story?.feedId||''),category:String(item.result?.category||item.story?.category||''),storyUrl:String(item.story?.link||''),sessionSeq:Number(item.sessionSeq)||0};}
+function rowFor(item){return{id:item.id||'',title:item.story?.title||item.result?.title||'',status:item.status,sourceType:item.sourceType||'rss',provider:item.provider||'',model:item.model||'',attempts:item.attempts||[],metrics:item.metrics||null,error:item.error||'',stage:item.stage||'',outputRetries:item.outputRetries||0,priority:item.priority||'normal',isExclusive:isExclusive(item),accessStatus:item.result?.accessStatus||item.accessStatus||item.article?.access?.status||'',exclusiveContentMode:String(item.exclusiveContentMode||item.result?.exclusiveContentMode||''),feedName:String(item.story?.feedName||''),feedId:String(item.story?.feedId||''),category:String(item.result?.category||item.story?.category||''),storyUrl:String(item.story?.link||''),sessionSeq:Number(item.sessionSeq)||0};}
 
 function installSettings0331(){
   const p=SettingsStore.prototype;if(p.__ec0331Settings)return;Object.defineProperty(p,'__ec0331Settings',{value:true});
@@ -25,16 +25,21 @@ function installSettings0331(){
 }
 
 function strictProjected(engine,s){
-  const remaining=(engine.queue||[]).filter(x=>x.status==='LISTA'&&isNews(x)),out=[],blocked=[];const every=clamp(s?.automation?.exclusiveEveryNews,0,20,4);let has=!!engine.exclusiveHasEmitted,since=Math.max(0,Number(engine.newsSinceExclusive)||0);
+  const remaining=(engine.queue||[]).filter(x=>x.status==='LISTA'&&isNews(x)),out=[],blocked=[];let since=Math.max(0,Number(engine.newsSinceExclusive)||0);
   while(remaining.length){
-    let chosen=null;
-    if(!every||every<=1){chosen=remaining[0];}
-    else if(!has){chosen=remaining[0];}
-    else if(since<every-1){chosen=remaining.find(x=>!isExclusive(x));if(!chosen){blocked.push(...remaining.splice(0));break;}}
-    else{chosen=remaining.find(isExclusive)||remaining.find(x=>!isExclusive(x))||remaining[0];}
-    remaining.splice(remaining.indexOf(chosen),1);out.push(rowFor(chosen));if(isExclusive(chosen)){has=true;since=0;}else if(has)since++;
+    const sched=exclusiveEligibilityState(s,since);let chosen=null;
+    if(sched.everyNews===0)chosen=remaining[0];
+    else if(sched.due){
+      chosen=remaining.find(isExclusive);
+      if(!chosen&&(engine.exclusiveReserve?.length||engine.hasExclusiveInPipeline?.()))break;
+      if(!chosen)chosen=remaining.find(x=>!isExclusive(x))||null;
+    }else{
+      chosen=remaining.find(x=>!isExclusive(x));
+      if(!chosen){blocked.push(...remaining.splice(0));break;}
+    }
+    if(!chosen)break;remaining.splice(remaining.indexOf(chosen),1);out.push(rowFor(chosen));if(isExclusive(chosen))since=0;else since++;
   }
-  const need=has&&every>1?Math.max(0,(every-1)-since):0;for(const x of blocked)out.push({...rowFor(x),exclusiveBlocked:true,planText:`En espera: faltan ${need} noticia${need===1?'':'s'} no exclusiva${need===1?'':'s'}`});return out;
+  const need=exclusiveEligibilityState(s,since).nonExclusiveNeeded;for(const x of blocked)out.push({...rowFor(x),exclusiveBlocked:true,planText:`En espera: faltan ${need} noticia${need===1?'':'s'} no exclusiva${need===1?'':'s'}`});return out;
 }
 
 function planKey(engine,reason,contentPath,manualPath){return[reason||'',Number(engine.scheduledNewsTotal)||0,keyPath(contentPath),keyPath(manualPath)].join('|');}
@@ -58,11 +63,7 @@ function ensurePlan(engine,s,reasonHint='',plannedContent=null){
 function installEngine0331(){
   const p=AutomationEngine.prototype;if(p.__ec0331Engine)return;Object.defineProperty(p,'__ec0331Engine',{value:true});
   const baseChoose=p.chooseReadyItem,baseDisplay=p.displayQueue,basePlay=p.playCanned,baseSkip=p.skipCurrent,baseSnapshot=p.snapshot,baseReset=p.resetSessionCounters;
-  p.chooseReadyItem=function(queue=this.queue,s=this.getSettings?.()||{}){
-    const ready=(queue||[]).filter(x=>x.status==='LISTA');if(!ready.length)return null;const every=clamp(s?.automation?.exclusiveEveryNews,0,20,4);if(!every||every<=1)return baseChoose.call(this,queue,s);
-    if(!this.exclusiveHasEmitted)return ready[0];const since=Math.max(0,Number(this.newsSinceExclusive)||0),normal=ready.find(x=>!isExclusive(x)),exclusive=ready.find(isExclusive);
-    if(since<every-1)return normal||null;return exclusive||normal||null;
-  };
+  p.chooseReadyItem=function(queue=this.queue,s=this.getSettings?.()||{}){return baseChoose.call(this,queue,s);};
   p.displayQueue=function(s=this.getSettings?.()||{}){
     let rows=baseDisplay.call(this,s)||[];const projected=strictProjected(this,s),slots=[];rows.forEach((r,i)=>{if(r.status==='LISTA'&&isNews(r))slots.push(i);});for(let i=0;i<slots.length;i++){if(projected[i])rows[slots[i]]={...rows[slots[i]],...projected[i]};}
     const plannedContent=rows.find(x=>x.planned&&x.sourceType==='content');if(plannedContent){const plan=ensurePlan(this,s,plannedContent.planReason||'',plannedContent);if(plan){for(const r of rows){if(r.planned&&r.sourceType==='content'){r.title=plan.content.name;r.mediaPath=plan.content.path;r.manualSpecific=plan.manual;}if(r.planned&&r.sourceType==='ad'&&plan.ad){r.title=plan.ad.name;r.mediaPath=plan.ad.path;r.adLocked=true;}}}}

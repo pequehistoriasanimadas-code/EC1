@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.20');
+  assert.strictEqual(pkg.version,'2.0.0-lab.21');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES}=require(runtimePath);
   assert.strictEqual(CUDA_RUNTIME.revision,2);
@@ -33,6 +33,6 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(ui.includes('Runtime CUDA necesita reparación')&&ui.includes('Reparar runtime CUDA')&&ui.includes('shared-cuda-v2'),'UI de reparación CUDA v2 no empaquetada');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 RUNTIME ISOLATION lab.20 OK · CUDA v2 · mutex · transaction · torch_version corruption · Unicode path');
+  console.log('PACKAGED V2 RUNTIME ISOLATION lab.21 OK · CUDA v2 · mutex · transaction · torch_version corruption · Unicode path');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
