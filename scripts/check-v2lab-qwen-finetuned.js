@@ -64,7 +64,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
 
     const ui=read('src/renderer-v2lab.js'),optimizerUi=read('src/renderer-0321.js');
     assert(!ui.includes('ttsLabValidateSelected')&&ui.includes('currentOptimizationKey')&&ui.includes('ttsModelFingerprint'),'UI lab.23 debe evitar la prevalidación duplicada e invalidar tuning al cambiar fine-tuned');
-    assert(optimizerUi.includes("version:'2.0-lab.23'")&&optimizerUi.includes('Qwen local (texto)')&&optimizerUi.includes('GPU SWAP'),'Optimizador lab.23 debe distinguir texto/voz y mostrar GPU SWAP');
+    assert(optimizerUi.includes("version:'2.0-lab.24'")&&optimizerUi.includes('Qwen local (texto)')&&optimizerUi.includes('GPU SWAP'),'Optimizador lab.23 debe distinguir texto/voz y mostrar GPU SWAP');
     assert(optimizerUi.includes('await window.ECAPI.ttsLabStop')&&optimizerUi.includes('await window.ECAPI.stopLocal'),'Optimización debe limpiar ambos runtimes al finalizar');
 
     console.log('check-v2lab-qwen-finetuned: OK · Aurelio exacto · reparación speech_tokenizer · tuning por fingerprint · GPU SWAP · cleanup');
