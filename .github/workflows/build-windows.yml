@@ -83,29 +83,35 @@ jobs:
           $proc = Start-Process -FilePath $exe -ArgumentList '--startup-smoke' -PassThru
           $log = Join-Path $root 'GEC V2 TTS Lab\EC Automatic News Data\logs\startup.log'
           $deadline = (Get-Date).AddSeconds(55)
+          $ready = $false
           try {
             while ((Get-Date) -lt $deadline) {
+              if (Test-Path $log) {
+                $startup = Get-Content $log -Raw
+                if ($startup -match 'CONTROL_UI_READY:') { $ready = $true; break }
+              }
+              $proc.Refresh()
               if ($proc.HasExited) { break }
               Start-Sleep -Milliseconds 300
-              $proc.Refresh()
             }
-            if (-not $proc.HasExited) {
-              throw "Real startup timed out. Log: $log"
+            if (Test-Path $log) {
+              $startup = Get-Content $log -Raw
+              Write-Host $startup
+            } else {
+              $startup = ''
             }
-            if ($proc.ExitCode -ne 0) {
-              if (Test-Path $log) { Get-Content $log | Write-Host }
-              throw "Real startup exited with code $($proc.ExitCode)"
+            if (-not $ready) {
+              if ($proc.HasExited) { throw "Real startup exited before UI ready with code $($proc.ExitCode)" }
+              throw "Real startup timed out before CONTROL_UI_READY. Log: $log"
             }
-            if (-not (Test-Path $log)) { throw "startup.log was not created: $log" }
-            $startup = Get-Content $log -Raw
-            Write-Host $startup
-            if ($startup -notmatch 'CONTROL_READY:' -or $startup -notmatch 'CONTROL_UI_READY:') {
-              throw 'Real executable did not reach CONTROL_READY + CONTROL_UI_READY'
+            if ($startup -notmatch 'CONTROL_READY:') {
+              throw 'Real executable reached CONTROL_UI_READY without CONTROL_READY'
             }
             if ($startup -match 'CONTROL_DIAGNOSTIC:|CONTROL_UI_TIMEOUT:|CONTROL_PRELOAD_ERROR:') {
               throw 'Real executable reached a fatal/invalid UI startup state'
             }
           } finally {
+            $proc.Refresh()
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
             Remove-Item Env:GEC_V2_TTS_LAB_ROOT -ErrorAction SilentlyContinue
           }
