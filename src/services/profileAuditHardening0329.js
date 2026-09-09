@@ -18,7 +18,7 @@ const {FontManager}=require('./fonts');
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function dataRoot(){const labRoot=process.env.GEC_V2_TTS_LAB_ROOT;if(process.env.GEC_V2_TTS_LAB==='1'&&labRoot)return path.join(labRoot,'EC Automatic News Data');const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
 function settingsRoot(base){let r=path.resolve(String(base||dataRoot()));if(path.basename(path.dirname(r)).toLowerCase()==='profiles'&&UUID_RE.test(path.basename(r)))r=path.dirname(path.dirname(r));return r;}
 function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
 function normalizeSettings(s={}){const x=clone(s)||{};x.ai=x.ai||{};x.tts=x.tts||{};x.visual=x.visual||{};x.visual.output=x.visual.output||{};x.visual.queueColors=x.visual.queueColors||{};x.documents=x.documents||{};x.documents.processed=x.documents.processed&&typeof x.documents.processed==='object'?x.documents.processed:{};x.automation=x.automation||{};x.canned=x.canned||{};
