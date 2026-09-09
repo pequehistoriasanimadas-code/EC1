@@ -89,6 +89,24 @@
   };
 
   const originalRefreshPronunciationStatus=refreshPronunciationStatus;
-  refreshPronunciationStatus=async function(){await originalRefreshPronunciationStatus();try{const p=await window.ECAPI.pronunciationStatus(),r=p?.migrationReport;if(r&&!window.__ec0316MigrationNoticeShown){window.__ec0316MigrationNoticeShown=true;const parts=[`Aprendizaje de pronunciación actualizado.`,`\n${r.found||0} pronunciaciones encontradas.`,`\n${r.manualProtected||0} ajuste${Number(r.manualProtected)===1?'':'s'} protegido${Number(r.manualProtected)===1?'':'s'} como manual${Number(r.manualProtected)===1?'':'es'}.`,`\n${r.removed||0} regla${Number(r.removed)===1?'':'s'} automática${Number(r.removed)===1?'':'s'} problemática${Number(r.removed)===1?'':'s'} retirada${Number(r.removed)===1?'':'s'} del aprendizaje activo.`,r.backup?'\nSe creó una copia de seguridad antes de la migración.':'',r.error?`\nAviso: ${r.error}`:''];alert(parts.join(''));}}catch{}};
+  refreshPronunciationStatus=async function(){
+    await originalRefreshPronunciationStatus();
+    try{
+      const p=await window.ECAPI.pronunciationStatus(),r=p?.migrationReport||p?.migrationInfo;
+      if(r&&!window.__ec0316MigrationNoticeShown){
+        window.__ec0316MigrationNoticeShown=true;
+        const parts=[
+          'Aprendizaje de pronunciación actualizado.',
+          `${r.found||0} pronunciaciones encontradas.`,
+          `${r.manualProtected||0} ajustes protegidos como manuales.`,
+          `${r.removed||0} reglas automáticas problemáticas retiradas.`,
+          r.backup?'Se creó una copia de seguridad.':'',
+          r.error?`Aviso: ${r.error}`:''
+        ].filter(Boolean),text=parts.join(' '),target=$('#pronunciationLearningInfo')||$('#ec28LearningMessage')||$('#ec0323LearningCleanup');
+        if(target)target.textContent=text;
+        if(typeof status==='function')status(text);
+      }
+    }catch{}
+  };
   const importBtn=$('#importPronunciationLearning');if(importBtn)importBtn.onclick=async()=>{try{const r=await window.ECAPI.importPronunciationLearning();if(r.cancelled)return;$('#pronunciationLearningInfo').textContent=`Importación completada · ${r.total||0} pronunciaciones disponibles${r.manualChanges?` · ${r.manualChanges} cambio${r.manualChanges===1?'':'s'} protegido${r.manualChanges===1?'':'s'} como manual${r.manualChanges===1?'':'es'}`:''}`;status(r.manualChanges?`Aprendizaje importado · ${r.manualChanges} corrección${r.manualChanges===1?'':'es'} manual${r.manualChanges===1?'':'es'} protegida${r.manualChanges===1?'':'s'}.`:'Aprendizaje importado.');await refreshPronunciationStatus();}catch(e){status(`Importar: ${humanError(e)}`);}};
 })();
