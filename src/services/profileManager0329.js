@@ -8,7 +8,9 @@ const REGISTRY_SCHEMA_VERSION=1;
 const DEFAULT_PROFILE_COLORS=['#F7C600','#22C55E','#3B82F6','#A855F7','#F97316','#EC4899','#06B6D4','#EF4444'];
 const DEFAULT_QUEUE_COLORS={rss:'#2E7D32',generated:'#2563EB',content:'#D97706',ad:'#7C3AED',exclusive:'#D4A514',error:'#B91C1C'};
 const PROFILE_TTS_KEYS=new Set(['voice','speed']);
-const GLOBAL_AI_KEYS=new Set(['claudeKeyEnc','geminiKeyEnc','claudeModel','localResourceMode']);
+const MACHINE_AI_KEYS=new Set(['localResourceMode','localAutoTuned','localTunedConfig','lastLocalBenchmark','performanceConfig','lastBenchmark','lastHardwareBenchmark','lastAdvancedBenchmark','benchmark','hardware','acceleration']);
+const GLOBAL_AI_KEYS=new Set(['claudeKeyEnc','geminiKeyEnc','claudeModel',...MACHINE_AI_KEYS]);
+const MACHINE_TOP_LEVEL_KEYS=new Set(['optimization0321','activeOptimizationV2']);
 
 function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
 function isObject(v){return!!v&&typeof v==='object'&&!Array.isArray(v);}
@@ -19,6 +21,7 @@ function safeName(value){return String(value||'').normalize('NFKC').replace(/[\u
 function safeColor(value){const c=String(value||'').trim().toUpperCase();return/^#[0-9A-F]{6}$/.test(c)?c:'';}
 function sameName(a,b){return safeName(a).toLocaleLowerCase('es')===safeName(b).toLocaleLowerCase('es');}
 function ensureSourceIds(settings){settings.canned=settings.canned||{};settings.documents=settings.documents||{};if(!settings.canned.contentSourceId)settings.canned.contentSourceId=crypto.randomUUID();if(!settings.canned.adSourceId)settings.canned.adSourceId=crypto.randomUUID();if(!settings.documents.sourceId)settings.documents.sourceId=crypto.randomUUID();return settings;}
+function stripMachineProfileSettings(settings={}){const out=clone(settings)||{};for(const k of MACHINE_TOP_LEVEL_KEYS)delete out[k];if(out.ai&&typeof out.ai==='object')for(const k of MACHINE_AI_KEYS)delete out.ai[k];return ensureSourceIds(out);}
 
 function splitSettings(settings={}){
   const src=clone(settings)||{},globalPart={},profilePart={};
@@ -34,19 +37,21 @@ function splitSettings(settings={}){
       for(const[vk,vv]of Object.entries(v||{})){
         if(vk==='queueColors'||vk==='theme')globalPart.visual[vk]=clone(vv);else profilePart.visual[vk]=clone(vv);
       }
-    }else if(['rssFeeds','rssPartialClose','exclusiveClose','canned','documents','automation'].includes(k))profilePart[k]=clone(v);
+    }else if(MACHINE_TOP_LEVEL_KEYS.has(k))globalPart[k]=clone(v);
+    else if(['rssFeeds','rssPartialClose','exclusiveClose','canned','documents','automation'].includes(k))profilePart[k]=clone(v);
     else profilePart[k]=clone(v);
   }
   globalPart.visual=globalPart.visual||{};globalPart.visual.queueColors={...DEFAULT_QUEUE_COLORS,...(globalPart.visual.queueColors||{})};
   return{globalPart,profilePart:ensureSourceIds(profilePart)};
 }
-function composeSettings(defaults,globalPart,profilePart){const d=clone(defaults)||{},parts=splitSettings(d),g=merge(parts.globalPart,globalPart||{}),p=merge(parts.profilePart,profilePart||{});g.visual=g.visual||{};g.visual.queueColors={...DEFAULT_QUEUE_COLORS,...(g.visual.queueColors||{})};const out=merge(d,p);out.ai={...(d.ai||{}),...(g.ai||{}),...(p.ai||{})};out.tts={...(d.tts||{}),...(g.tts||{}),...(p.tts||{})};out.visual={...(d.visual||{}),...(p.visual||{}),theme:{...(d.visual?.theme||{}),...(g.visual?.theme||{})},queueColors:{...DEFAULT_QUEUE_COLORS,...(g.visual?.queueColors||{})},output:{...(d.visual?.output||{}),...(p.visual?.output||{})}};return ensureSourceIds(out);}
+function composeSettings(defaults,globalPart,profilePart){const d=clone(defaults)||{},parts=splitSettings(d),g=merge(parts.globalPart,globalPart||{}),p=merge(parts.profilePart,stripMachineProfileSettings(profilePart||{}));g.visual=g.visual||{};g.visual.queueColors={...DEFAULT_QUEUE_COLORS,...(g.visual.queueColors||{})};const out=merge(merge(d,g),p);out.ai={...(d.ai||{}),...(g.ai||{}),...(p.ai||{})};out.tts={...(d.tts||{}),...(g.tts||{}),...(p.tts||{})};out.visual={...(d.visual||{}),...(p.visual||{}),theme:{...(d.visual?.theme||{}),...(g.visual?.theme||{})},queueColors:{...DEFAULT_QUEUE_COLORS,...(g.visual?.queueColors||{})},output:{...(d.visual?.output||{}),...(p.visual?.output||{})}};return ensureSourceIds(out);}
 
 class ProfileManager0329{
   constructor(baseDir){
     this.baseDir=path.resolve(baseDir);this.profilesDir=path.join(this.baseDir,'profiles');this.globalDir=path.join(this.baseDir,'global');this.registryFile=path.join(this.baseDir,'profiles.json');this.globalSettingsFile=path.join(this.globalDir,'settings.json');this.pendingFile=path.join(this.baseDir,'.profile-switch-pending.json');
-    fs.mkdirSync(this.profilesDir,{recursive:true});fs.mkdirSync(this.globalDir,{recursive:true});this.registry=this.loadRegistry();this.consumePending();
+    fs.mkdirSync(this.profilesDir,{recursive:true});fs.mkdirSync(this.globalDir,{recursive:true});this.registry=this.loadRegistry();this.consumePending();this.migrateLegacyMachineSettings();
   }
+  migrateLegacyMachineSettings(){const id=this.activeId();if(!id)return;const file=this.profileSettingsFile(id),raw=readJson(file,null);if(!raw)return;const globalRaw=readJson(this.globalSettingsFile,{})||{};let changedGlobal=false,changedProfile=false;if(raw.optimization0321&&!globalRaw.optimization0321){globalRaw.optimization0321=clone(raw.optimization0321);changedGlobal=true;}if(raw.activeOptimizationV2){delete raw.activeOptimizationV2;changedProfile=true;}if(raw.optimization0321){delete raw.optimization0321;changedProfile=true;}if(raw.ai&&typeof raw.ai==='object'){globalRaw.ai=globalRaw.ai||{};for(const k of MACHINE_AI_KEYS)if(Object.prototype.hasOwnProperty.call(raw.ai,k)){if(!Object.prototype.hasOwnProperty.call(globalRaw.ai,k)){globalRaw.ai[k]=clone(raw.ai[k]);changedGlobal=true;}delete raw.ai[k];changedProfile=true;}}if(changedGlobal)atomicJson(this.globalSettingsFile,globalRaw);if(changedProfile)atomicJson(file,ensureSourceIds(raw));}
   loadRegistry(){const fallback={schemaVersion:REGISTRY_SCHEMA_VERSION,activeProfileId:'',profiles:[],updatedAt:new Date().toISOString()},raw=readJson(this.registryFile)||readJson(`${this.registryFile}.bak`);if(!raw)return fallback;const profiles=(Array.isArray(raw.profiles)?raw.profiles:[]).filter(x=>x&&x.id&&safeName(x.name)).map(x=>({...x,name:safeName(x.name),color:safeColor(x.color)||DEFAULT_PROFILE_COLORS[0]}));const active=profiles.some(x=>x.id===raw.activeProfileId)?String(raw.activeProfileId):'';return{schemaVersion:REGISTRY_SCHEMA_VERSION,activeProfileId:active,profiles,updatedAt:String(raw.updatedAt||new Date().toISOString())};}
   saveRegistry(){this.registry.updatedAt=new Date().toISOString();atomicJson(this.registryFile,this.registry);}
   consumePending(){const p=readJson(this.pendingFile);if(p?.profileId&&this.registry.profiles.some(x=>x.id===p.profileId)){this.registry.activeProfileId=p.profileId;this.saveRegistry();}try{fs.rmSync(this.pendingFile,{force:true});}catch{}}
@@ -59,8 +64,8 @@ class ProfileManager0329{
   historyFile(id){return path.join(this.profileDir(id),'history.json');}
   cycleFile(id){return path.join(this.profileDir(id),'canned-cycle-state.json');}
   assetsDir(id){return path.join(this.profileDir(id),'assets');}
-  readProfileSettings(id){return ensureSourceIds(readJson(this.profileSettingsFile(id),{})||{});}
-  writeProfileSettings(id,settings){fs.mkdirSync(this.profileDir(id),{recursive:true});atomicJson(this.profileSettingsFile(id),ensureSourceIds(clone(settings)||{}));}
+  readProfileSettings(id){return stripMachineProfileSettings(readJson(this.profileSettingsFile(id),{})||{});}
+  writeProfileSettings(id,settings){fs.mkdirSync(this.profileDir(id),{recursive:true});atomicJson(this.profileSettingsFile(id),stripMachineProfileSettings(settings));}
   seedGlobalFromLegacy(defaults){if(fs.existsSync(this.globalSettingsFile))return;const legacy=readJson(path.join(this.baseDir,'settings.json'),{})||{},effective=merge(defaults||{},legacy),{globalPart}=splitSettings(effective);atomicJson(this.globalSettingsFile,globalPart);}
   globalSettings(defaults){this.seedGlobalFromLegacy(defaults);const base=splitSettings(defaults||{}).globalPart,stored=readJson(this.globalSettingsFile,{})||{},out=merge(base,stored);out.visual=out.visual||{};out.visual.queueColors={...DEFAULT_QUEUE_COLORS,...(out.visual.queueColors||{})};return out;}
   effectiveSettings(defaults){const globalPart=this.globalSettings(defaults),active=this.activeId(),profile=active?this.readProfileSettings(active):(()=>{const p=splitSettings(defaults||{}).profilePart;p.rssFeeds=[];p.documents={...(p.documents||{}),processed:{}};return ensureSourceIds(p);})();return composeSettings(defaults,globalPart,profile);}
@@ -78,4 +83,4 @@ class ProfileManager0329{
 function oOr(v){return isObject(v)?v:{};}
 const managers=new Map();
 function getProfileManager(baseDir){const k=path.resolve(baseDir);if(!managers.has(k))managers.set(k,new ProfileManager0329(k));return managers.get(k);}
-module.exports={ProfileManager0329,getProfileManager,splitSettings,composeSettings,DEFAULT_PROFILE_COLORS,DEFAULT_QUEUE_COLORS,PROFILE_SCHEMA_VERSION,REGISTRY_SCHEMA_VERSION,safeName,safeColor,atomicJson,readJson,merge};
+module.exports={ProfileManager0329,getProfileManager,splitSettings,composeSettings,stripMachineProfileSettings,MACHINE_AI_KEYS,MACHINE_TOP_LEVEL_KEYS,DEFAULT_PROFILE_COLORS,DEFAULT_QUEUE_COLORS,PROFILE_SCHEMA_VERSION,REGISTRY_SCHEMA_VERSION,safeName,safeColor,atomicJson,readJson,merge};
