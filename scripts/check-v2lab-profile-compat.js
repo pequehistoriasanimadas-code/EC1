@@ -83,6 +83,7 @@ try{
   assert(main.includes("Number(code)===-3")&&main.includes('CONTROL_LOAD_ABORTED')&&main.includes('CONTROL_UI_READY'),'startup lab.24 debe tratar ERR_ABORTED como transitorio y verificar la UI real');
   const startupBlock=main.slice(main.indexOf('function createControlWindow(){'),main.indexOf('function applyOutputWindowFormat'));
   assert(!startupBlock.includes('reloadIgnoringCache'),'startup lab.24 no debe competir con recargas automáticas del renderer');
+  assert(startupBlock.includes("!uiReady&&!domReady")&&startupBlock.includes('CONTROL_UNRESPONSIVE_WAIT'),'unresponsive después de DOM-ready no debe disparar una nueva navegación');
   assert(stability.includes('__ecPrepareControlledRelaunch')&&stability.includes('__ecRefreshOutputAfterProfileChange'),'perfil debe coordinar relaunch y refresco Output');
   for(const v of ['renderer-0317.js','renderer-0318.js','renderer-0319.js','renderer-0320.js','renderer-0321.js','renderer-0322.js','renderer-0323.js'])assert(preload.includes(v),`falta restaurar ${v}`);
   assert(!control.includes('control-0324.css')&&!control.includes('renderer-0324.js'),'control.html no debe duplicar assets versionados que ya inyecta preload');
