@@ -124,7 +124,7 @@ function createControlWindow(){
   });
   controlWindow.webContents.on('preload-error',(_,preloadPath,error)=>{logEvent('CONTROL_PRELOAD_ERROR',`${preloadPath} · ${error?.message||error}`);showDiagnostic(error||new Error('Falló preload'));});
   controlWindow.webContents.on('render-process-gone',(_,details)=>{logEvent('CONTROL_RENDER_GONE',JSON.stringify(details));if(!uiReady)scheduleRecovery('renderer-gone',700);});
-  controlWindow.on('unresponsive',()=>{logEvent('CONTROL_UNRESPONSIVE',`uiReady=${uiReady} domReady=${domReady}`);if(!uiReady)scheduleRecovery('renderer-unresponsive',2500);});
+  controlWindow.on('unresponsive',()=>{logEvent('CONTROL_UNRESPONSIVE',`uiReady=${uiReady} domReady=${domReady}`);if(!uiReady&&!domReady)scheduleRecovery('renderer-unresponsive-before-dom',2500);else if(!uiReady&&domReady)logEvent('CONTROL_UNRESPONSIVE_WAIT','DOM ya cargado; se evita navegar otra vez sobre el renderer durante inicialización');});
   controlWindow.on('responsive',()=>logEvent('CONTROL_RESPONSIVE','renderer respondió'));
   controlWindow.on('closed',()=>{clearTimeout(slowTimer);controlWindow=null;if(!controlledShutdown())app.quit();});
   controlWindow.webContents.on('did-finish-load',()=>{
