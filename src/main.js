@@ -47,7 +47,86 @@ function ensureVoiceFallbackSync(){try{const s=settingsStore.load(),custom=Strin
 
 async function syncLocalPolicy(settings=settingsStore?.load()){if(!settings||!localRuntime)return;const ai=settings.ai||{},localAsBackup=ai.primary!=='local'&&[ai.backup1,ai.backup2].includes('local');if(localAsBackup&&(ai.localBackupMode||'on_demand')==='always'){try{const st=await localRuntime.status();if(st.model&&!st.running)await localRuntime.start();}catch(e){sendControl('local:event',{type:'local-ai-error',message:e.message||String(e)});}}else if(localAsBackup&&(ai.localBackupMode||'on_demand')==='on_demand'){const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||5));localRuntime.scheduleIdleStop(minutes*60000);}}
 
-function createControlWindow(){let loadFinished=false,startupReloaded=false,shown=false;controlWindow=new BrowserWindow({width:1500,height:940,minWidth:1100,minHeight:720,show:false,title:'EC Automatic News',backgroundColor:'#0f0f0f',webPreferences:secureWebPreferences()});const showControl=()=>{if(controlledShutdown()||shown||!controlWindow||controlWindow.isDestroyed())return;shown=true;try{controlWindow.show();controlWindow.focus();}catch{}};const slowTimer=setTimeout(()=>{if(loadFinished||controlledShutdown())return;logEvent('CONTROL_LOAD_SLOW','control.html no terminó de cargar en 15 s; mostrando ventana de diagnóstico');showControl();},15000);controlWindow.webContents.on('dom-ready',()=>logEvent('CONTROL_DOM_READY','control.html DOM listo'));controlWindow.webContents.on('did-fail-load',(_,code,desc,url)=>{if(controlledShutdown()){logEvent('CONTROL_LOAD_CANCELLED',`${code} ${desc} ${url} · cierre/reinicio controlado`);return;}if(Number(code)===-2&&!loadFinished){logEvent('CONTROL_LOAD_TRANSIENT',`${code} ${desc} ${url} · se reintentará sin mostrar error`);return;}logEvent('CONTROL_LOAD_FAIL',`${code} ${desc} ${url}`);showControl();});controlWindow.webContents.on('render-process-gone',(_,details)=>{logEvent('CONTROL_RENDER_GONE',JSON.stringify(details));if(!controlledShutdown()&&!loadFinished&&!startupReloaded&&controlWindow&&!controlWindow.isDestroyed()){startupReloaded=true;setTimeout(()=>{try{controlWindow.webContents.reloadIgnoringCache();}catch{}},500);}});controlWindow.on('unresponsive',()=>{logEvent('CONTROL_UNRESPONSIVE',`startup=${!loadFinished}`);if(!controlledShutdown()&&!loadFinished&&!startupReloaded&&controlWindow&&!controlWindow.isDestroyed()){startupReloaded=true;setTimeout(()=>{try{controlWindow.webContents.reloadIgnoringCache();}catch{}},700);}});controlWindow.on('responsive',()=>logEvent('CONTROL_RESPONSIVE','renderer respondió'));controlWindow.on('closed',()=>{clearTimeout(slowTimer);controlWindow=null;if(!controlledShutdown())app.quit();});const controlFile=path.join(__dirname,'control.html');let loadAttempts=0;const loadControl=()=>{loadAttempts++;controlWindow.loadFile(controlFile).catch(e=>{if(controlledShutdown()){logEvent('CONTROL_LOAD_CANCELLED',`${e?.code||''} ${e?.message||e} · cierre/reinicio controlado`);return;}const transient=(String(e?.code||'')==='ERR_FAILED'||String(e?.message||'').includes('ERR_FAILED'))&&fs.existsSync(controlFile);if(transient&&loadAttempts<3){logEvent('CONTROL_LOAD_RETRY',`intento ${loadAttempts}/3 · ${e?.message||e}`);setTimeout(()=>{if(!controlledShutdown()&&controlWindow&&!controlWindow.isDestroyed())loadControl();},350*loadAttempts);return;}showControl();fatalError('No se pudo cargar la interfaz',e);});};loadControl();controlWindow.webContents.once('did-finish-load',()=>{loadFinished=true;clearTimeout(slowTimer);logEvent('CONTROL_READY','control.html terminó de cargar');showControl();broadcastOutputState();if(automation)sendControl('automation:state',automation.getState());});}
+function createControlWindow(){
+  let loadFinished=false,shown=false,loadAttempts=0,recoveryScheduled=false,uiVerified=false;
+  const controlFile=path.join(__dirname,'control.html');
+  controlWindow=new BrowserWindow({width:1500,height:940,minWidth:1100,minHeight:720,show:false,title:'EC Automatic News',backgroundColor:'#0f0f0f',webPreferences:secureWebPreferences()});
+  const showControl=()=>{if(controlledShutdown()||shown||!controlWindow||controlWindow.isDestroyed())return;shown=true;try{controlWindow.show();controlWindow.focus();}catch{}};
+  const isControlUrl=()=>{try{return /control\.html(?:\?|$)/i.test(String(controlWindow?.webContents?.getURL?.()||''));}catch{return false;}};
+  const isTransient=(code,message='')=>Number(code)===-2||Number(code)===-3||/ERR_(?:FAILED|ABORTED)/i.test(String(code||''))||/ERR_(?:FAILED|ABORTED)/i.test(String(message||''));
+  const verifyUi=async()=>{
+    if(uiVerified||controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    for(let i=0;i<80;i++){
+      try{
+        const ok=await controlWindow.webContents.executeJavaScript("Boolean(document.readyState==='complete'&&document.querySelector('.layout')&&window.ECAPI&&window.__gecV2TtsLabUi===true&&window.__GEC_V2LAB_RENDERER_RESPONSIVE__==='lab24')",true);
+        if(ok){
+          uiVerified=true;
+          logEvent('CONTROL_UI_READY','interfaz V2 lab.24 verificada');
+          if(process.argv.includes('--startup-smoke'))setTimeout(()=>{try{app.exit(0);}catch{}},150);
+          return;
+        }
+      }catch{}
+      await new Promise(r=>setTimeout(r,250));
+      if(controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    }
+    logEvent('CONTROL_UI_TIMEOUT','control.html cargó pero la UI V2 no terminó de inicializar en 20 s');
+  };
+  const showDiagnostic=async err=>{
+    if(controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    const message=String(err?.message||err||'Error desconocido');
+    logEvent('CONTROL_DIAGNOSTIC',message);
+    showControl();
+    const esc=v=>String(v||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const html=`<!doctype html><meta charset="utf-8"><title>EC Automatic News · Diagnóstico</title><body style="margin:0;background:#0f0f0f;color:#eee;font:15px Segoe UI,Arial,sans-serif"><main style="max-width:900px;margin:8vh auto;padding:32px"><h1 style="font-size:24px">EC Automatic News no pudo iniciar la interfaz</h1><p>Se realizaron varios intentos de recuperación sin borrar perfiles ni configuración.</p><pre style="white-space:pre-wrap;background:#171717;border:1px solid #333;padding:16px;border-radius:8px">${esc(message)}</pre><p>Registro: ${esc(startupLogFile||'no disponible')}</p></main></body>`;
+    try{await controlWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));}catch{}
+    fatalError('No se pudo cargar la interfaz',err);
+  };
+  const loadControl=(reason='startup')=>{
+    if(controlledShutdown()||loadFinished||!controlWindow||controlWindow.isDestroyed())return;
+    loadAttempts++;
+    const attempt=loadAttempts;
+    logEvent('CONTROL_LOAD_ATTEMPT',`intento=${attempt} reason=${reason}`);
+    controlWindow.loadFile(controlFile).catch(e=>{
+      if(controlledShutdown()||loadFinished){logEvent('CONTROL_LOAD_CANCELLED',`${e?.code||''} ${e?.message||e} · cierre/reinicio o carga ya completada`);return;}
+      if(isTransient(e?.code,e?.message)&&fs.existsSync(controlFile)&&attempt<3){
+        logEvent('CONTROL_LOAD_RETRY',`intento ${attempt}/3 · ${e?.code||''} ${e?.message||e}`);
+        setTimeout(()=>loadControl('transient-navigation'),300*attempt);
+        return;
+      }
+      showDiagnostic(e);
+    });
+  };
+  const scheduleRecovery=(reason,delay=700)=>{
+    if(recoveryScheduled||loadFinished||controlledShutdown())return;
+    recoveryScheduled=true;
+    logEvent('CONTROL_RECOVERY_SCHEDULED',reason);
+    setTimeout(()=>{recoveryScheduled=false;if(!loadFinished&&!controlledShutdown())loadControl(reason);},delay);
+  };
+  const slowTimer=setTimeout(()=>{if(loadFinished||controlledShutdown())return;logEvent('CONTROL_LOAD_SLOW','control.html no terminó de cargar en 15 s; manteniendo recuperación controlada');showControl();scheduleRecovery('startup-timeout',500);},15000);
+  controlWindow.webContents.on('dom-ready',()=>{if(isControlUrl())logEvent('CONTROL_DOM_READY','control.html DOM listo');});
+  controlWindow.webContents.on('did-fail-load',(_,code,desc,url,isMainFrame)=>{
+    if(isMainFrame===false){logEvent('CONTROL_SUBRESOURCE_FAIL',`${code} ${desc} ${url}`);return;}
+    if(controlledShutdown()){logEvent('CONTROL_LOAD_CANCELLED',`${code} ${desc} ${url} · cierre/reinicio controlado`);return;}
+    if(!loadFinished&&isTransient(code,desc)){logEvent(Number(code)===-3?'CONTROL_LOAD_ABORTED':'CONTROL_LOAD_TRANSIENT',`${code} ${desc} ${url} · recuperación controlada`);return;}
+    logEvent('CONTROL_LOAD_FAIL',`${code} ${desc} ${url}`);
+  });
+  controlWindow.webContents.on('preload-error',(_,preloadPath,error)=>{logEvent('CONTROL_PRELOAD_ERROR',`${preloadPath} · ${error?.message||error}`);});
+  controlWindow.webContents.on('render-process-gone',(_,details)=>{logEvent('CONTROL_RENDER_GONE',JSON.stringify(details));if(!loadFinished)scheduleRecovery('renderer-gone',500);});
+  controlWindow.on('unresponsive',()=>{logEvent('CONTROL_UNRESPONSIVE',`startup=${!loadFinished}`);if(!loadFinished)scheduleRecovery('renderer-unresponsive',2500);});
+  controlWindow.on('responsive',()=>logEvent('CONTROL_RESPONSIVE','renderer respondió'));
+  controlWindow.on('closed',()=>{clearTimeout(slowTimer);controlWindow=null;if(!controlledShutdown())app.quit();});
+  controlWindow.webContents.on('did-finish-load',()=>{
+    if(!isControlUrl())return;
+    loadFinished=true;
+    clearTimeout(slowTimer);
+    logEvent('CONTROL_READY','control.html terminó de cargar');
+    showControl();
+    broadcastOutputState();
+    if(automation)sendControl('automation:state',automation.getState());
+    verifyUi().catch(e=>logEvent('CONTROL_UI_VERIFY_ERROR',e?.message||e));
+  });
+  loadControl();
+}
 function applyOutputWindowFormat(format,resize=false){if(!outputWindow||outputWindow.isDestroyed())return;const vertical=format==='9:16',n=nativeOutputSize(format,outputWindow);try{outputWindow.setAspectRatio(vertical?9/16:16/9);}catch{}if(resize){try{outputWindow.setContentSize(n.dipWidth,n.dipHeight,false);}catch{}}setOutputState({format:vertical?'9:16':'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});}
 function createOutputWindow(show=true){if(outputWindow&&!outputWindow.isDestroyed()){if(show){outputWindow.show();try{outputWindow.webContents.setAudioMuted(false);}catch{}}setOutputState({open:true,visible:outputWindow.isVisible()});return outputWindow;}const design=currentDesign(),n=nativeOutputSize(design.format);outputWindow=new BrowserWindow({width:n.dipWidth,height:n.dipHeight,useContentSize:true,show,frame:false,resizable:false,maximizable:false,fullscreenable:false,roundedCorners:false,hasShadow:false,title:'EC Automatic News — OUTPUT',backgroundColor:'#000000',autoHideMenuBar:true,webPreferences:secureWebPreferences({backgroundThrottling:false})});try{outputWindow.webContents.setAudioMuted(!show);}catch{}setOutputState({open:true,visible:!!show,source:'none',kind:'none',title:'',format:design.format||'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}outputWindow.webContents.on('did-fail-load',(_,code,desc,url)=>logEvent('OUTPUT_LOAD_FAIL',`${code} ${desc} ${url}`));outputWindow.webContents.on('render-process-gone',(_,details)=>logEvent('OUTPUT_RENDER_GONE',JSON.stringify(details)));outputWindow.loadFile(path.join(__dirname,'output.html')).catch(e=>{if(controlledShutdown()){logEvent('OUTPUT_LOAD_CANCELLED',`${e?.code||''} ${e?.message||e} · cierre/reinicio controlado`);return;}fatalError('No se pudo cargar Output',e);});outputWindow.webContents.once('did-finish-load',()=>{try{outputWindow.webContents.setBackgroundThrottling(false);}catch{}outputWindow.webContents.send('output:design',currentDesign());const actual=nativeOutputSize(design.format,outputWindow);setOutputState({open:true,visible:outputWindow.isVisible(),format:design.format||'16:9',resolution:actual.resolution,scaleFactor:actual.scaleFactor});});outputWindow.on('move',()=>{try{applyOutputWindowFormat(currentDesign().format||'16:9',true);}catch{}});outputWindow.on('show',()=>{try{outputWindow.webContents.setAudioMuted(false);}catch{}setOutputState({open:true,visible:true});});outputWindow.on('hide',()=>{try{outputWindow.webContents.setAudioMuted(true);}catch{}setOutputState({open:true,visible:false});});outputWindow.on('close',e=>{if(!controlledShutdown()){e.preventDefault();outputWindow.hide();setOutputState({open:true,visible:false});}});outputWindow.on('closed',()=>{outputWindow=null;setOutputState({open:false,visible:false,source:'none',kind:'none',title:''});});applyOutputWindowFormat(design.format||'16:9',false);return outputWindow;}
 function outputReady(){return!!(outputWindow&&!outputWindow.isDestroyed());}
