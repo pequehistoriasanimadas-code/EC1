@@ -48,31 +48,15 @@ function ensureVoiceFallbackSync(){try{const s=settingsStore.load(),custom=Strin
 async function syncLocalPolicy(settings=settingsStore?.load()){if(!settings||!localRuntime)return;const ai=settings.ai||{},localAsBackup=ai.primary!=='local'&&[ai.backup1,ai.backup2].includes('local');if(localAsBackup&&(ai.localBackupMode||'on_demand')==='always'){try{const st=await localRuntime.status();if(st.model&&!st.running)await localRuntime.start();}catch(e){sendControl('local:event',{type:'local-ai-error',message:e.message||String(e)});}}else if(localAsBackup&&(ai.localBackupMode||'on_demand')==='on_demand'){const minutes=Math.max(1,Math.min(60,Number(ai.localIdleMinutes)||5));localRuntime.scheduleIdleStop(minutes*60000);}}
 
 function createControlWindow(){
-  let loadFinished=false,shown=false,loadAttempts=0,recoveryScheduled=false,uiVerified=false;
-  const controlFile=path.join(__dirname,'control.html');
+  let uiReady=false,domReady=false,shown=false,loadAttempts=0,recoveryScheduled=false,diagnosticMode=false,verifyRunning=false;
+  const controlFile=path.join(__dirname,'control.html'),maxAttempts=3;
   controlWindow=new BrowserWindow({width:1500,height:940,minWidth:1100,minHeight:720,show:false,title:'EC Automatic News',backgroundColor:'#0f0f0f',webPreferences:secureWebPreferences()});
   const showControl=()=>{if(controlledShutdown()||shown||!controlWindow||controlWindow.isDestroyed())return;shown=true;try{controlWindow.show();controlWindow.focus();}catch{}};
-  const isControlUrl=()=>{try{return /control\.html(?:\?|$)/i.test(String(controlWindow?.webContents?.getURL?.()||''));}catch{return false;}};
+  const isControlUrl=()=>{try{return /control\.html(?:[?#]|$)/i.test(String(controlWindow?.webContents?.getURL?.()||''));}catch{return false;}};
   const isTransient=(code,message='')=>Number(code)===-2||Number(code)===-3||/ERR_(?:FAILED|ABORTED)/i.test(String(code||''))||/ERR_(?:FAILED|ABORTED)/i.test(String(message||''));
-  const verifyUi=async()=>{
-    if(uiVerified||controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
-    for(let i=0;i<80;i++){
-      try{
-        const ok=await controlWindow.webContents.executeJavaScript("Boolean(document.readyState==='complete'&&document.querySelector('.layout')&&window.ECAPI&&window.__gecV2TtsLabUi===true&&window.__GEC_V2LAB_RENDERER_RESPONSIVE__==='lab24')",true);
-        if(ok){
-          uiVerified=true;
-          logEvent('CONTROL_UI_READY','interfaz V2 lab.24 verificada');
-          if(process.argv.includes('--startup-smoke'))setTimeout(()=>{try{app.exit(0);}catch{}},150);
-          return;
-        }
-      }catch{}
-      await new Promise(r=>setTimeout(r,250));
-      if(controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
-    }
-    logEvent('CONTROL_UI_TIMEOUT','control.html cargó pero la UI V2 no terminó de inicializar en 20 s');
-  };
   const showDiagnostic=async err=>{
-    if(controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    if(diagnosticMode||controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    diagnosticMode=true;
     const message=String(err?.message||err||'Error desconocido');
     logEvent('CONTROL_DIAGNOSTIC',message);
     showControl();
@@ -81,50 +65,91 @@ function createControlWindow(){
     try{await controlWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));}catch{}
     fatalError('No se pudo cargar la interfaz',err);
   };
-  const loadControl=(reason='startup')=>{
-    if(controlledShutdown()||loadFinished||!controlWindow||controlWindow.isDestroyed())return;
-    loadAttempts++;
-    const attempt=loadAttempts;
-    logEvent('CONTROL_LOAD_ATTEMPT',`intento=${attempt} reason=${reason}`);
-    controlWindow.loadFile(controlFile).catch(e=>{
-      if(controlledShutdown()||loadFinished){logEvent('CONTROL_LOAD_CANCELLED',`${e?.code||''} ${e?.message||e} · cierre/reinicio o carga ya completada`);return;}
-      if(isTransient(e?.code,e?.message)&&fs.existsSync(controlFile)&&attempt<3){
-        logEvent('CONTROL_LOAD_RETRY',`intento ${attempt}/3 · ${e?.code||''} ${e?.message||e}`);
-        setTimeout(()=>loadControl('transient-navigation'),300*attempt);
-        return;
-      }
-      showDiagnostic(e);
-    });
+  const publishUiReady=()=>{
+    if(uiReady||diagnosticMode||controlledShutdown())return;
+    uiReady=true;
+    clearTimeout(slowTimer);
+    logEvent('CONTROL_READY',`interfaz utilizable · intento=${loadAttempts}`);
+    logEvent('CONTROL_UI_READY','interfaz V2 lab.24 verificada antes de recursos secundarios');
+    showControl();
+    broadcastOutputState();
+    if(automation)sendControl('automation:state',automation.getState());
+    if(process.argv.includes('--startup-smoke'))setTimeout(()=>{try{app.exit(0);}catch{}},150);
   };
+  const verifyUi=async()=>{
+    if(verifyRunning||uiReady||diagnosticMode||controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    verifyRunning=true;
+    try{
+      for(let i=0;i<80;i++){
+        try{
+          const ok=await controlWindow.webContents.executeJavaScript("Boolean(document.querySelector('.layout')&&window.ECAPI&&window.__gecV2TtsLabUi===true&&window.__GEC_V2LAB_RENDERER_RESPONSIVE__==='lab24')",true);
+          if(ok){publishUiReady();return;}
+        }catch{}
+        await new Promise(r=>setTimeout(r,250));
+        if(uiReady||diagnosticMode||controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+      }
+      if(!uiReady&&!diagnosticMode)await showDiagnostic(new Error('control.html abrió, pero la interfaz V2 no terminó de inicializar en 20 s'));
+    }finally{verifyRunning=false;}
+  };
+  let loadControl=()=>{};
   const scheduleRecovery=(reason,delay=700)=>{
-    if(recoveryScheduled||loadFinished||controlledShutdown())return;
+    if(recoveryScheduled||uiReady||diagnosticMode||controlledShutdown())return;
+    if(loadAttempts>=maxAttempts){showDiagnostic(new Error(`No se pudo recuperar control.html: ${reason}`));return;}
     recoveryScheduled=true;
     logEvent('CONTROL_RECOVERY_SCHEDULED',reason);
-    setTimeout(()=>{recoveryScheduled=false;if(!loadFinished&&!controlledShutdown())loadControl(reason);},delay);
+    setTimeout(()=>{recoveryScheduled=false;if(!uiReady&&!diagnosticMode&&!controlledShutdown())loadControl(reason);},delay);
   };
-  const slowTimer=setTimeout(()=>{if(loadFinished||controlledShutdown())return;logEvent('CONTROL_LOAD_SLOW','control.html no terminó de cargar en 15 s; manteniendo recuperación controlada');showControl();scheduleRecovery('startup-timeout',500);},15000);
-  controlWindow.webContents.on('dom-ready',()=>{if(isControlUrl())logEvent('CONTROL_DOM_READY','control.html DOM listo');});
+  const slowTimer=setTimeout(()=>{
+    if(uiReady||diagnosticMode||controlledShutdown())return;
+    logEvent('CONTROL_LOAD_SLOW',`startup lento · domReady=${domReady} · no se abortará una navegación que ya tiene DOM`);
+    showControl();
+    if(domReady)verifyUi().catch(e=>showDiagnostic(e));else scheduleRecovery('startup-timeout-sin-dom',1000);
+  },15000);
+  controlWindow.webContents.on('dom-ready',()=>{
+    if(!isControlUrl())return;
+    domReady=true;
+    logEvent('CONTROL_DOM_READY','control.html DOM listo');
+    verifyUi().catch(e=>showDiagnostic(e));
+  });
   controlWindow.webContents.on('did-fail-load',(_,code,desc,url,isMainFrame)=>{
     if(isMainFrame===false){logEvent('CONTROL_SUBRESOURCE_FAIL',`${code} ${desc} ${url}`);return;}
-    if(controlledShutdown()){logEvent('CONTROL_LOAD_CANCELLED',`${code} ${desc} ${url} · cierre/reinicio controlado`);return;}
-    if(!loadFinished&&isTransient(code,desc)){logEvent(Number(code)===-3?'CONTROL_LOAD_ABORTED':'CONTROL_LOAD_TRANSIENT',`${code} ${desc} ${url} · recuperación controlada`);return;}
+    if(controlledShutdown()||diagnosticMode){logEvent('CONTROL_LOAD_CANCELLED',`${code} ${desc} ${url} · cierre/reinicio/diagnóstico controlado`);return;}
+    if(isTransient(code,desc)){
+      logEvent(Number(code)===-3?'CONTROL_LOAD_ABORTED':'CONTROL_LOAD_TRANSIENT',`${code} ${desc} ${url} · domReady=${domReady}`);
+      if(domReady)verifyUi().catch(e=>showDiagnostic(e));else scheduleRecovery('main-navigation-transient',500);
+      return;
+    }
     logEvent('CONTROL_LOAD_FAIL',`${code} ${desc} ${url}`);
+    showDiagnostic(new Error(`${code} ${desc} ${url}`));
   });
-  controlWindow.webContents.on('preload-error',(_,preloadPath,error)=>{logEvent('CONTROL_PRELOAD_ERROR',`${preloadPath} · ${error?.message||error}`);});
-  controlWindow.webContents.on('render-process-gone',(_,details)=>{logEvent('CONTROL_RENDER_GONE',JSON.stringify(details));if(!loadFinished)scheduleRecovery('renderer-gone',500);});
-  controlWindow.on('unresponsive',()=>{logEvent('CONTROL_UNRESPONSIVE',`startup=${!loadFinished}`);if(!loadFinished)scheduleRecovery('renderer-unresponsive',2500);});
+  controlWindow.webContents.on('preload-error',(_,preloadPath,error)=>{logEvent('CONTROL_PRELOAD_ERROR',`${preloadPath} · ${error?.message||error}`);showDiagnostic(error||new Error('Falló preload'));});
+  controlWindow.webContents.on('render-process-gone',(_,details)=>{logEvent('CONTROL_RENDER_GONE',JSON.stringify(details));if(!uiReady)scheduleRecovery('renderer-gone',700);});
+  controlWindow.on('unresponsive',()=>{logEvent('CONTROL_UNRESPONSIVE',`uiReady=${uiReady} domReady=${domReady}`);if(!uiReady)scheduleRecovery('renderer-unresponsive',2500);});
   controlWindow.on('responsive',()=>logEvent('CONTROL_RESPONSIVE','renderer respondió'));
   controlWindow.on('closed',()=>{clearTimeout(slowTimer);controlWindow=null;if(!controlledShutdown())app.quit();});
   controlWindow.webContents.on('did-finish-load',()=>{
     if(!isControlUrl())return;
-    loadFinished=true;
-    clearTimeout(slowTimer);
-    logEvent('CONTROL_READY','control.html terminó de cargar');
-    showControl();
-    broadcastOutputState();
-    if(automation)sendControl('automation:state',automation.getState());
-    verifyUi().catch(e=>logEvent('CONTROL_UI_VERIFY_ERROR',e?.message||e));
+    logEvent('CONTROL_LOAD_COMPLETE','control.html + recursos iniciales terminaron de cargar');
+    if(!domReady)domReady=true;
+    verifyUi().catch(e=>showDiagnostic(e));
   });
+  loadControl=(reason='startup')=>{
+    if(uiReady||diagnosticMode||controlledShutdown()||!controlWindow||controlWindow.isDestroyed())return;
+    if(loadAttempts>=maxAttempts){showDiagnostic(new Error(`Se agotaron ${maxAttempts} intentos de carga: ${reason}`));return;}
+    loadAttempts++;
+    const attempt=loadAttempts;
+    domReady=false;
+    logEvent('CONTROL_LOAD_ATTEMPT',`intento=${attempt} reason=${reason}`);
+    controlWindow.loadFile(controlFile).catch(e=>{
+      if(controlledShutdown()||uiReady||diagnosticMode){logEvent('CONTROL_LOAD_CANCELLED',`${e?.code||''} ${e?.message||e} · estado ya resuelto`);return;}
+      if(isTransient(e?.code,e?.message)){
+        logEvent('CONTROL_LOAD_PROMISE_ABORTED',`intento=${attempt} domReady=${domReady} · ${e?.code||''} ${e?.message||e}`);
+        if(domReady){verifyUi().catch(err=>showDiagnostic(err));return;}
+        if(attempt<maxAttempts){scheduleRecovery('loadFile-transient',500);return;}
+      }
+      showDiagnostic(e);
+    });
+  };
   loadControl();
 }
 function applyOutputWindowFormat(format,resize=false){if(!outputWindow||outputWindow.isDestroyed())return;const vertical=format==='9:16',n=nativeOutputSize(format,outputWindow);try{outputWindow.setAspectRatio(vertical?9/16:16/9);}catch{}if(resize){try{outputWindow.setContentSize(n.dipWidth,n.dipHeight,false);}catch{}}setOutputState({format:vertical?'9:16':'16:9',resolution:n.resolution,scaleFactor:n.scaleFactor});}
