@@ -12,7 +12,7 @@
       <div id="ecMonitorFrameHost" class="ec-monitor-frame-host format-16-9"><iframe id="ecMonitorFrame" title="Monitor de emisión" allow="autoplay" referrerpolicy="no-referrer"></iframe><div id="ecMonitorEmpty" class="ec-monitor-empty">Iniciando monitor…</div></div>
       <div class="ec-monitor-footer"><span id="ecMonitorLanHint">Monitor local · no controla la cola</span><span id="ecMonitorClients">LAN: 0 conexiones</span></div>`;
     right.insertBefore(card,queue);
-    const emission=[...q('#tab-auto .auto-cols > div:first-child')?.querySelectorAll('.card')||[]].find(x=>/Emisión automática|Control de emisión/i.test(x.textContent||''));const note=emission?.querySelector('p.note');if(note)note.textContent='El Output maestro se abre automáticamente al iniciar la emisión. Ocultar la ventana Output no detiene el monitor ni la salida LAN.';
+    const left=q('#tab-auto .auto-cols > div:first-child'),emission=[...(left?.querySelectorAll('.card')||[])].find(x=>/Emisión automática|Control de emisión/i.test(x.textContent||''));const note=emission?.querySelector('p.note');if(note)note.textContent='El Output maestro se abre automáticamente al iniciar la emisión. Ocultar la ventana Output no detiene el monitor ni la salida LAN.';
   }
 
   function injectLanSettings(){
