@@ -953,6 +953,127 @@ def generate_qwen_finetuned_batch(texts, params, model_path, speaker):
     return arrays, int(sr), diag
 
 
+
+def cleanup_chatterbox_tail(audio, sample_rate, enabled=True):
+    """Remove only a short low-level tail/residual from a Chatterbox chunk.
+
+    The detector is deliberately conservative: it inspects only the last
+    650 ms, preserves a natural post-speech margin, and never gates the body
+    of the voice. It also catches the Chatterbox pattern observed in production
+    where a short breath/noise burst appears after an already quiet valley.
+    """
+    arr = np.asarray(audio, dtype=np.float32).reshape(-1)
+    sr = max(1, int(sample_rate or 0))
+    diag = {
+        "tail_cleanup_applied": False,
+        "tail_cleanup_ms": 0,
+        "tail_cleanup_reason": "disabled" if not enabled else "none",
+        "tail_cleanup_threshold_db": 0.0,
+        "tail_cleanup_fade_ms": 0,
+    }
+    if not enabled or arr.size < int(sr * 0.45):
+        return arr, diag
+
+    frame = max(1, int(round(sr * 0.020)))
+    lookback = min(arr.size, int(round(sr * 0.650)))
+    start = arr.size - lookback
+    body_rms = float(np.sqrt(np.mean(np.square(arr.astype(np.float64))))) if arr.size else 0.0
+    body_db = 20.0 * math.log10(max(body_rms, 1e-9))
+    quiet_db = max(-58.0, min(-46.0, body_db - 30.0))
+    diag["tail_cleanup_threshold_db"] = round(quiet_db, 2)
+
+    frames = []
+    pos = start
+    while pos < arr.size:
+        end = min(arr.size, pos + frame)
+        x = arr[pos:end].astype(np.float64)
+        rms = float(np.sqrt(np.mean(np.square(x)))) if x.size else 0.0
+        peak = float(np.max(np.abs(x))) if x.size else 0.0
+        frames.append({
+            "start": pos,
+            "end": end,
+            "rms_db": 20.0 * math.log10(max(rms, 1e-9)),
+            "peak_db": 20.0 * math.log10(max(peak, 1e-9)),
+        })
+        pos = end
+    if len(frames) < 5:
+        return arr, diag
+
+    min_quiet_frames = max(4, int(math.ceil(0.080 / (frame / float(sr)))))
+    keep_after_quiet = int(round(sr * 0.060))
+    max_residual_frames = max(1, int(math.ceil(0.240 / (frame / float(sr)))))
+    cut = None
+    reason = "none"
+
+    # Pattern A: a quiet valley followed by a short, low-level breath/noise
+    # burst before the chunk boundary. This is the pattern found in the
+    # user-provided Chatterbox WAVs.
+    run_start = None
+    candidates = []
+    for i, fr in enumerate(frames):
+        if fr["rms_db"] <= quiet_db:
+            if run_start is None:
+                run_start = i
+        else:
+            if run_start is not None and i - run_start >= min_quiet_frames:
+                candidates.append((run_start, i))
+            run_start = None
+    if run_start is not None and len(frames) - run_start >= min_quiet_frames:
+        candidates.append((run_start, len(frames)))
+
+    for q0, q1 in reversed(candidates):
+        later = frames[q1:]
+        if not later or len(later) > max_residual_frames:
+            continue
+        later_active = [fr for fr in later if fr["rms_db"] > quiet_db]
+        if not later_active:
+            continue
+        max_rms = max(fr["rms_db"] for fr in later_active)
+        max_peak = max(fr["peak_db"] for fr in later_active)
+        median_rms = float(np.median([fr["rms_db"] for fr in later]))
+        if max_rms <= -28.0 and max_peak <= -16.0 and median_rms <= -43.0:
+            cut = min(arr.size, frames[q0]["start"] + keep_after_quiet)
+            reason = "post_silence_residual"
+            break
+
+    # Pattern B: ordinary low-level trailing tail. Only shorten it if at
+    # least 140 ms remain after the last clearly active frame.
+    if cut is None:
+        last_active = -1
+        for i, fr in enumerate(frames):
+            if fr["rms_db"] > quiet_db:
+                last_active = i
+        if last_active >= 0:
+            active_end = frames[last_active]["end"]
+            trailing_ms = (arr.size - active_end) * 1000.0 / sr
+            if trailing_ms >= 140.0:
+                cut = min(arr.size, active_end + int(round(sr * 0.080)))
+                reason = "low_level_tail"
+
+    if cut is None:
+        return arr, diag
+
+    # Never remove more than 420 ms and never leave an implausibly short
+    # chunk. If the detector would exceed either guard, leave the audio intact.
+    min_cut = max(int(sr * 0.35), arr.size - int(round(sr * 0.420)))
+    cut = max(min_cut, min(arr.size, int(cut)))
+    removed = arr.size - cut
+    if removed < int(round(sr * 0.060)):
+        return arr, diag
+
+    fade = min(int(round(sr * 0.030)), max(1, cut // 8))
+    cleaned = arr[:cut].copy()
+    if fade > 1:
+        cleaned[-fade:] *= np.linspace(1.0, 0.0, fade, endpoint=True, dtype=np.float32)
+    diag.update({
+        "tail_cleanup_applied": True,
+        "tail_cleanup_ms": round(removed * 1000.0 / sr, 1),
+        "tail_cleanup_reason": reason,
+        "tail_cleanup_fade_ms": round(fade * 1000.0 / sr, 1),
+    })
+    return cleaned, diag
+
+
 def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mode, model_path, speaker):
     piece_started = time.perf_counter()
     if ENGINE == "chatterbox":
@@ -983,10 +1104,16 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         if arr.ndim > 1:
             arr = arr[0]
         numpy_ms = round((time.perf_counter() - numpy_started) * 1000)
-        return arr.astype(np.float32), int(model.sr), {
+        arr, tail_diag = cleanup_chatterbox_tail(
+            arr.astype(np.float32),
+            int(model.sr),
+            enabled=params.get("tailCleanup", True) is not False,
+        )
+        return arr, int(model.sr), {
             "piece_total_ms": round((time.perf_counter() - piece_started) * 1000),
             "model_call_ms": model_call_ms,
             "numpy_ms": numpy_ms,
+            **tail_diag,
         }
 
     if ENGINE == "qwen3tts":
@@ -1251,6 +1378,9 @@ def generate(payload):
                 "talker_steps": int(piece_diag.get("talker_steps") or 0),
                 "code_predictor_steps": int(piece_diag.get("code_predictor_steps") or 0),
                 "prefill_tokens": int(piece_diag.get("prefill_tokens") or 0),
+                "tail_cleanup_applied": bool(piece_diag.get("tail_cleanup_applied")),
+                "tail_cleanup_ms": float(piece_diag.get("tail_cleanup_ms") or 0),
+                "tail_cleanup_reason": str(piece_diag.get("tail_cleanup_reason") or ""),
                 "seed": chunk_seed,
                 "temperature": round(float(params.get("productionTemperature", 0.60 if ENGINE == "chatterbox" else params.get("temperature", 0.78))), 3),
                 "consistency_mode": str(params.get("consistencyMode") or "automatic"),
@@ -1330,6 +1460,8 @@ def generate(payload):
             "model_call_ms": sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics),
             "prompt_ms": sum(int(x.get("prompt_ms") or 0) for x in piece_stage_diagnostics),
             "numpy_ms": sum(int(x.get("numpy_ms") or 0) for x in piece_stage_diagnostics),
+            "chatterbox_tail_cleanup_ms": round(sum(float(x.get("tail_cleanup_ms") or 0) for x in piece_stage_diagnostics), 1),
+            "chatterbox_tail_cleanup_chunks": sum(1 for x in piece_stage_diagnostics if x.get("tail_cleanup_applied")),
             "concat_ms": concat_ms,
             "write_wav_ms": write_wav_ms,
             "synthesis_ms": sum(int(x.get("model_call_ms") or 0) for x in piece_stage_diagnostics),
