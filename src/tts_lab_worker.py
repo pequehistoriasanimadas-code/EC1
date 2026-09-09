@@ -37,7 +37,7 @@ QWEN_SHARED_FILES = [
     "speech_tokenizer/preprocessor_config.json",
 ]
 QWEN_BASE_MODEL_FILES = ["config.json", "model.safetensors", *QWEN_SHARED_FILES]
-QWEN_PERF_REVISION = 3
+QWEN_PERF_REVISION = 4
 QWEN_SHARED_REVISION = 2
 
 
@@ -55,17 +55,31 @@ def qwen_runtime_params(params=None):
     cache_impl = str(params.get("cacheImplementation") or "auto").lower()
     if cache_impl not in ("auto", "dynamic", "static"):
         cache_impl = "auto"
+    batch_size = max(1, min(8, int(params.get("batchSize") or 1)))
+    predictor_hidden_states = params.get("predictorHiddenStates", True) is not False
+    talker_do_sample = params.get("talkerDoSample", None)
+    subtalker_do_sample = params.get("subtalkerDoSample", None)
     return {
         "dtypeMode": dtype_mode,
         "attentionMode": attention_mode,
         "chunkChars": chunk_chars,
         "nonStreamingMode": None if non_streaming is None else bool(non_streaming),
         # Kept for settings/backward compatibility. qwen_tts 0.1.1 drops these kwargs
-        # before they reach HuggingFace, so lab.19 no longer benchmarks them.
+        # before they reach HuggingFace, so lab.20 never benchmarks them.
         "useCache": use_cache,
         "cacheImplementation": cache_impl,
         "benchmarkDeterministic": bool(params.get("benchmarkDeterministic")),
         "profileStages": bool(params.get("profileStages")),
+        "predictorHiddenStates": predictor_hidden_states,
+        "talkerDoSample": None if talker_do_sample is None else bool(talker_do_sample),
+        "talkerTopK": int(params.get("talkerTopK") or 0),
+        "talkerTopP": float(params.get("talkerTopP") or 0),
+        "repetitionPenalty": float(params.get("repetitionPenalty") or 0),
+        "subtalkerDoSample": None if subtalker_do_sample is None else bool(subtalker_do_sample),
+        "subtalkerTopK": int(params.get("subtalkerTopK") or 0),
+        "subtalkerTopP": float(params.get("subtalkerTopP") or 0),
+        "subtalkerTemperature": float(params.get("subtalkerTemperature") or 0),
+        "batchSize": batch_size,
     }
 
 
@@ -288,7 +302,7 @@ def _cuda_sync():
         pass
 
 
-def _timed_qwen_wrapper(model, call, profile_steps=False):
+def _timed_qwen_wrapper(model, call, profile_steps=False, predictor_hidden_states=True):
     timings = {
         "autoregressive_ms": 0,
         "decode_ms": 0,
@@ -296,6 +310,9 @@ def _timed_qwen_wrapper(model, call, profile_steps=False):
         "code_predictor_calls": 0,
         "code_predictor_steps": 0,
         "talker_steps": 0,
+        "talker_output_frames": 0,
+        "talker_max_frames": 0,
+        "batch_items": 1,
         "prefill_tokens": 0,
     }
     core = getattr(model, "model", None)
@@ -318,8 +335,26 @@ def _timed_qwen_wrapper(model, call, profile_steps=False):
     def timed_generate(*args, **kwargs):
         _cuda_sync()
         started = time.perf_counter()
+        result = None
         try:
-            return original_generate(*args, **kwargs)
+            result = original_generate(*args, **kwargs)
+            codes = result[0] if isinstance(result, (tuple, list)) and result else None
+            if isinstance(codes, (tuple, list)):
+                lengths = []
+                for code in codes:
+                    shape = getattr(code, "shape", None)
+                    if shape is not None and len(shape):
+                        try:
+                            lengths.append(int(shape[0] if len(shape) == 1 else shape[-2]))
+                        except Exception:
+                            pass
+                if lengths:
+                    timings["batch_items"] = len(lengths)
+                    timings["talker_output_frames"] = sum(lengths)
+                    timings["talker_max_frames"] = max(lengths)
+                    if not profile_steps:
+                        timings["talker_steps"] = sum(lengths)
+            return result
         finally:
             _cuda_sync()
             timings["autoregressive_ms"] += round((time.perf_counter() - started) * 1000)
@@ -345,29 +380,41 @@ def _timed_qwen_wrapper(model, call, profile_steps=False):
                 break
         return original_talker_generate(*args, **kwargs)
 
-    def timed_predictor_generate(*args, **kwargs):
+    def optimized_predictor_generate(*args, **kwargs):
+        if not predictor_hidden_states:
+            # qwen_tts 0.1.1 hard-codes output_hidden_states=True for every one of
+            # the 15 predictor steps. The result only consumes .sequences, so lab.20
+            # disables storage without altering logits or sampling.
+            kwargs["output_hidden_states"] = False
+        if not profile_steps:
+            return original_predictor_generate(*args, **kwargs)
         _cuda_sync()
         started = time.perf_counter()
         result = original_predictor_generate(*args, **kwargs)
         _cuda_sync()
         timings["code_predictor_ms"] += round((time.perf_counter() - started) * 1000)
         timings["code_predictor_calls"] += 1
-        timings["talker_steps"] += 1
         seq = getattr(result, "sequences", None)
         shape = getattr(seq, "shape", None)
+        batch = 1
+        steps = 0
         if shape is not None and len(shape):
             try:
-                timings["code_predictor_steps"] += int(shape[-1])
+                batch = int(shape[0]) if len(shape) >= 2 else 1
+                steps = int(shape[-1]) * batch
             except Exception:
-                pass
+                batch, steps = 1, 0
+        timings["batch_items"] = max(timings["batch_items"], batch)
+        timings["code_predictor_steps"] += steps
+        timings["talker_steps"] += batch
         return result
 
     core.generate = timed_generate
     tokenizer.decode = timed_decode
     if profile_steps and callable(original_talker_generate):
         talker.generate = timed_talker_generate
-    if profile_steps and callable(original_predictor_generate):
-        predictor.generate = timed_predictor_generate
+    if callable(original_predictor_generate) and (profile_steps or not predictor_hidden_states):
+        predictor.generate = optimized_predictor_generate
 
     _cuda_sync()
     started = time.perf_counter()
@@ -379,20 +426,19 @@ def _timed_qwen_wrapper(model, call, profile_steps=False):
         tokenizer.decode = original_decode
         if profile_steps and callable(original_talker_generate):
             talker.generate = original_talker_generate
-        if profile_steps and callable(original_predictor_generate):
+        if callable(original_predictor_generate) and (profile_steps or not predictor_hidden_states):
             predictor.generate = original_predictor_generate
 
     total = round((time.perf_counter() - started) * 1000)
     timings["model_call_ms"] = total
     timings["wrapper_overhead_ms"] = max(0, total - timings["autoregressive_ms"] - timings["decode_ms"])
     if timings["code_predictor_steps"] > 0:
-        timings["code_predictor_ms_per_step"] = round(
-            timings["code_predictor_ms"] / timings["code_predictor_steps"], 3
-        )
+        timings["code_predictor_ms_per_step"] = round(timings["code_predictor_ms"] / timings["code_predictor_steps"], 3)
     else:
         timings["code_predictor_ms_per_step"] = 0.0
+    if timings["talker_output_frames"] > 0 and timings["talker_steps"] <= 0:
+        timings["talker_steps"] = timings["talker_output_frames"]
     return result, timings
-
 
 def torch_runtime_info():
     import torch
@@ -808,6 +854,105 @@ def prepare_reference(payload):
     raise RuntimeError("Motor no soportado")
 
 
+def _qwen_generation_options(params, stable_mode, temperature):
+    perf = qwen_runtime_params(params)
+    benchmark_deterministic = bool(perf["benchmarkDeterministic"])
+    talker_do_sample = perf["talkerDoSample"]
+    if talker_do_sample is None:
+        talker_do_sample = not benchmark_deterministic
+    subtalker_do_sample = perf["subtalkerDoSample"]
+    if subtalker_do_sample is None:
+        subtalker_do_sample = True
+    talker_top_k = perf["talkerTopK"] or (20 if stable_mode else 50)
+    talker_top_p = perf["talkerTopP"] or (0.90 if stable_mode else 1.0)
+    repetition_penalty = perf["repetitionPenalty"] or 1.05
+    subtalker_top_k = perf["subtalkerTopK"] or 50
+    subtalker_top_p = perf["subtalkerTopP"] or 1.0
+    subtalker_temperature = perf["subtalkerTemperature"] or 0.9
+    return {
+        "do_sample": bool(talker_do_sample),
+        "top_k": int(talker_top_k),
+        "top_p": float(talker_top_p),
+        "temperature": float(temperature),
+        "repetition_penalty": float(repetition_penalty),
+        "subtalker_dosample": bool(subtalker_do_sample),
+        "subtalker_top_k": int(subtalker_top_k),
+        "subtalker_top_p": float(subtalker_top_p),
+        "subtalker_temperature": float(subtalker_temperature),
+        "max_new_tokens": 2048,
+    }
+
+
+def _qwen_finalize_diag(model, wavs, sr, call_timings, model_load_ms=0, prompt_ms=0, numpy_ms=0, non_streaming=True, params=None):
+    total_audio_sec = sum(len(np.asarray(w)) for w in wavs) / float(sr) if sr else 0.0
+    core = getattr(model, "model", None)
+    cfg = getattr(core, "config", None)
+    code_groups = int(getattr(cfg, "num_code_groups", 16) or 16)
+    if int(call_timings.get("talker_output_frames") or 0) <= 0 and total_audio_sec > 0:
+        call_timings["talker_output_frames"] = max(1, int(round(total_audio_sec * 12.5)))
+    if int(call_timings.get("talker_steps") or 0) <= 0:
+        call_timings["talker_steps"] = int(call_timings.get("talker_output_frames") or 0)
+    if int(call_timings.get("code_predictor_steps") or 0) <= 0:
+        call_timings["code_predictor_steps"] = int(call_timings.get("talker_steps") or 0) * max(0, code_groups - 1)
+    call_timings["num_code_groups"] = code_groups
+    call_timings["predictor_hidden_states"] = qwen_runtime_params(params)["predictorHiddenStates"]
+    return {
+        "model_load_ms": model_load_ms,
+        "prompt_ms": prompt_ms,
+        "numpy_ms": numpy_ms,
+        "non_streaming_mode": non_streaming,
+        "benchmark_deterministic": bool(qwen_runtime_params(params)["benchmarkDeterministic"]),
+        **call_timings,
+    }
+
+
+def generate_qwen_finetuned_batch(texts, params, model_path, speaker):
+    if not texts:
+        raise RuntimeError("Batch Qwen vacío")
+    if not model_path or not os.path.isdir(model_path):
+        raise RuntimeError("Selecciona un modelo Qwen3-TTS entrenado")
+    if not speaker:
+        raise RuntimeError("El modelo entrenado no declara un speaker válido")
+    import torch
+    started = time.perf_counter()
+    model = load_model(model_path, qwen_params=params)
+    stable_mode = str(params.get("consistencyMode") or "") == "stable-v1"
+    perf = qwen_runtime_params(params)
+    configured_temperature = float(params.get("temperature", 0.78))
+    production_temperature = float(params.get("productionTemperature", configured_temperature))
+    temperature = max(0.10, min(1.50, production_temperature))
+    non_streaming = True if perf["nonStreamingMode"] is None else bool(perf["nonStreamingMode"])
+    generation = _qwen_generation_options(params, stable_mode, temperature)
+    model_load_ms = round((time.perf_counter() - started) * 1000)
+
+    def qwen_call():
+        with torch.inference_mode():
+            return model.generate_custom_voice(
+                text=list(texts),
+                language=["Spanish"] * len(texts),
+                speaker=[speaker] * len(texts),
+                non_streaming_mode=non_streaming,
+                **generation,
+            )
+
+    (wavs, sr), call_timings = _timed_qwen_wrapper(
+        model,
+        qwen_call,
+        profile_steps=bool(perf["profileStages"]),
+        predictor_hidden_states=bool(perf["predictorHiddenStates"]),
+    )
+    arrays = [np.asarray(w, dtype=np.float32) for w in wavs]
+    if len(arrays) != len(texts):
+        raise RuntimeError(f"Qwen3-TTS devolvió {len(arrays)} audios para un batch de {len(texts)}")
+    diag = _qwen_finalize_diag(
+        model, arrays, sr, call_timings, model_load_ms=model_load_ms,
+        prompt_ms=0, numpy_ms=0, non_streaming=non_streaming, params=params,
+    )
+    diag["batch_size"] = len(texts)
+    diag["piece_total_ms"] = round((time.perf_counter() - started) * 1000)
+    return arrays, int(sr), diag
+
+
 def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mode, model_path, speaker):
     piece_started = time.perf_counter()
     if ENGINE == "chatterbox":
@@ -849,7 +994,6 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
         production_temperature = float(params.get("productionTemperature", configured_temperature))
         temperature = max(0.10, min(1.50, production_temperature))
         perf = qwen_runtime_params(params)
-        benchmark_deterministic = bool(perf["benchmarkDeterministic"])
         profile_steps = bool(perf["profileStages"])
 
         model_load_started = time.perf_counter()
@@ -862,6 +1006,7 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
             model = load_model(model_path, qwen_params=params)
             stable_mode = str(params.get("consistencyMode") or "") == "stable-v1"
             non_streaming = True if perf["nonStreamingMode"] is None else bool(perf["nonStreamingMode"])
+            generation = _qwen_generation_options(params, stable_mode, temperature)
             model_load_ms = round((time.perf_counter() - model_load_started) * 1000)
             def qwen_call():
                 with torch.inference_mode():
@@ -870,20 +1015,19 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                         language="Spanish",
                         speaker=speaker,
                         non_streaming_mode=non_streaming,
-                        max_new_tokens=2048,
-                        do_sample=not benchmark_deterministic,
-                        top_k=20 if stable_mode else 50,
-                        top_p=0.90 if stable_mode else 1.0,
-                        temperature=temperature,
-                        repetition_penalty=1.05,
+                        **generation,
                     )
-            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call, profile_steps=profile_steps)
+            (wavs, sr), call_timings = _timed_qwen_wrapper(
+                model, qwen_call, profile_steps=profile_steps,
+                predictor_hidden_states=bool(perf["predictorHiddenStates"]),
+            )
             prompt_ms = 0
         else:
             import torch
             model = load_model(qwen_params=params)
             stable_mode = str(params.get("consistencyMode") or "automatic") in ("automatic", "stable-v1")
             non_streaming = False if perf["nonStreamingMode"] is None else bool(perf["nonStreamingMode"])
+            generation = _qwen_generation_options(params, stable_mode, temperature)
             model_load_ms = round((time.perf_counter() - model_load_started) * 1000)
             prompt_started = time.perf_counter()
             prompt = qwen_prompt(ref_audio, ref_text, cache_path, params)
@@ -895,36 +1039,23 @@ def generate_piece(text, ref_audio, ref_text, cache_path, style, params, qwen_mo
                         language="Spanish",
                         voice_clone_prompt=prompt,
                         non_streaming_mode=non_streaming,
-                        max_new_tokens=2048,
-                        do_sample=not benchmark_deterministic,
-                        top_k=20 if stable_mode else 50,
-                        top_p=0.90 if stable_mode else 1.0,
-                        temperature=temperature,
-                        repetition_penalty=1.05,
+                        **generation,
                     )
-            (wavs, sr), call_timings = _timed_qwen_wrapper(model, qwen_call, profile_steps=profile_steps)
+            (wavs, sr), call_timings = _timed_qwen_wrapper(
+                model, qwen_call, profile_steps=profile_steps,
+                predictor_hidden_states=bool(perf["predictorHiddenStates"]),
+            )
 
         numpy_started = time.perf_counter()
         arr = np.asarray(wavs[0], dtype=np.float32)
         numpy_ms = round((time.perf_counter() - numpy_started) * 1000)
-        audio_sec = (len(arr) / float(sr)) if sr else 0.0
-        core = getattr(model, "model", None)
-        cfg = getattr(core, "config", None)
-        code_groups = int(getattr(cfg, "num_code_groups", 16) or 16)
-        if int(call_timings.get("talker_steps") or 0) <= 0 and audio_sec > 0:
-            call_timings["talker_steps"] = max(1, int(round(audio_sec * 12.5)))
-        if int(call_timings.get("code_predictor_steps") or 0) <= 0:
-            call_timings["code_predictor_steps"] = int(call_timings.get("talker_steps") or 0) * max(0, code_groups - 1)
-        call_timings["num_code_groups"] = code_groups
-        return arr, int(sr), {
-            "piece_total_ms": round((time.perf_counter() - piece_started) * 1000),
-            "model_load_ms": model_load_ms,
-            "prompt_ms": prompt_ms,
-            "numpy_ms": numpy_ms,
-            "non_streaming_mode": non_streaming,
-            "benchmark_deterministic": benchmark_deterministic,
-            **call_timings,
-        }
+        diag = _qwen_finalize_diag(
+            model, [arr], sr, call_timings, model_load_ms=model_load_ms,
+            prompt_ms=prompt_ms, numpy_ms=numpy_ms, non_streaming=non_streaming, params=params,
+        )
+        diag["piece_total_ms"] = round((time.perf_counter() - piece_started) * 1000)
+        diag["batch_size"] = 1
+        return arr, int(sr), diag
 
     raise RuntimeError("Motor no soportado")
 
@@ -1106,7 +1237,12 @@ def generate(payload):
             "code_predictor_ms": sum(int(x.get("code_predictor_ms") or 0) for x in piece_stage_diagnostics),
             "code_predictor_calls": sum(int(x.get("code_predictor_calls") or 0) for x in piece_stage_diagnostics),
             "code_predictor_steps": sum(int(x.get("code_predictor_steps") or 0) for x in piece_stage_diagnostics),
+            "code_predictor_ms_per_step": round(
+                sum(int(x.get("code_predictor_ms") or 0) for x in piece_stage_diagnostics) /
+                max(1, sum(int(x.get("code_predictor_steps") or 0) for x in piece_stage_diagnostics)), 3
+            ),
             "talker_steps": sum(int(x.get("talker_steps") or 0) for x in piece_stage_diagnostics),
+            "talker_output_frames": sum(int(x.get("talker_output_frames") or 0) for x in piece_stage_diagnostics),
             "prefill_tokens_max": max([int(x.get("prefill_tokens") or 0) for x in piece_stage_diagnostics] or [0]),
             "num_code_groups": max([int(x.get("num_code_groups") or 0) for x in piece_stage_diagnostics] or [0]),
             "wrapper_overhead_ms": sum(int(x.get("wrapper_overhead_ms") or 0) for x in piece_stage_diagnostics),
