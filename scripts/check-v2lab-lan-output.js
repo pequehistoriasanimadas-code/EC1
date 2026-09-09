@@ -37,6 +37,7 @@ function req(url,opts={}){return new Promise((resolve,reject)=>{const u=new URL(
  assert(main.includes("outputLan?.updateMasterPlayback(event)"),'master progress must drive reconnection timing');
  assert(preload.includes('outputLanStatus')&&preload.includes('outputLanConfigure'),'LAN IPC bridge missing');
  assert(renderer.includes('Monitor de emisión')&&renderer.includes('Output por red local'),'monitor/LAN UI missing');
+ assert(renderer.includes('function ensureMonitorFrame()')&&renderer.includes("window.addEventListener('load'")&&renderer.includes("document.readyState==='complete'"),'monitor iframe debe montarse después del load principal para no bloquear CONTROL_READY');
  assert(renderer.includes('una sola')||renderer.includes('este único enlace'),'UI must expose one LAN link');
  assert(web.includes("outputPlayback:e=>{if(e?.type==='error')"),'web viewer must never report ended/progress into master queue');
  assert(mode.includes("let muted=monitor"),'monitor audio must default to muted');
