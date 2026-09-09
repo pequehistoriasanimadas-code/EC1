@@ -216,12 +216,16 @@ class AutomationEngine extends Automation0324{
     return{samples:rows.length,totalMedianMs:Math.round(med('totalMs')),totalP95Ms:Math.round(p95('totalMs')),voiceWaitMedianMs:Math.round(med('voiceWaitMs')),voiceMedianMs:Math.round(med('voiceMs')),rtfMedian:Number(med('rtf').toFixed(3)),aiMedianMs:Math.round(med('aiMs')),pronunciationMedianMs:Math.round(med('pronunciationMs'))};
   }
   chooseReadyItem(queue=this.queue,s=this.getSettings()||{}){
-    const ready=(queue||[]).filter(x=>x.status==='LISTA');if(!ready.length)return null;const every=clamp(s.automation?.exclusiveEveryNews,0,20,4);if(!every)return ready[0];const due=this.newsSinceExclusive>=Math.max(0,every-1),exclusive=ready.find(x=>!!(x.result?.isExclusive||x.isExclusive)),publicItem=ready.find(x=>!(x.result?.isExclusive||x.isExclusive));if(due&&exclusive)return exclusive;if(!due&&publicItem)return publicItem;return ready[0];
+    const ready=(queue||[]).filter(x=>x.status==='LISTA');if(!ready.length)return null;const sched=this.schedulerState(s),exclusive=ready.find(x=>!!(x.result?.isExclusive||x.isExclusive)),publicItem=ready.find(x=>!(x.result?.isExclusive||x.isExclusive));
+    if(sched.everyNews===0)return ready[0];
+    if(sched.due){if(exclusive)return exclusive;if(this.exclusiveReserve.length||this.hasExclusiveInPipeline())return null;return publicItem||null;}
+    return publicItem||null;
   }
   displayQueue(settings){
     const rows=super.displayQueue(settings),active=new Map((this.queue||[]).map(x=>[x.id,x]));return rows.filter(row=>{const item=row.id?active.get(row.id):null;return !(item&&item.status==='PROCESANDO'&&!item.uiVisible);}).map(row=>{const item=row.id?active.get(row.id):null;if(item){return{...row,isExclusive:!!(item.result?.isExclusive||item.isExclusive),accessStatus:item.result?.accessStatus||item.accessStatus||item.article?.access?.status||'',feedName:sourceName(item.story),feedId:String(item.story?.feedId||''),category:sectionName(item),storyKey:storyKey(item.story),baseKey:baseStoryKey(item.story),storyUrl:String(item.story?.link||''),selectionScore:Number(item.selectionScore)||0,selectionReason:String(item.selectionReason||'')};}return row;});
   }
-  snapshot(extra={}){const s=super.snapshot(extra),mode=this.coexistenceMode();return{...s,processing:{...s.processing,pipelineWorkers:this.inFlight.size,aiBusy:this.aiStageBusy,voiceBusy:this.voiceStageBusy,pipelineMode:mode==='gpu-coordinated'?'staggered-2-gpu-coordinated':mode==='gpu-swap'?'staggered-2-gpu-swap':'staggered-2',gpuStageBusy:this.gpuStageBusy,gpuStageCurrent:this.gpuStageCurrent,gpuQueue:this.gpuStageQueue.length,gpuVoiceBurst:this.gpuVoiceBurst,gpuQueueWatchdogMs:this.gpuQueueTimeoutMs,voiceBacklog:this.gpuStageQueue.filter(x=>x.kind==='voice').length},performance:this.performanceSummary(),selector:{recentFeeds:this.selectionRecent.slice(-8),urlCooldowns:[...this.urlFailures.values()].filter(x=>Number(x.until)>Date.now()).length,feedCooldowns:[...this.feedFailures.values()].filter(x=>Number(x.until)>Date.now()).length}};}
+  snapshot(extra={}){const s=super.snapshot(extra),mode=this.coexistenceMode(),sched=this.schedulerState();return{...s,exclusiveScheduler:sched,exclusiveReserve:{count:this.exclusiveReserve.length,max:sched.reserveMax,items:this.exclusiveReserve.slice(0,10).map(x=>({title:String(x.story?.title||''),feedName:sourceName(x.story),pubDate:String(x.story?.pubDate||''),storyUrl:String(x.story?.link||'')}))},processing:{...s.processing,pipelineWorkers:this.inFlight.size,aiBusy:this.aiStageBusy,voiceBusy:this.voiceStageBusy,pipelineMode:mode==='gpu-coordinated'?'staggered-2-gpu-coordinated':mode==='gpu-swap'?'staggered-2-gpu-swap':'staggered-2',gpuStageBusy:this.gpuStageBusy,gpuStageCurrent:this.gpuStageCurrent,gpuQueue:this.gpuStageQueue.length,gpuVoiceBurst:this.gpuVoiceBurst,gpuQueueWatchdogMs:this.gpuQueueTimeoutMs,voiceBacklog:this.gpuStageQueue.filter(x=>x.kind==='voice').length},performance:this.performanceSummary(),selector:{recentFeeds:this.selectionRecent.slice(-8),urlCooldowns:[...this.urlFailures.values()].filter(x=>Number(x.until)>Date.now()).length,feedCooldowns:[...this.feedFailures.values()].filter(x=>Number(x.until)>Date.now()).length}};}
+  clearQueue(){const r=super.clearQueue();this.exclusiveReserve=[];this.exclusiveReserveKeys.clear();this.state();return this.snapshot();}
   async consumer(epoch){
     while(this.emissionRunning&&epoch===this.emissionEpoch){
       if(this.emissionPaused){await wait(300);continue;}if(!this.isOutputReady()){this.emissionPaused=true;this.state({notice:'Abre Output para continuar la emisión'});continue;}
@@ -242,4 +246,4 @@ class AutomationEngine extends Automation0324{
 }
 
 function URLSafe(value){try{return new URL(String(value||''));}catch{return{hash:''};}}
-module.exports={AutomationEngine,selectGpuRequestIndex};
+module.exports={AutomationEngine,selectGpuRequestIndex,exclusiveEligibilityState};
