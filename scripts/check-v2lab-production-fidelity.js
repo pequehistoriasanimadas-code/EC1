@@ -10,6 +10,7 @@ const {LocalRuntime}=require(path.join(root,'src','services','localRuntime.js'))
 const {installVersion0320LocalPolicy}=require(path.join(root,'src','services','version0320LocalPolicy.js'));
 const {
   PROFILE_VERSION,
+  compatibility,
   profileFile,
   hydrateSettings,
   resolvePipelineMode,
@@ -98,6 +99,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     fs.writeFileSync(profileFile(tmp),JSON.stringify(profile,null,2));
     const hydrated=hydrateSettings(JSON.parse(JSON.stringify(profileSettings)),tmp);
     assert.strictEqual(hydrated.activeOptimizationV2.valid,true);
+    assert.strictEqual(compatibility(profileSettings,{...profile,version:'2.0-lab.22'}).ok,true,'La optimización lab.22 de esta misma PC debe seguir siendo válida en lab.23');
     assert.strictEqual(hydrated.ai.localResourceMode,'tuned');
     assert.strictEqual(hydrated.ai.localTunedConfig.gpuLayers,48);
     assert.strictEqual(hydrated.ai.lastLocalBenchmark.coexistenceMode,'gpu-coordinated');
