@@ -16,7 +16,7 @@
     if(previous==='news')await revealStoryFromStory(async()=>{if(serial===contentSerial)await setStoryContent(p);});
     else if(previous==='canned')await crossfadeLayers(cannedLayer,storyLayer,async()=>{if(serial===contentSerial)await setStoryContent(p);});
     else{await setStoryContent(p);storyLayer.classList.remove('hidden-layer');cannedLayer.classList.add('hidden-layer');}
-    if(serial!==contentSerial)return;if(previous==='canned')clearCannedVideo();await voiceReady;if(serial!==contentSerial)return;activeKind='news';stage.dataset.kind='news';await startMusicForNews();if(serial!==contentSerial)return;audio.volume=volume(design.voiceVolume==null?100:design.voiceVolume);if(p.audioUrl){try{audio.currentTime=0;}catch{}audio.play().catch(e=>playback('error',e.message||'No se pudo iniciar el audio'));}else playback('ended');
+    if(serial!==contentSerial)return;if(previous==='canned')clearCannedVideo();await voiceReady;if(serial!==contentSerial)return;activeKind='news';stage.dataset.kind='news';await startMusicForNews();if(serial!==contentSerial)return;audio.volume=volume(design.voiceVolume==null?100:design.voiceVolume);if(p.audioUrl){const seek=Math.max(0,Number(p.startAtSec)||0);try{audio.currentTime=Number.isFinite(audio.duration)&&audio.duration>0?Math.min(seek,Math.max(0,audio.duration-.08)):seek;}catch{}audio.play().catch(e=>playback('error',e.message||'No se pudo iniciar el audio'));}else playback('ended');
   };
   try{syncCustomFonts(design?.customFonts||[]);}catch{}
 })();
