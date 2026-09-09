@@ -44,7 +44,7 @@
     if(!s)return;lanState=s;const enabled=q('#ecLanEnabled'),port=q('#ecLanPort'),url=q('#ecLanUrl'),clients=q('#ecLanClientsField'),pill=q('#ecLanState'),info=q('#ecLanInfo');
     if(enabled&&document.activeElement!==enabled)enabled.checked=!!s.enabled;if(port&&document.activeElement!==port)port.value=String(s.port||8787);if(url)url.value=s.lanUrl||'';if(clients)clients.value=String(Number(s.clients)||0);
     if(pill){if(s.error){pill.textContent='ERROR';pill.className='status-pill error';}else if(s.enabled&&s.lanUrl){pill.textContent='LAN ACTIVO';pill.className='status-pill live';}else{pill.textContent='SOLO LOCAL';pill.className='status-pill neutral';}}
-    if(info)info.textContent=s.error?`${s.error} El programa y el monitor local continúan funcionando.`:s.enabled&&s.lanUrl?`Salida disponible en ${s.ip}:${s.actualPort}. Audio LAN activado.`:'El monitor interno permanece disponible. Activa LAN solo cuando necesites enviar la señal a otra PC.';
+    if(info)info.textContent=s.error?`${s.error} El programa y el monitor local continúan funcionando.`:s.lastClientError?`Aviso de cliente LAN: ${s.lastClientError}. La cola no fue afectada.`:s.enabled&&s.lanUrl?`Salida disponible en ${s.ip}:${s.actualPort}. Audio LAN activado.`:'El monitor interno permanece disponible. Activa LAN solo cuando necesites enviar la señal a otra PC.';
     const monClients=q('#ecMonitorClients');if(monClients)monClients.textContent=`LAN: ${Number(s.clients)||0} conexión${Number(s.clients)===1?'':'es'}`;
     if(s.localUrl&&s.localUrl!==lastMonitorUrl){lastMonitorUrl=s.localUrl;const frame=q('#ecMonitorFrame'),empty=q('#ecMonitorEmpty');if(frame){frame.src=s.localUrl;frame.onload=()=>empty?.classList.add('hidden');}if(empty)empty.classList.remove('hidden');}
   }
