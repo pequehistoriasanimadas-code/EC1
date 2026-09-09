@@ -8,7 +8,17 @@
   function gpuIdentity(g={}){const d=g.gpu||g.device||{};return{gpu:String(d.name||g.gpuName||g.name||''),vram:Number(d.vramMb||d.memoryTotalMb||g.vramMb||g.memoryTotalMb||0),driver:String(d.driver||g.driver||'')};}
   async function hardwareFingerprint(){const [local,gpu]=await Promise.all([window.ECAPI.localStatus().catch(()=>({})),window.ECAPI.gpuTtsStatus().catch(()=>({}))]),id=gpuIdentity(gpu),logical=Number(local?.profile?.logicalCpus||0);return JSON.stringify({logical,gpu:id.gpu,vram:Math.round(id.vram/256)*256,driver:id.driver});}
   async function migrateGlobalOptimization(){
-    try{const fp=await hardwareFingerprint(),r=await window.ECAPI.optimizationMigrateGlobal(fp);if(r?.matched&&r?.changed&&!sessionStorage.getItem('ec0330-global-tuning-reload')){sessionStorage.setItem('ec0330-global-tuning-reload','1');location.reload();return;}sessionStorage.removeItem('ec0330-global-tuning-reload');if(r?.matched){settings=await window.ECAPI.getSettings();const badge=q('#ecOptimizeState0321'),box=q('#ecOptimizeResult0321'),opt=settings?.optimization0321;if(badge&&opt?.fingerprint===fp){badge.textContent='OPTIMIZADA ✓';badge.className='mini-pill ok';if(box&&!box.dataset.live)box.textContent=`Perfil global de esta computadora · ${opt.hardwareLabel||'hardware actual'} · ${opt.summary||'GEC optimizado'}.`;}}}catch(e){console.warn('EC 0.3.30 global tuning migration:',e?.message||e);}
+    try{
+      const fp=await hardwareFingerprint(),r=await window.ECAPI.optimizationMigrateGlobal(fp);
+      if(!r?.matched)return;
+      settings=await window.ECAPI.getSettings();
+      const badge=q('#ecOptimizeState0321'),box=q('#ecOptimizeResult0321'),opt=settings?.optimization0321;
+      if(badge&&opt?.fingerprint===fp){badge.textContent='OPTIMIZADA ✓';badge.className='mini-pill ok';if(box&&!box.dataset.live)box.textContent=`Perfil global de esta computadora · ${opt.hardwareLabel||'hardware actual'} · ${opt.summary||'GEC optimizado'}.`;}
+      if(r.changed){
+        try{window.dispatchEvent(new CustomEvent('gec:settings-updated',{detail:{source:'global-tuning-migration',fingerprint:fp}}));}catch{}
+        try{if(typeof refreshRuntimeStatus==='function')await refreshRuntimeStatus();}catch{}
+      }
+    }catch(e){console.warn('EC 0.3.30 global tuning migration:',e?.message||e);}
   }
 
   function enhanceCustomIntervalUi(){
