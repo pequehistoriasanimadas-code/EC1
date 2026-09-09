@@ -12,7 +12,7 @@ let documentTickBusy=false;
 let documentCoordinatorTimer=null;
 const documentReadContext=new Map();
 
-function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function dataRoot(){const labRoot=process.env.GEC_V2_TTS_LAB_ROOT;if(process.env.GEC_V2_TTS_LAB==='1'&&labRoot)return path.join(labRoot,'EC Automatic News Data');const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
 function manager(){return require('./profileManager0329').getProfileManager(dataRoot());}
 function controlWindow(){return BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&!/OUTPUT/i.test(w.getTitle?.()||''))||null;}
 function sendControl(channel,payload){try{controlWindow()?.webContents.send(channel,payload);}catch{}}
