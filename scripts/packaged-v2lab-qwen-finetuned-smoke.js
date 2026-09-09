@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.21','Versión empaquetada no es lab.21');
+  assert.strictEqual(pkg.version,'2.0.0-lab.22','Versión empaquetada no es lab.22');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime,CACHE_REVISION}=require(runtimePath);
   assert.strictEqual(CACHE_REVISION,'lab11-r1');
@@ -37,9 +37,9 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(release.includes('ttsModelFingerprint')&&release.includes("tts-lab:validateSelected")&&release.includes('QWEN_ASSET_REVISION'),'Fingerprint/asset identity no está empaquetado');
   assert(opt.includes("mode:'gpu-swap'")&&opt.includes('swapValidated:true'),'GPU SWAP validado no está empaquetado');
   assert(automation.includes('releaseOppositeForGpuSwap')&&automation.includes('stopAndWait'),'GPU SWAP real no está empaquetado');
-  assert(ui.includes('currentOptimizationKey')&&!ui.includes('ttsLabValidateSelected')&&ui.includes('v2InstallProgress'),'UI fine-tuned lab.21 no está empaquetada');
+  assert(ui.includes('currentOptimizationKey')&&!ui.includes('ttsLabValidateSelected')&&ui.includes('v2InstallProgress'),'UI fine-tuned lab.22 no está empaquetada');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 QWEN FINE-TUNED lab.21 OK · Aurelio exacto · overlay inmutable · fingerprint · GPU SWAP');
+  console.log('PACKAGED V2 QWEN FINE-TUNED lab.22 OK · Aurelio exacto · overlay inmutable · fingerprint · GPU SWAP');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
