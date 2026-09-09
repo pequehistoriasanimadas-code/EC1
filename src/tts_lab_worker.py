@@ -1001,7 +1001,7 @@ def cleanup_chatterbox_tail(audio, sample_rate, enabled=True):
 
     min_quiet_frames = max(4, int(math.ceil(0.080 / (frame / float(sr)))))
     keep_after_quiet = int(round(sr * 0.060))
-    max_residual_frames = max(1, int(math.ceil(0.240 / (frame / float(sr)))))
+    max_residual_frames = max(1, int(math.ceil(0.320 / (frame / float(sr)))))
     cut = None
     reason = "none"
 
@@ -1053,9 +1053,9 @@ def cleanup_chatterbox_tail(audio, sample_rate, enabled=True):
     if cut is None:
         return arr, diag
 
-    # Never remove more than 420 ms and never leave an implausibly short
+    # Never remove more than 360 ms and never leave an implausibly short
     # chunk. If the detector would exceed either guard, leave the audio intact.
-    min_cut = max(int(sr * 0.35), arr.size - int(round(sr * 0.420)))
+    min_cut = max(int(sr * 0.35), arr.size - int(round(sr * 0.360)))
     cut = max(min_cut, min(arr.size, int(cut)))
     removed = arr.size - cut
     if removed < int(round(sr * 0.060)):
