@@ -19,7 +19,7 @@ function payload({name='Perfil',profileSchemaVersion=1,kind='profile',settings={
   if(kind==='all')manifest.activeProfileId=id;
   return{manifest,globalSettings:kind==='all'?globalSettings:null,profiles:[{meta:{id,name,color:'#F7C600',schemaVersion:profileSchemaVersion},settings}],resources:[],voiceManifest:[]};
 }
-const root=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab23-profile-'));
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab24-profile-'));
 try{
   const m=new ProfileManager0329(root);
   atomicJson(m.globalSettingsFile,{
@@ -39,7 +39,7 @@ try{
   }});
   delete legacy.manifest.packageSchemaVersion; // compatibilidad con paquete antiguo sin número explícito.
   writePackage(legacyFile,legacy);
-  const legacyInfo=pack.readInfo(legacyFile);assert.equal(legacyInfo.packageSchemaVersion,1);
+  const legacyInfo=pack.readInfo(legacyFile);assert.equal(legacyInfo.packageSchemaVersion,1);assert.equal(legacyInfo.profileSchemaVersion,0);assert.equal(legacyInfo.legacyProfile,true,'schema 0 debe identificarse como perfil legacy');
   const lr=pack.importFile(legacyFile,'keep');assert(lr.ok);
   const oldId=lr.imported[0],oldSettings=m.readProfileSettings(oldId);
   assert.equal(oldSettings.rssFeeds[0].id,'old');assert.equal(oldSettings.automation.bufferReady,9);
@@ -78,13 +78,20 @@ try{
   assert.throws(()=>readPackage(futurePackage),/versión más nueva de GEC/i);
 
   const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
-  const main=read('src/main.js'),stability=read('src/services/profileStability0329.js'),preload=read('src/preload.js'),r0324=read('src/renderer-0324.js'),lan=read('src/renderer-lan-output.js'),css=read('src/control-lan-output.css'),optimizer=read('src/renderer-0321.js');
-  assert(main.includes('CONTROL_LOAD_CANCELLED')&&main.includes('controlledShutdown()'),'reinicio controlado debe suprimir falso ERR_FAILED');
+  const main=read('src/main.js'),stability=read('src/services/profileStability0329.js'),preload=read('src/preload.js'),control=read('src/control.html'),r0324=read('src/renderer-0324.js'),r0330=read('src/renderer-0330.js'),lan=read('src/renderer-lan-output.js'),css=read('src/control-lan-output.css'),optimizer=read('src/renderer-0321.js'),boot=read('src/bootstrap-v2lab.js'),boot0329=read('src/bootstrap-0329.js');
+  assert(main.includes('CONTROL_LOAD_CANCELLED')&&main.includes('controlledShutdown()'),'reinicio controlado debe suprimir falsos errores de carga');
+  assert(main.includes("Number(code)===-3")&&main.includes('CONTROL_LOAD_ABORTED')&&main.includes('CONTROL_UI_READY'),'startup lab.24 debe tratar ERR_ABORTED como transitorio y verificar la UI real');
+  const startupBlock=main.slice(main.indexOf('function createControlWindow(){'),main.indexOf('function applyOutputWindowFormat'));
+  assert(!startupBlock.includes('reloadIgnoringCache'),'startup lab.24 no debe competir con recargas automáticas del renderer');
   assert(stability.includes('__ecPrepareControlledRelaunch')&&stability.includes('__ecRefreshOutputAfterProfileChange'),'perfil debe coordinar relaunch y refresco Output');
   for(const v of ['renderer-0317.js','renderer-0318.js','renderer-0319.js','renderer-0320.js','renderer-0321.js','renderer-0322.js','renderer-0323.js'])assert(preload.includes(v),`falta restaurar ${v}`);
+  assert(!control.includes('control-0324.css')&&!control.includes('renderer-0324.js'),'control.html no debe duplicar assets versionados que ya inyecta preload');
   assert(r0324.includes('__ec0323UiInstalled'),'0.3.24 debe esperar la cadena previa completa');
+  const migrateBlock=r0330.slice(r0330.indexOf('async function migrateGlobalOptimization()'),r0330.indexOf('function enhanceCustomIntervalUi'));
+  assert(migrateBlock.includes('gec:settings-updated')&&!migrateBlock.includes('location.reload'),'migración global no debe recargar la interfaz durante startup');
   assert(optimizer.includes('ecOptimizer0321')&&optimizer.includes('Optimización automática de EC'),'optimizador debe existir en Ajustes');
+  assert(boot.includes('__ecSingleInstanceLockOwned')&&boot0329.includes('inheritedLock'),'V2 debe poseer un solo single-instance lock a través de la cadena legacy');
   assert(lan.includes('ecAutoRightColumn')&&lan.includes('outputLanEnsure')&&lan.includes("'profile:changed'"),'monitor debe quedar arriba de la cola y recuperarse');
   assert(css.includes('#ecAutoRightColumn'),'layout de monitor/cola no aplicado');
-  console.log('check-v2lab-profile-compat: OK · perfil antiguo + actual + schema de perfil nuevo · optimización de PC preservada · relaunch silencioso · monitor recuperable');
+  console.log('check-v2lab-profile-compat: OK · schema legacy 0 · startup sin reload competitivo · ERR_ABORTED recuperable · lock único · monitor recuperable');
 }finally{fs.rmSync(root,{recursive:true,force:true});}
