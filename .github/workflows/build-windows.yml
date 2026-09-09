@@ -71,6 +71,45 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:portable
 
+      - name: Packaged V2.0 real executable startup test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
+          if (-not (Test-Path $exe)) { throw "Missing V2 Lab executable: $exe" }
+          $root = Join-Path $env:RUNNER_TEMP ("gec-lab24-startup-" + [guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          $env:GEC_V2_TTS_LAB_ROOT = $root
+          $proc = Start-Process -FilePath $exe -ArgumentList '--startup-smoke' -PassThru
+          $log = Join-Path $root 'GEC V2 TTS Lab\EC Automatic News Data\logs\startup.log'
+          $deadline = (Get-Date).AddSeconds(55)
+          try {
+            while ((Get-Date) -lt $deadline) {
+              if ($proc.HasExited) { break }
+              Start-Sleep -Milliseconds 300
+              $proc.Refresh()
+            }
+            if (-not $proc.HasExited) {
+              throw "Real startup timed out. Log: $log"
+            }
+            if ($proc.ExitCode -ne 0) {
+              if (Test-Path $log) { Get-Content $log | Write-Host }
+              throw "Real startup exited with code $($proc.ExitCode)"
+            }
+            if (-not (Test-Path $log)) { throw "startup.log was not created: $log" }
+            $startup = Get-Content $log -Raw
+            Write-Host $startup
+            if ($startup -notmatch 'CONTROL_READY:' -or $startup -notmatch 'CONTROL_UI_READY:') {
+              throw 'Real executable did not reach CONTROL_READY + CONTROL_UI_READY'
+            }
+            if ($startup -match 'CONTROL_DIAGNOSTIC:|CONTROL_UI_TIMEOUT:|CONTROL_PRELOAD_ERROR:') {
+              throw 'Real executable reached a fatal/invalid UI startup state'
+            }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+            Remove-Item Env:GEC_V2_TTS_LAB_ROOT -ErrorAction SilentlyContinue
+          }
+
       - name: Packaged V2.0 TTS Lab architecture smoke test
         shell: pwsh
         timeout-minutes: 4
