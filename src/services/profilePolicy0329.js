@@ -14,7 +14,7 @@ const {ProfilePackage0329}=require('./profilePackage0329');
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const keyPath=v=>{try{return path.resolve(String(v||'')).normalize('NFKC').toLocaleLowerCase('es');}catch{return String(v||'').normalize('NFKC').toLocaleLowerCase('es');}};
-function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function dataRoot(){const labRoot=process.env.GEC_V2_TTS_LAB_ROOT;if(process.env.GEC_V2_TTS_LAB==='1'&&labRoot)return path.join(labRoot,'EC Automatic News Data');const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
 function manager(){const m=getProfileManager(dataRoot());global.__ec0329ProfileManager=m;return m;}
 function defaults(){try{return SettingsStore.prototype.defaults.call({baseDir:dataRoot()});}catch{return{};}}
 function controlWindow(){return BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&!/OUTPUT/i.test(w.getTitle?.()||''))||null;}

@@ -11,7 +11,7 @@ const {FontManager}=require('./fonts');
 const {getProfileManager,readJson}=require('./profileManager0329');
 
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function dataRoot(){const labRoot=process.env.GEC_V2_TTS_LAB_ROOT;if(process.env.GEC_V2_TTS_LAB==='1'&&labRoot)return path.join(labRoot,'EC Automatic News Data');const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
 function manager(){return getProfileManager(dataRoot());}
 function controlWindow(){return BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&!/OUTPUT/i.test(w.getTitle?.()||''))||null;}
 function outputs(){return BrowserWindow.getAllWindows().filter(w=>!w.isDestroyed()&&(/OUTPUT/i.test(w.getTitle?.()||'')||/output\.html/i.test(w.webContents?.getURL?.()||'')));}

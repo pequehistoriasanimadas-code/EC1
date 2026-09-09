@@ -7,7 +7,7 @@ const {CannedManager,VIDEO_EXTENSIONS}=require('./canned');
 const {FontManager}=require('./fonts');
 
 let loaded=false,dirty=false,timer=null;const cache={folders:{}};
-function dataRoot(){const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
+function dataRoot(){const labRoot=process.env.GEC_V2_TTS_LAB_ROOT;if(process.env.GEC_V2_TTS_LAB==='1'&&labRoot)return path.join(labRoot,'EC Automatic News Data');const portable=process.env.PORTABLE_EXECUTABLE_DIR;if(portable)return path.join(portable,'EC Automatic News Data');if(app.isPackaged)return path.join(path.dirname(process.execPath),'EC Automatic News Data');return path.join(app.getPath('userData'),'EC Automatic News Data');}
 function file(){return path.join(dataRoot(),'media-index-0329.json');}
 function load(){if(loaded)return;loaded=true;try{const x=JSON.parse(fs.readFileSync(file(),'utf8'));if(x?.folders&&typeof x.folders==='object')cache.folders=x.folders;}catch{}}
 function saveLater(){dirty=true;if(timer)return;timer=setTimeout(()=>{timer=null;if(!dirty)return;dirty=false;try{const keys=Object.keys(cache.folders);if(keys.length>120)for(const k of keys.slice(0,keys.length-120))delete cache.folders[k];const out=file(),tmp=`${out}.tmp`;fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(tmp,JSON.stringify({schemaVersion:1,updatedAt:new Date().toISOString(),folders:cache.folders}),'utf8');try{fs.renameSync(tmp,out);}catch{fs.copyFileSync(tmp,out);fs.rmSync(tmp,{force:true});}}catch{}},900);}
