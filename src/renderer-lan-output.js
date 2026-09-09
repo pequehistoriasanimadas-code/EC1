@@ -9,10 +9,18 @@
     let right=q('#ecAutoRightColumn');if(!right){right=document.createElement('div');right.id='ecAutoRightColumn';right.className='ec-auto-right-column';queue.replaceWith(right);right.appendChild(queue);}
     const card=document.createElement('div');card.id='ecLanMonitorCard';card.className='card ec-lan-monitor-card';card.innerHTML=`
       <div class="section-head"><div><h3>Monitor de emisión</h3><p class="note">Refleja la misma señal del Output. El audio del monitor inicia apagado y se activa dentro del visor.</p></div><span id="ecMonitorState" class="status-pill neutral">STANDBY</span></div>
-      <div id="ecMonitorFrameHost" class="ec-monitor-frame-host format-16-9"><iframe id="ecMonitorFrame" title="Monitor de emisión" allow="autoplay" referrerpolicy="no-referrer"></iframe><div id="ecMonitorEmpty" class="ec-monitor-empty">Iniciando monitor…</div></div>
+      <div id="ecMonitorFrameHost" class="ec-monitor-frame-host format-16-9"><div id="ecMonitorEmpty" class="ec-monitor-empty">Iniciando monitor…</div></div>
       <div class="ec-monitor-footer"><span id="ecMonitorLanHint">Monitor local · no controla la cola</span><span id="ecMonitorClients">LAN: 0 conexiones</span></div>`;
     right.insertBefore(card,queue);
     const left=q('#tab-auto .auto-cols > div:first-child'),emission=[...(left?.querySelectorAll('.card')||[])].find(x=>/Emisión automática|Control de emisión/i.test(x.textContent||''));const note=emission?.querySelector('p.note');if(note)note.textContent='El Output maestro se abre automáticamente al iniciar la emisión. Ocultar la ventana Output no detiene el monitor ni la salida LAN.';
+  }
+
+  function ensureMonitorFrame(){
+    let frame=q('#ecMonitorFrame');if(frame)return frame;
+    const host=q('#ecMonitorFrameHost'),empty=q('#ecMonitorEmpty');if(!host)return null;
+    frame=document.createElement('iframe');frame.id='ecMonitorFrame';frame.title='Monitor de emisión';frame.setAttribute('allow','autoplay');frame.setAttribute('referrerpolicy','no-referrer');
+    host.insertBefore(frame,empty||null);
+    return frame;
   }
 
   function injectLanSettings(){
@@ -63,8 +71,9 @@
     const btn=q('#openOutput');if(!btn||btn.dataset.ecLanGuard)return;btn.dataset.ecLanGuard='1';btn.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const s=await window.ECAPI.outputStatus();if(s?.visible){const r=await window.ECAPI.closeOutput();renderOutputState(r.state||await window.ECAPI.outputStatus());if(typeof status==='function')status('Ventana Output oculta. La emisión, el monitor y LAN continúan.');}else{const r=await window.ECAPI.openOutput();renderOutputState(r.state||await window.ECAPI.outputStatus());if(typeof status==='function')status('Ventana Output visible.');}}catch(err){if(typeof status==='function')status(`Output: ${err.message||err}`);}},true);
   }
 
-  injectMonitor();injectLanSettings();installOutputButtonGuard();refreshLan();window.ECAPI.outputStatus().then(renderOutputState).catch(()=>{});
+  injectMonitor();injectLanSettings();installOutputButtonGuard();window.ECAPI.outputStatus().then(renderOutputState).catch(()=>{});
   window.ECAPI.on('output:lanState',s=>renderLan(s));window.ECAPI.on('output:state',s=>renderOutputState(s));window.ECAPI.on('profile:changed',async()=>{lastMonitorUrl='';monitorReady=false;monitorAttemptAt=0;try{if(window.ECAPI.outputLanEnsure)renderLan(await window.ECAPI.outputLanEnsure());}catch{}refreshLan();});
-  pollTimer=setInterval(()=>{if(!document.hidden)refreshLan();},2500);
+  const startMonitorRuntime=()=>{ensureMonitorFrame();refreshLan();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden)refreshLan();},2500);};
+  if(document.readyState==='complete')setTimeout(startMonitorRuntime,0);else window.addEventListener('load',()=>setTimeout(startMonitorRuntime,0),{once:true});
   window.addEventListener('beforeunload',()=>clearInterval(pollTimer),{once:true});
 })();
