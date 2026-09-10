@@ -73,10 +73,17 @@ const source=fs.readFileSync(path.join(__dirname,'../src/services/automation0325
 assert(source.includes("exclusiveContentModeRequested:s?.automation?.openExclusiveArticles===true?'full':'public-preview'"));
 assert(source.includes("holder.exclusiveContentModeRequested==='full'"));
 assert(source.includes("result:{...result,ttsScript:locution.text,exclusiveContentMode:holder.exclusiveContentMode}"));
-assert(source.includes('sched=this.processingSchedulerState(s)'),'El productor debe usar la cadencia proyectada');
-assert(source.includes('exclusiveOnly:true'),'Cuando toca exclusiva debe intentarla primero');
-assert(source.includes('publicFallback'),'Si no existe una exclusiva elegible, la preparación debe continuar con una noticia pública en cualquier perfil');
-assert(!source.includes('Turno de exclusiva pendiente · esperando una exclusiva elegible'),'La ausencia de exclusiva no debe dejar al productor bloqueado');
+assert(source.includes('sched=this.processingSchedulerState(s)'),'El motor base debe conservar la cadencia proyectada');
+
+// Lab.28 corrige la regresión desde una capa compartida, sin ramas por nombre de perfil.
+const stab=fs.readFileSync(path.join(__dirname,'../src/services/releaseV2Stabilization.js'),'utf8');
+assert(stab.includes('p.producer=async function'),'Lab.28 debe reemplazar el productor compartido, no parchear un perfil concreto');
+assert(stab.includes('exclusiveOnly:true'),'Cuando toca exclusiva debe intentarla primero');
+assert(stab.includes('publicOnly:true'),'Debe existir un camino explícito de noticias públicas');
+assert(stab.includes('publicFallback'),'Si no existe una exclusiva elegible, la preparación debe continuar con una noticia pública en cualquier perfil');
+assert(stab.includes('continuando con noticia pública para no detener la reserva'),'El operador debe ver que se hizo fallback sin bloquear la reserva');
+assert(!/\bEC\b.*producer|\bGestión\b.*producer/i.test(stab),'La corrección no debe depender del nombre EC o Gestión');
+assert(!stab.includes('Turno de exclusiva pendiente · esperando una exclusiva elegible'),'La ausencia de exclusiva no debe dejar al productor bloqueado');
 
 const ui=fs.readFileSync(path.join(__dirname,'../src/renderer-final-0324.js'),'utf8');
 assert(ui.includes("#tab-auto .auto-cols > div:first-child"),'Frecuencia debe estar en Automático');
