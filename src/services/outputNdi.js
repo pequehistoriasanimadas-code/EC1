@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('fs');
 const path=require('path');
+const crypto=require('crypto');
 const {spawn}=require('child_process');
 
 function safeJson(file,fallback){try{const v=JSON.parse(fs.readFileSync(file,'utf8'));return v&&typeof v==='object'?v:fallback;}catch{return fallback;}}
@@ -27,6 +28,24 @@ function runtimeCandidates(){
   return [...new Set(out)];
 }
 function findRuntime(){for(const p of runtimeCandidates())try{if(fs.existsSync(p))return p;}catch{}return'';}
+function bundledBridgePath(resourcesDir){return path.join(path.resolve(resourcesDir),'runtime','ndi','gec-ndi-bridge.exe');}
+function stableBridgePath(dataDir){
+  const LOCALAPPDATA=String(process.env.LOCALAPPDATA||'').trim();
+  const base=LOCALAPPDATA||path.join(path.dirname(path.resolve(dataDir||'.')),'LocalAppData');
+  return path.join(base,'EC Automatic News','Network','gec-ndi-bridge.exe');
+}
+function fileHash(file){const h=crypto.createHash('sha256');h.update(fs.readFileSync(file));return h.digest('hex');}
+function deployStableBridge({dataDir,resourcesDir,log}={}){
+  const bundled=bundledBridgePath(resourcesDir||'.'),stable=stableBridgePath(dataDir||'.');
+  if(process.platform!=='win32')return{ok:fs.existsSync(bundled),path:bundled,bundled,stable:false,error:fs.existsSync(bundled)?'':'Bridge NDI no incluido en este build.'};
+  if(!fs.existsSync(bundled))return{ok:false,path:bundled,bundled,stable:false,error:'Bridge NDI no incluido en este build.'};
+  try{
+    fs.mkdirSync(path.dirname(stable),{recursive:true});
+    const same=fs.existsSync(stable)&&fileHash(stable)===fileHash(bundled);
+    if(!same){const tmp=stable+'.tmp-'+process.pid+'-'+Date.now();fs.copyFileSync(bundled,tmp);try{fs.renameSync(tmp,stable);}catch{fs.copyFileSync(tmp,stable);try{fs.rmSync(tmp,{force:true});}catch{}}}
+    return{ok:true,path:stable,bundled,stable:true,error:''};
+  }catch(e){try{log?.('OUTPUT_NDI_STABLE_BRIDGE',e?.message||e);}catch{}return{ok:true,path:bundled,bundled,stable:false,error:'No se pudo preparar la ruta NDI estable; se usa el bridge incluido en este build.'};}
+}
 function packet(type,a,b,c,payload){
   const data=Buffer.isBuffer(payload)?payload:Buffer.from(payload||[]);
   const h=Buffer.allocUnsafe(28);h.write('GECN',0,4,'ascii');h.writeUInt32LE(1,4);h.writeUInt32LE(type>>>0,8);h.writeUInt32LE(a>>>0,12);h.writeUInt32LE(b>>>0,16);h.writeUInt32LE(c>>>0,20);h.writeUInt32LE(data.length>>>0,24);
@@ -36,14 +55,15 @@ class OutputNdi{
   constructor({dataDir,resourcesDir,log,onState}){
     this.dataDir=path.resolve(dataDir);this.resourcesDir=path.resolve(resourcesDir);this.log=log||(()=>{});this.onState=onState||(()=>{});
     this.configFile=path.join(this.dataDir,'global','output-ndi.json');
-    this.config=this.loadConfig();this.child=null;this.running=false;this.starting=false;this.stopping=false;this.error='';this.connections=0;this.runtimePath='';this.restartTimer=null;this.stderrBuf='';this.framesSent=0;this.audioPackets=0;this.droppedVideo=0;this.droppedAudio=0;this.lastFrameAt=0;this.lastAudioAt=0;
+    this.config=this.loadConfig();this.child=null;this.running=false;this.starting=false;this.stopping=false;this.error='';this.connections=0;this.runtimePath='';this.restartTimer=null;this.stderrBuf='';this.framesSent=0;this.audioPackets=0;this.droppedVideo=0;this.droppedAudio=0;this.lastFrameAt=0;this.lastAudioAt=0;this.activeBridgePath='';this.bridgeDeployError='';this.bridgeIsStable=false;
   }
   loadConfig(){const r=safeJson(this.configFile,{})||{};return{enabled:r.enabled===true,name:cleanName(r.name),fps:[15,25,30,50,60].includes(Number(r.fps))?Number(r.fps):30,audio:r.audio!==false};}
   saveConfig(){atomicJson(this.configFile,this.config);}
-  bridgePath(){return path.join(this.resourcesDir,'runtime','ndi','gec-ndi-bridge.exe');}
+  bridgePath(){if(this.activeBridgePath&&fs.existsSync(this.activeBridgePath))return this.activeBridgePath;const stable=stableBridgePath(this.dataDir);if(fs.existsSync(stable))return stable;return bundledBridgePath(this.resourcesDir);}
+  prepareBridge(){const r=deployStableBridge({dataDir:this.dataDir,resourcesDir:this.resourcesDir,log:this.log});this.activeBridgePath=r.path||bundledBridgePath(this.resourcesDir);this.bridgeDeployError=r.error||'';this.bridgeIsStable=r.stable===true;return r;}
   status(){
-    const runtime=findRuntime()||this.runtimePath;
-    return{enabled:this.config.enabled,name:this.config.name,fps:this.config.fps,audio:this.config.audio,running:this.running,starting:this.starting,bridgeAvailable:fs.existsSync(this.bridgePath()),runtimeDetected:!!runtime,runtimePath:runtime||'',connections:this.connections,error:this.error||'',framesSent:this.framesSent,audioPackets:this.audioPackets,droppedVideo:this.droppedVideo,droppedAudio:this.droppedAudio,lastFrameAt:this.lastFrameAt,lastAudioAt:this.lastAudioAt,mode:'ndi-high-bandwidth',resolution:'follow-output'};
+    const runtime=findRuntime()||this.runtimePath,bridge=this.bridgePath(),bundled=bundledBridgePath(this.resourcesDir);
+    return{enabled:this.config.enabled,name:this.config.name,fps:this.config.fps,audio:this.config.audio,running:this.running,starting:this.starting,bridgeAvailable:fs.existsSync(bridge)||fs.existsSync(bundled),bridgePath:bridge,bridgeStable:this.bridgeIsStable||bridge===stableBridgePath(this.dataDir),bridgeDeployError:this.bridgeDeployError||'',runtimeDetected:!!runtime,runtimePath:runtime||'',connections:this.connections,error:this.error||'',framesSent:this.framesSent,audioPackets:this.audioPackets,droppedVideo:this.droppedVideo,droppedAudio:this.droppedAudio,lastFrameAt:this.lastFrameAt,lastAudioAt:this.lastAudioAt,mode:'ndi-high-bandwidth',resolution:'follow-output'};
   }
   emit(){try{this.onState(this.status());}catch{}}
   parseLine(line){
@@ -63,7 +83,7 @@ class OutputNdi{
     if(!this.config.enabled){await this.stop(false);return this.status();}
     if(this.child&&this.running)return this.status();
     if(this.starting)return this.status();
-    const exe=this.bridgePath();if(!fs.existsSync(exe)){this.error='Bridge NDI no incluido en este build.';this.running=false;this.starting=false;this.emit();return this.status();}
+    const prep=this.prepareBridge(),exe=prep.path;if(!prep.ok||!exe||!fs.existsSync(exe)){this.error=prep.error||'Bridge NDI no incluido en este build.';this.running=false;this.starting=false;this.emit();return this.status();}
     this.stopping=false;this.starting=true;this.error='';this.connections=0;this.emit();
     let child;
     try{child=spawn(exe,['--name',this.config.name,'--fps',String(this.config.fps),'--audio',this.config.audio?'1':'0'],{windowsHide:true,stdio:['pipe','ignore','pipe'],env:{...process.env}});}
@@ -107,4 +127,4 @@ class OutputNdi{
     const ok=this.writePacket(packet(2,sampleRate,channels,samples,b),'audio');if(ok){this.audioPackets++;this.lastAudioAt=Date.now();}return ok;
   }
 }
-module.exports={OutputNdi,cleanName,runtimeCandidates,findRuntime,packet};
+module.exports={OutputNdi,cleanName,runtimeCandidates,findRuntime,packet,bundledBridgePath,stableBridgePath,deployStableBridge};
