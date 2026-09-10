@@ -42,6 +42,7 @@ assert(ui.includes('Promo de YouTube')&&ui.includes('ecYoutubePromoCtaTextLab28'
 assert(ui.includes("OPTIMIZADA ✓")&&ui.includes('SIN OPTIMIZAR'),'El badge de optimización debe reflejar el perfil activo');
 assert(ui.includes('SOLICITANDO')&&ui.includes('Esperando a Windows'),'Permisos de red deben mostrar feedback inmediato de UAC');
 assert(ui.includes('lab28-auto-compact'),'La pantalla Automático debe usar el layout compacto de estabilización');
+assert(/optObserver\.observe\(badge,\{childList:true,characterData:true,subtree:true\}\)/.test(ui),'El observer del badge no debe observar atributos que él mismo actualiza');
 const css=read('src/control-stabilization-lab28.css');
 assert(css.includes('lab28-auto-compact')&&css.includes('exclusive-frequency-row'),'El CSS Lab.28 debe reducir apilado vertical sin ocultar controles principales');
 
