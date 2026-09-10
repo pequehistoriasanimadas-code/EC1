@@ -18,7 +18,6 @@ static constexpr uint32_t fourcc(char a,char b,char c,char d){
     return (uint32_t)(uint8_t)a | ((uint32_t)(uint8_t)b<<8) | ((uint32_t)(uint8_t)c<<16) | ((uint32_t)(uint8_t)d<<24);
 }
 static constexpr uint32_t NDI_BGRA = fourcc('B','G','R','A');
-static constexpr uint32_t NDI_FLTP = fourcc('F','L','T','p');
 static constexpr int NDI_PROGRESSIVE = 1;
 
 struct NDIlib_send_create_t {
@@ -39,13 +38,12 @@ struct NDIlib_video_frame_v2_t {
     const char* p_metadata;
     int64_t timestamp;
 };
-struct NDIlib_audio_frame_v3_t {
+struct NDIlib_audio_frame_v2_t {
     int sample_rate;
     int no_channels;
     int no_samples;
     int64_t timecode;
-    uint32_t FourCC;
-    uint8_t* p_data;
+    float* p_data;
     int channel_stride_in_bytes;
     const char* p_metadata;
     int64_t timestamp;
@@ -56,8 +54,10 @@ using FnDestroy = void (__cdecl*)();
 using FnSendCreate = NDIlib_send_instance_t (__cdecl*)(const NDIlib_send_create_t*);
 using FnSendDestroy = void (__cdecl*)(NDIlib_send_instance_t);
 using FnSendVideo = void (__cdecl*)(NDIlib_send_instance_t,const NDIlib_video_frame_v2_t*);
-using FnSendAudio = void (__cdecl*)(NDIlib_send_instance_t,const NDIlib_audio_frame_v3_t*);
+using FnSendAudio = void (__cdecl*)(NDIlib_send_instance_t,const NDIlib_audio_frame_v2_t*);
 using FnConnections = int (__cdecl*)(NDIlib_send_instance_t,uint32_t);
+using FnLoadTable = const void* (__cdecl*)();
+
 
 static std::string jsonEscape(const std::string& in){
     std::string out; out.reserve(in.size()+16);
@@ -124,6 +124,8 @@ static std::vector<std::wstring> runtimeCandidates(){
     if(!pf.empty()){
         addCandidate(c,join(pf,L"NDI\\NDI 6 Runtime\\v6"));
         addCandidate(c,join(pf,L"NDI\\NDI 6 Runtime"));
+        addCandidate(c,join(pf,L"NDI\\NDI 6 Tools\\Runtime"));
+        addCandidate(c,join(pf,L"NDI\\NDI 5 Tools\\Runtime"));
         addCandidate(c,join(pf,L"NDI\\NDI 5 Runtime\\v5"));
         addCandidate(c,join(pf,L"NDI\\NDI 5 Runtime"));
         addCandidate(c,join(pf,L"NDI\\NDI Tools"));
@@ -147,6 +149,50 @@ static HMODULE loadNdi(std::wstring& loadedPath){
     return nullptr;
 }
 template<class T> static T sym(HMODULE h,const char* name){ return reinterpret_cast<T>(GetProcAddress(h,name)); }
+struct NdiFns {
+    FnInitialize initialize=nullptr;
+    FnDestroy destroy=nullptr;
+    FnSendCreate sendCreate=nullptr;
+    FnSendDestroy sendDestroy=nullptr;
+    FnSendVideo sendVideo=nullptr;
+    FnSendAudio sendAudio=nullptr;
+    FnConnections getConnections=nullptr;
+    std::string mode;
+};
+
+// NDI's documented OSS dynamic-loading ABI returns a table from NDIlib_v6_load/NDIlib_v5_load.
+// The indices below are the stable v5/v6 prefix positions for the sender calls used by GEC.
+static bool resolveNdiFns(HMODULE dll,NdiFns& out){
+    out.initialize=sym<FnInitialize>(dll,"NDIlib_initialize");
+    out.destroy=sym<FnDestroy>(dll,"NDIlib_destroy");
+    out.sendCreate=sym<FnSendCreate>(dll,"NDIlib_send_create");
+    out.sendDestroy=sym<FnSendDestroy>(dll,"NDIlib_send_destroy");
+    out.sendVideo=sym<FnSendVideo>(dll,"NDIlib_send_send_video_v2");
+    out.sendAudio=sym<FnSendAudio>(dll,"NDIlib_send_send_audio_v2");
+    out.getConnections=sym<FnConnections>(dll,"NDIlib_send_get_no_connections");
+    if(out.initialize&&out.destroy&&out.sendCreate&&out.sendDestroy&&out.sendVideo&&out.sendAudio){
+        out.mode="direct-exports";return true;
+    }
+    const char* loaders[]={"NDIlib_v6_3_load","NDIlib_v6_load","NDIlib_v5_load"};
+    for(const char* loaderName:loaders){
+        auto load=sym<FnLoadTable>(dll,loaderName);if(!load)continue;
+        const void* raw=load();if(!raw)continue;
+        auto slots=reinterpret_cast<void* const*>(raw);
+        NdiFns t{};
+        t.initialize=reinterpret_cast<FnInitialize>(slots[0]);
+        t.destroy=reinterpret_cast<FnDestroy>(slots[1]);
+        t.sendCreate=reinterpret_cast<FnSendCreate>(slots[8]);
+        t.sendDestroy=reinterpret_cast<FnSendDestroy>(slots[9]);
+        t.getConnections=reinterpret_cast<FnConnections>(slots[17]);
+        t.sendVideo=reinterpret_cast<FnSendVideo>(slots[50]);
+        t.sendAudio=reinterpret_cast<FnSendAudio>(slots[52]);
+        if(t.initialize&&t.destroy&&t.sendCreate&&t.sendDestroy&&t.sendVideo&&t.sendAudio){
+            t.mode=std::string("function-table:")+loaderName;out=t;return true;
+        }
+    }
+    return false;
+}
+
 
 #pragma pack(push,1)
 struct PacketHeader {
@@ -181,42 +227,36 @@ int wmain(int argc,wchar_t** argv){
         else if(argEq(argv[i],L"--audio")&&i+1<argc) audio=_wtoi(argv[++i])!=0;
     }
     if(selfTest){
-        const bool sizes=sizeof(NDIlib_video_frame_v2_t)>=64 && sizeof(NDIlib_audio_frame_v3_t)>=56 && sizeof(PacketHeader)==28;
-        std::printf("{\"ok\":%s,\"protocol\":1,\"videoStruct\":%zu,\"audioStruct\":%zu,\"packetHeader\":%zu}\n",sizes?"true":"false",sizeof(NDIlib_video_frame_v2_t),sizeof(NDIlib_audio_frame_v3_t),sizeof(PacketHeader));
+        const bool sizes=sizeof(NDIlib_video_frame_v2_t)>=64 && sizeof(NDIlib_audio_frame_v2_t)>=56 && sizeof(PacketHeader)==28;
+        std::printf("{\"ok\":%s,\"protocol\":1,\"videoStruct\":%zu,\"audioStruct\":%zu,\"packetHeader\":%zu}\n",sizes?"true":"false",sizeof(NDIlib_video_frame_v2_t),sizeof(NDIlib_audio_frame_v2_t),sizeof(PacketHeader));
         return sizes?0:2;
     }
     std::wstring dllPath; HMODULE dll=loadNdi(dllPath);
     if(!dll){ emit("error","NDI Runtime no encontrado. Instala NDI Tools/Runtime o define NDI_RUNTIME_DIR_V6.",10); return 10; }
-    auto initialize=sym<FnInitialize>(dll,"NDIlib_initialize");
-    auto destroy=sym<FnDestroy>(dll,"NDIlib_destroy");
-    auto sendCreate=sym<FnSendCreate>(dll,"NDIlib_send_create");
-    auto sendDestroy=sym<FnSendDestroy>(dll,"NDIlib_send_destroy");
-    auto sendVideo=sym<FnSendVideo>(dll,"NDIlib_send_send_video_v2");
-    auto sendAudio=sym<FnSendAudio>(dll,"NDIlib_send_send_audio_v3");
-    auto getConnections=sym<FnConnections>(dll,"NDIlib_send_get_no_connections");
-    if(!initialize||!destroy||!sendCreate||!sendDestroy||!sendVideo||!sendAudio){
-        emit("error","La biblioteca NDI encontrada no expone la API de envío requerida.",11,dllPath);
+    NdiFns api{};
+    if(!resolveNdiFns(dll,api)){
+        emit("error","La biblioteca NDI encontrada no expone una API dinámica compatible (v5/v6).",11,dllPath);
         FreeLibrary(dll); return 11;
     }
-    if(!initialize()){ emit("error","NDIlib_initialize falló.",12,dllPath); FreeLibrary(dll); return 12; }
+    if(!api.initialize()){ emit("error","NDI initialize falló.",12,dllPath); FreeLibrary(dll); return 12; }
     std::string name8=utf8(name);
     NDIlib_send_create_t create{}; create.p_ndi_name=name8.c_str(); create.p_groups=nullptr; create.clock_video=false; create.clock_audio=false;
-    NDIlib_send_instance_t sender=sendCreate(&create);
-    if(!sender){ emit("error","No se pudo crear el sender NDI.",13,dllPath); destroy(); FreeLibrary(dll); return 13; }
+    NDIlib_send_instance_t sender=api.sendCreate(&create);
+    if(!sender){ emit("error","No se pudo crear el sender NDI.",13,dllPath); api.destroy(); FreeLibrary(dll); return 13; }
 
     std::atomic<bool> running{true};
     std::thread monitor;
-    if(getConnections){
+    if(api.getConnections){
         monitor=std::thread([&](){
             int last=-999;
             while(running.load()){
-                int n=getConnections(sender,0);
+                int n=api.getConnections(sender,0);
                 if(n!=last){ emit("connections","",n); last=n; }
                 for(int i=0;i<10&&running.load();i++) std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         });
     }
-    emit("ready",name8,fps,dllPath);
+    emit("ready",name8+" · "+api.mode,fps,dllPath);
 
     HANDLE in=GetStdHandle(STD_INPUT_HANDLE);
     std::vector<uint8_t> payload;
@@ -236,20 +276,20 @@ int wmain(int argc,wchar_t** argv){
             f.picture_aspect_ratio=(float)w/(float)hh;f.frame_format_type=NDI_PROGRESSIVE;
             f.timecode=NDIlib_send_timecode_synthesize;f.p_data=payload.data();
             f.line_stride_in_bytes=(int)w*4;f.p_metadata=nullptr;f.timestamp=0;
-            sendVideo(sender,&f);
+            api.sendVideo(sender,&f);
         } else if(h.type==2 && audio){
             const uint32_t rate=h.a,channels=h.b,samples=h.c;
             const uint64_t expected=(uint64_t)channels*(uint64_t)samples*sizeof(float);
             if(rate<8000||rate>192000||channels<1||channels>8||samples<1||samples>8192||expected!=h.bytes) continue;
-            NDIlib_audio_frame_v3_t f{};
+            NDIlib_audio_frame_v2_t f{};
             f.sample_rate=(int)rate;f.no_channels=(int)channels;f.no_samples=(int)samples;
-            f.timecode=NDIlib_send_timecode_synthesize;f.FourCC=NDI_FLTP;f.p_data=payload.data();
+            f.timecode=NDIlib_send_timecode_synthesize;f.p_data=reinterpret_cast<float*>(payload.data());
             f.channel_stride_in_bytes=(int)samples*(int)sizeof(float);f.p_metadata=nullptr;f.timestamp=0;
-            sendAudio(sender,&f);
+            api.sendAudio(sender,&f);
         }
     }
     running.store(false); if(monitor.joinable()) monitor.join();
-    sendDestroy(sender); destroy(); FreeLibrary(dll);
+    api.sendDestroy(sender); api.destroy(); FreeLibrary(dll);
     emit("stopped","NDI bridge finalizado.");
     return 0;
 }
