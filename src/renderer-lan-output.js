@@ -2,7 +2,7 @@
 (function installLanOutputUi(){
   if(!window.ECAPI||!document.querySelector('#tab-auto')||!document.querySelector('#tab-emission')){setTimeout(installLanOutputUi,120);return;}
   if(window.__ecLanOutputUiInstalled)return;window.__ecLanOutputUiInstalled=true;
-  const q=s=>document.querySelector(s);let lanState=null,ndiState=null,networkPermissionState=null,networkPermissionBusy=false,lastFormat='16:9',pollTimer=null,monitorReady=false,monitorBusy=false,monitorAudioEnabled=false,lastLanPollAt=0;
+  const q=s=>document.querySelector(s);const MONITOR_FPS=15,MONITOR_FRAME_MS=Math.round(1000/MONITOR_FPS);let lanState=null,ndiState=null,networkPermissionState=null,networkPermissionBusy=false,lastFormat='16:9',pollTimer=null,monitorReady=false,monitorBusy=false,monitorAudioEnabled=false,lastLanPollAt=0;
 
   function injectMonitor(){
     const grid=q('#tab-auto .auto-cols'),queue=grid?.querySelector('.queue-card');if(!grid||!queue||q('#ecLanMonitorCard'))return;
@@ -36,17 +36,19 @@
     if(ndi){ndi.textContent=st.supported===false?'No disponible':permissionLabel(st.ndiConfigured===true);ndi.className=st.ndiConfigured===true?'is-ok':'is-pending';}
     if(lan){lan.textContent=st.supported===false?'No disponible':permissionLabel(st.lanConfigured===true);lan.className=st.lanConfigured===true?'is-ok':'is-pending';}
     if(pill){
-      if(st.configured===true){pill.textContent='PERMITIDO';pill.className='status-pill live';}
-      else if(st.policyManaged){pill.textContent='POLÍTICA';pill.className='status-pill error';}
+      if(networkPermissionBusy){pill.textContent='SOLICITANDO';pill.className='status-pill ok';}
+      else if(st.configured===true){pill.textContent='PERMITIDO';pill.className='status-pill live';}
+      else if(st.policyManaged||st.elevationState==='policy-blocked'){pill.textContent='POLÍTICA';pill.className='status-pill error';}
       else if(st.supported===false){pill.textContent='NO DISPONIBLE';pill.className='status-pill neutral';}
       else if(st.error&&!st.cancelled){pill.textContent='REVISAR';pill.className='status-pill error';}
       else{pill.textContent='PENDIENTE';pill.className='status-pill ok';}
     }
-    if(btn){btn.disabled=networkPermissionBusy||st.supported===false||st.configured===true;btn.textContent=st.configured===true?'Permisos configurados ✓':'Configurar permisos de red';}
+    if(btn){btn.disabled=networkPermissionBusy||st.supported===false||st.configured===true;btn.textContent=networkPermissionBusy?'Esperando a Windows…':st.configured===true?'Permisos configurados ✓':'Configurar permisos de red';}
     if(info){
-      if(st.configured===true)info.textContent=`NDI y Output LAN (TCP ${st.lanPort||8787}) están autorizados para la red local en perfiles Dominio/Privado.`;
+      if(networkPermissionBusy)info.textContent='Solicitando autorización de administrador a Windows…';
+      else if(st.configured===true)info.textContent=`NDI y Output LAN (TCP ${st.lanPort||8787}) están autorizados para la red local en perfiles Dominio/Privado.`;
       else if(st.cancelled)info.textContent='Autorización cancelada. GEC continúa funcionando; las salidas locales no se ven afectadas.';
-      else if(st.policyManaged)info.textContent=st.error||'La política de seguridad de la organización no permitió activar estas reglas. Solicita autorización a Sistemas.';
+      else if(st.policyManaged||st.elevationState==='policy-blocked')info.textContent=st.error||'Windows bloqueó la elevación por una política de seguridad. Solicita autorización a Sistemas.';
       else if(st.error)info.textContent=st.error;
       else if(st.supported===false)info.textContent=st.message||'La configuración automática de firewall está disponible en Windows.';
       else info.textContent='Pulsa una sola vez para autorizar NDI y Output LAN. La ventana segura de Windows gestiona la autorización; GEC no recibe las credenciales.';
@@ -60,12 +62,12 @@
 
   async function configureNetworkPermissions(){
     if(networkPermissionBusy||!window.ECAPI.configureOutputNetworkPermissions)return;
-    networkPermissionBusy=true;const btn=q('#ecNetworkPermissionsConfigure'),info=q('#ecNetworkPermissionsInfo');if(btn)btn.disabled=true;if(info)info.textContent='Esperando autorización de Windows…';
+    networkPermissionBusy=true;const btn=q('#ecNetworkPermissionsConfigure'),info=q('#ecNetworkPermissionsInfo'),pill=q('#ecNetworkPermissionsState');if(btn){btn.disabled=true;btn.textContent='Esperando a Windows…';}if(pill){pill.textContent='SOLICITANDO';pill.className='status-pill ok';}if(info)info.textContent='Solicitando autorización de administrador a Windows…';
     try{
       const r=await window.ECAPI.configureOutputNetworkPermissions();renderNetworkPermissions(r);
-      if(typeof status==='function')status(r?.configured?'Permisos de red configurados ✓':r?.cancelled?'Autorización de red cancelada.':`Permisos de red: ${r?.error||'pendientes'}`);
+      if(typeof status==='function')status(r?.configured?'Permisos de red configurados ✓':r?.cancelled?'Autorización de red cancelada.':r?.policyManaged?'Windows bloqueó los permisos por política del equipo.':`Permisos de red: ${r?.error||'pendientes'}`);
     }catch(e){renderNetworkPermissions({...(networkPermissionState||{}),supported:true,configured:false,error:e.message||String(e)});if(typeof status==='function')status(`Permisos de red: ${e.message||e}`);}
-    finally{networkPermissionBusy=false;if(btn)btn.disabled=networkPermissionState?.configured===true;}
+    finally{networkPermissionBusy=false;if(networkPermissionState)renderNetworkPermissions(networkPermissionState);else if(btn){btn.disabled=false;btn.textContent='Configurar permisos de red';}}
   }
 
   function injectLanSettings(){
@@ -188,7 +190,7 @@
 
   injectMonitor();injectNetworkPermissionsSettings();injectLanSettings();injectNdiSettings();installOutputButtonGuard();window.ECAPI.outputStatus().then(renderOutputState).catch(()=>{});refreshNetworkPermissions();refreshNdi();
   window.ECAPI.on('output:lanState',s=>renderLan(s));window.ECAPI.on('output:ndiState',s=>renderNdi(s));window.ECAPI.on('output:state',s=>renderOutputState(s));window.ECAPI.on('profile:changed',async()=>{monitorReady=false;const img=q('#ecMonitorImage');if(img){img.removeAttribute('src');img.classList.add('hidden');}try{if(window.ECAPI.outputLanEnsure)renderLan(await window.ECAPI.outputLanEnsure());}catch{}refreshLan();refreshNdi();refreshNetworkPermissions();refreshMonitor();});
-  const startMonitorRuntime=()=>{refreshMonitor();refreshLan();refreshNdi();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden){refreshMonitor();const now=Date.now();if(now-lastLanPollAt>2400){lastLanPollAt=now;refreshLan();refreshNdi();}}},900);};
+  const startMonitorRuntime=()=>{refreshMonitor();refreshLan();refreshNdi();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden){refreshMonitor();const now=Date.now();if(now-lastLanPollAt>2400){lastLanPollAt=now;refreshLan();refreshNdi();}}},MONITOR_FRAME_MS);};
   if(document.readyState==='complete')setTimeout(startMonitorRuntime,0);else window.addEventListener('load',()=>setTimeout(startMonitorRuntime,0),{once:true});
   window.addEventListener('beforeunload',()=>clearInterval(pollTimer),{once:true});
 })();
