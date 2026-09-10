@@ -87,7 +87,7 @@ class OutputNdi{
     if(!this.config.enabled)await this.stop(false);else if(restart){await this.stop(false);await this.start();}else if(!this.running)await this.start();
     this.emit();return this.status();
   }
-  canAcceptVideo(){return!!(this.running&&this.child&&this.child.stdin&&!this.child.stdin.destroyed&&this.child.stdin.writableLength<10*1024*1024);}
+  canAcceptVideo(){return!!(this.running&&this.connections>0&&this.child&&this.child.stdin&&!this.child.stdin.destroyed&&this.child.stdin.writableLength<10*1024*1024);}
   writePacket(p,kind){
     const stdin=this.child&&this.child.stdin;if(!this.running||!stdin||stdin.destroyed)return false;
     const limit=kind==='video'?10*1024*1024:32*1024*1024;
@@ -100,7 +100,7 @@ class OutputNdi{
     const ok=this.writePacket(packet(1,width,height,this.config.fps,b),'video');if(ok){this.framesSent++;this.lastFrameAt=Date.now();}return ok;
   }
   sendAudio(data,sampleRate,channels,samples){
-    if(!this.config.audio||!this.running)return false;
+    if(!this.config.audio||!this.running||this.connections<1)return false;
     const b=Buffer.isBuffer(data)?data:Buffer.from(data);if(b.length!==channels*samples*4){this.droppedAudio++;return false;}
     const ok=this.writePacket(packet(2,sampleRate,channels,samples,b),'audio');if(ok){this.audioPackets++;this.lastAudioAt=Date.now();}return ok;
   }
