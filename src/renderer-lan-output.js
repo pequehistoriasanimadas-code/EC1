@@ -2,7 +2,7 @@
 (function installLanOutputUi(){
   if(!window.ECAPI||!document.querySelector('#tab-auto')||!document.querySelector('#tab-emission')){setTimeout(installLanOutputUi,120);return;}
   if(window.__ecLanOutputUiInstalled)return;window.__ecLanOutputUiInstalled=true;
-  const q=s=>document.querySelector(s);let lanState=null,lastMonitorUrl='',lastFormat='16:9',pollTimer=null,monitorReady=false,monitorAttemptAt=0,monitorRecoveryAt=0;
+  const q=s=>document.querySelector(s);let lanState=null,ndiState=null,lastMonitorUrl='',lastFormat='16:9',pollTimer=null,monitorReady=false,monitorAttemptAt=0,monitorRecoveryAt=0;
 
   function injectMonitor(){
     const grid=q('#tab-auto .auto-cols'),queue=grid?.querySelector('.queue-card');if(!grid||!queue||q('#ecLanMonitorCard'))return;
@@ -35,6 +35,65 @@
     left.appendChild(card);
     q('#ecLanApply').onclick=applyLan;q('#ecLanEnabled').onchange=()=>applyLan();q('#ecLanCopy').onclick=copyLanUrl;
   }
+
+  function injectNdiSettings(){
+    const left=q('#tab-emission .cols > div:first-child');if(!left||q('#ecNdiOutputCard'))return;
+    const card=document.createElement('div');card.id='ecNdiOutputCard';card.className='card top-gap ec-ndi-output-card';card.innerHTML=`
+      <div class="section-head"><div><h3>Salida NDI®</h3><p class="note">Publica la misma señal del Output como fuente NDI High Bandwidth para OBS, vMix u otros equipos de producción de la red.</p></div><span id="ecNdiState" class="status-pill neutral">DESACTIVADO</span></div>
+      <label class="switch-row"><span><b>Activar salida NDI</b><small>Funciona en segundo plano y no reemplaza el Output local ni el Output LAN.</small></span><input id="ecNdiEnabled" type="checkbox"><span class="switch-ui"></span></label>
+      <div class="form-grid two">
+        <label>Nombre de la fuente<input id="ecNdiName" type="text" maxlength="180" value="GEC Automatic News - OUTPUT"></label>
+        <label>FPS<select id="ecNdiFps"><option value="15">15</option><option value="25">25</option><option value="30" selected>30</option><option value="50">50</option><option value="60">60</option></select></label>
+      </div>
+      <label class="switch-row compact-row"><span><b>Enviar audio</b><small>Mezcla la voz, música, videos, contenidos y anuncios del Output.</small></span><input id="ecNdiAudio" type="checkbox" checked><span class="switch-ui"></span></label>
+      <div class="form-grid two">
+        <label>Receptores NDI conectados<input id="ecNdiClients" type="text" value="0" readonly></label>
+        <label>Formato<input id="ecNdiFormat" type="text" value="Sigue al Output · 16:9 / 9:16" readonly></label>
+      </div>
+      <div class="buttons"><button id="ecNdiApply">Aplicar NDI</button></div>
+      <p id="ecNdiInfo" class="note">NDI está desactivado. Al activarlo, la fuente aparecerá en los receptores NDI de la red.</p>
+      <p class="ec-ndi-attribution">NDI® is a registered trademark of Vizrt NDI AB. <button id="ecNdiWebsite" class="link-button" type="button">ndi.video</button></p>`;
+    left.appendChild(card);
+    q('#ecNdiApply').onclick=applyNdi;
+    q('#ecNdiEnabled').onchange=()=>applyNdi();
+    q('#ecNdiWebsite').onclick=()=>window.ECAPI.openNdiWebsite?.().catch(()=>{});
+  }
+
+  async function applyNdi(){
+    const enabled=!!q('#ecNdiEnabled')?.checked,name=String(q('#ecNdiName')?.value||'GEC Automatic News - OUTPUT').trim(),fps=Number(q('#ecNdiFps')?.value)||30,audio=!!q('#ecNdiAudio')?.checked,btn=q('#ecNdiApply');
+    if(btn)btn.disabled=true;
+    try{
+      ndiState=await window.ECAPI.outputNdiConfigure({enabled,name,fps,audio});
+      renderNdi(ndiState);
+      if(typeof status==='function')status(ndiState.error?`NDI: ${ndiState.error}`:(ndiState.running?`NDI activo · ${ndiState.name}`:'NDI desactivado.'));
+    }catch(e){if(typeof status==='function')status(`NDI: ${e.message||e}`);}
+    finally{if(btn)btn.disabled=false;}
+  }
+
+  function renderNdi(st){
+    if(!st)return;ndiState=st;
+    const enabled=q('#ecNdiEnabled'),name=q('#ecNdiName'),fps=q('#ecNdiFps'),audio=q('#ecNdiAudio'),clients=q('#ecNdiClients'),pill=q('#ecNdiState'),info=q('#ecNdiInfo');
+    if(enabled&&document.activeElement!==enabled)enabled.checked=!!st.enabled;
+    if(name&&document.activeElement!==name)name.value=st.name||'GEC Automatic News - OUTPUT';
+    if(fps&&document.activeElement!==fps)fps.value=String(st.fps||30);
+    if(audio&&document.activeElement!==audio)audio.checked=st.audio!==false;
+    if(clients)clients.value=String(Number(st.connections)||0);
+    if(pill){
+      if(st.error){pill.textContent='ERROR';pill.className='status-pill error';}
+      else if(st.running){pill.textContent='NDI ACTIVO';pill.className='status-pill live';}
+      else if(st.starting){pill.textContent='INICIANDO';pill.className='status-pill ok';}
+      else{pill.textContent='DESACTIVADO';pill.className='status-pill neutral';}
+    }
+    if(info){
+      if(st.error)info.textContent=`${st.error} GEC, el Output local y la cola continúan funcionando.`;
+      else if(!st.bridgeAvailable)info.textContent='El bridge NDI no está incluido en este build. Reinstala una versión de GEC con soporte NDI.';
+      else if(st.enabled&&!st.runtimeDetected&&!st.running)info.textContent='NDI Runtime no detectado en esta computadora. Instala NDI Tools/Runtime o usa la instalación NDI existente del equipo.';
+      else if(st.running)info.textContent=`Fuente "${st.name}" · ${st.fps} fps · ${st.audio?'audio estéreo 48 kHz':'sin audio'} · ${Number(st.connections)||0} receptor${Number(st.connections)===1?'':'es'} conectado${Number(st.connections)===1?'':'s'}.`;
+      else info.textContent='NDI está desactivado. Al activarlo, la fuente aparecerá en los receptores NDI de la red.';
+    }
+  }
+
+  async function refreshNdi(){try{renderNdi(await window.ECAPI.outputNdiStatus());}catch{}}
 
   async function copyLanUrl(){
     const value=q('#ecLanUrl')?.value||'';if(!value)return;
@@ -71,9 +130,9 @@
     const btn=q('#openOutput');if(!btn||btn.dataset.ecLanGuard)return;btn.dataset.ecLanGuard='1';btn.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const s=await window.ECAPI.outputStatus();if(s?.visible){const r=await window.ECAPI.closeOutput();renderOutputState(r.state||await window.ECAPI.outputStatus());if(typeof status==='function')status('Ventana Output oculta. La emisión, el monitor y LAN continúan.');}else{const r=await window.ECAPI.openOutput();renderOutputState(r.state||await window.ECAPI.outputStatus());if(typeof status==='function')status('Ventana Output visible.');}}catch(err){if(typeof status==='function')status(`Output: ${err.message||err}`);}},true);
   }
 
-  injectMonitor();injectLanSettings();installOutputButtonGuard();window.ECAPI.outputStatus().then(renderOutputState).catch(()=>{});
-  window.ECAPI.on('output:lanState',s=>renderLan(s));window.ECAPI.on('output:state',s=>renderOutputState(s));window.ECAPI.on('profile:changed',async()=>{lastMonitorUrl='';monitorReady=false;monitorAttemptAt=0;try{if(window.ECAPI.outputLanEnsure)renderLan(await window.ECAPI.outputLanEnsure());}catch{}refreshLan();});
-  const startMonitorRuntime=()=>{ensureMonitorFrame();refreshLan();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden)refreshLan();},2500);};
+  injectMonitor();injectLanSettings();injectNdiSettings();installOutputButtonGuard();window.ECAPI.outputStatus().then(renderOutputState).catch(()=>{});refreshNdi();
+  window.ECAPI.on('output:lanState',s=>renderLan(s));window.ECAPI.on('output:ndiState',s=>renderNdi(s));window.ECAPI.on('output:state',s=>renderOutputState(s));window.ECAPI.on('profile:changed',async()=>{lastMonitorUrl='';monitorReady=false;monitorAttemptAt=0;try{if(window.ECAPI.outputLanEnsure)renderLan(await window.ECAPI.outputLanEnsure());}catch{}refreshLan();refreshNdi();});
+  const startMonitorRuntime=()=>{ensureMonitorFrame();refreshLan();refreshNdi();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden){refreshLan();refreshNdi();}},2500);};
   if(document.readyState==='complete')setTimeout(startMonitorRuntime,0);else window.addEventListener('load',()=>setTimeout(startMonitorRuntime,0),{once:true});
   window.addEventListener('beforeunload',()=>clearInterval(pollTimer),{once:true});
 })();
