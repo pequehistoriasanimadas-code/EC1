@@ -52,6 +52,6 @@ assert(rel32.includes("sourceType:'content'")&&rel32.includes("sourceType:'ad'")
 
 // 8. Output local/LAN: ocultar no mata la emisión y servidor LAN sigue expuesto a la red cuando está activo.
 assert(main.includes("outputWindow.on('close',e=>{if(!controlledShutdown()){e.preventDefault();outputWindow.hide()"),'cerrar Output debe ocultar, no destruir durante operación');
-assert(lanServer.includes("host:'0.0.0.0'")||lanServer.includes("listen(port,'0.0.0.0'")||lanServer.includes("listen(this.actualPort,'0.0.0.0'"),'Output LAN debe escuchar en todas las interfaces');
+assert(lanServer.includes("this.config.enabled?'0.0.0.0':'127.0.0.1'")&&lanServer.includes('server.listen(port,host'),'Output LAN debe escuchar en 0.0.0.0 cuando LAN está activo');
 
 console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor · optimization · content/ad · LAN');
