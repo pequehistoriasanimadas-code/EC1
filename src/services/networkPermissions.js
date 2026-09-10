@@ -25,6 +25,14 @@ function parseStatus(text){
   for(let i=rows.length-1;i>=0;i--)try{const value=JSON.parse(rows[i]);if(value&&typeof value==='object')return value;}catch{}
   return null;
 }
+function classifyElevationFailure(result={}){
+  const code=Number(result.code),text=String(result.stderr||result.stdout||'').trim(),low=text.toLowerCase();
+  if(code===1223||/cancel(?:led|ed|ar|ado|ada)|operaci[oó]n.*cancel/.test(low))return{kind:'cancelled',code,text};
+  if(code===740||code===5||/group policy|directiva|pol[ií]tica|administrator|administrador|elevation|elevaci[oó]n|privilege|privilegio|access is denied|acceso denegado|blocked|bloquead/.test(low))return{kind:'policy-blocked',code,text};
+  if(result.timeout)return{kind:'timeout',code,text};
+  if(result.spawnError)return{kind:'spawn-error',code,text};
+  return{kind:result.ok?'ok':'failed',code,text};
+}
 class NetworkPermissions{
   constructor({dataDir,resourcesDir,log}={}){
     this.dataDir=path.resolve(dataDir||'.');this.resourcesDir=path.resolve(resourcesDir||'.');this.log=log||(()=>{});
@@ -47,16 +55,21 @@ class NetworkPermissions{
     if(before.bridgeStable!==true)return before;
     const helper=this.helperPath(),bridge=before.bridgePath||stableBridgePath(this.dataDir);
     if(!fs.existsSync(helper))return before;
-    const script=`$ErrorActionPreference='Stop'; try { $b=$env:GEC_NETWORK_BRIDGE.Replace('"',''); $a='--configure --bridge="'+$b+'" --lan-port='+$env:GEC_NETWORK_PORT; $p=Start-Process -FilePath $env:GEC_NETWORK_HELPER -ArgumentList $a -Verb RunAs -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop; exit $p.ExitCode } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1223 }`;
+    const script=`$ErrorActionPreference='Stop'; try { $b=$env:GEC_NETWORK_BRIDGE.Replace('"',''); $a='--configure --bridge="'+$b+'" --lan-port='+$env:GEC_NETWORK_PORT; $p=Start-Process -FilePath $env:GEC_NETWORK_HELPER -ArgumentList $a -Verb RunAs -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop; exit $p.ExitCode } catch { $m=$_.Exception.Message; [Console]::Error.WriteLine($m); if($m -match 'cancel|cancelad') { exit 1223 }; exit 5 }`;
     const env={...process.env,GEC_NETWORK_HELPER:helper,GEC_NETWORK_BRIDGE:bridge,GEC_NETWORK_PORT:String(port)};
     let elevated;
     try{elevated=await runHidden('powershell.exe',['-NoProfile','-NonInteractive','-WindowStyle','Hidden','-Command',script],{env,timeoutMs:300000});}
     catch(e){elevated={ok:false,code:-1,stderr:String(e?.message||e)};}
-    if(elevated.code===1223||/cancel|cancell|cancelad/i.test(String(elevated.stderr||'')))return{...before,ok:false,cancelled:true,error:'La autorización de Windows fue cancelada. GEC continúa funcionando normalmente.'};
+    const failure=classifyElevationFailure(elevated);
+    if(failure.kind==='cancelled')return{...before,ok:false,cancelled:true,elevationState:'cancelled',error:'La autorización de Windows fue cancelada. GEC continúa funcionando normalmente.'};
     const after=await this.status(port);
-    if(after.configured===true)return{...after,ok:true,configured:true,changed:true};
-    if(!elevated.ok)return{...after,ok:false,policyManaged:true,error:'Windows no pudo aplicar los permisos de red. La configuración puede estar administrada por tu organización; solicita autorización a Sistemas.'};
-    return{...after,ok:false,policyManaged:true,error:after.error||'Windows finalizó la configuración, pero las reglas de red no quedaron activas. La política de la organización puede estar reemplazándolas.'};
+    if(after.configured===true)return{...after,ok:true,configured:true,changed:true,elevationState:'configured'};
+    if(!elevated.ok){
+      if(failure.kind==='policy-blocked')return{...after,ok:false,policyManaged:true,elevationState:'policy-blocked',error:'Windows bloqueó la solicitud de administrador o no permite modificar estas reglas. La configuración puede estar administrada por tu organización; solicita autorización a Sistemas.'};
+      if(failure.kind==='timeout')return{...after,ok:false,elevationState:'timeout',error:'Windows no respondió a la solicitud de permisos dentro del tiempo esperado.'};
+      const detail=failure.text?` · ${failure.text}`:'';return{...after,ok:false,elevationState:'failed',error:`Windows no pudo completar la solicitud de permisos${detail}`};
+    }
+    return{...after,ok:false,policyManaged:true,elevationState:'policy-blocked',error:after.error||'Windows finalizó la configuración, pero las reglas de red no quedaron activas. Una política de la organización puede estar reemplazándolas.'};
   }
 }
-module.exports={NetworkPermissions,clampPort,runHidden,parseStatus};
+module.exports={NetworkPermissions,clampPort,runHidden,parseStatus,classifyElevationFailure};
