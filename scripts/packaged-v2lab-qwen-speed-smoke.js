@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
+  assert.strictEqual(pkg.version,'2.0.0-lab.26');
   const {TTSLabRuntime,CACHE_REVISION}=require(path.join(appRoot,'src','services','ttsLabRuntime.js'));
   const rt=Object.create(TTSLabRuntime.prototype);
   rt.qwenCapabilities=async()=>({flash_attention_2:false,sdpa:true,fp16:true,bf16:true,gpu_name:'RTX TEST',gpu_vram_mb:12288});
@@ -62,8 +62,8 @@ app.whenReady().then(async()=>{try{
   const ui=fs.readFileSync(path.join(appRoot,'src','renderer-0321.js'),'utf8');
   const v2=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8');
   for(const token of ['QWEN_PERF_REVISION = 4','predictorHiddenStates','subtalkerTopK','batchSize','generate_qwen_finetuned_batch','kwargs["output_hidden_states"] = False','code_predictor_ms_per_step'])assert(worker.includes(token),`Qwen lab.23 worker missing ${token}`);
-  for(const token of ['QWEN3-TTS LAB.23 · SAMPLING (N=5)','QWEN3-TTS LAB.23 · BATCHING (N=2 + perfil)','DIAGNÓSTICO GANADOR LAB.23','batchEffectiveRealtimeFactor',"version:'2.0-lab.24'"])assert(ui.includes(token),`Unified optimizer lab.23 UI missing ${token}`);
-  assert(v2.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab24'"),'Renderer lab.23 marker missing');
+  for(const token of ['QWEN3-TTS LAB.23 · SAMPLING (N=5)','QWEN3-TTS LAB.23 · BATCHING (N=2 + perfil)','DIAGNÓSTICO GANADOR LAB.23','batchEffectiveRealtimeFactor',"version:'2.0-lab.25'"])assert(ui.includes(token),`Unified optimizer lab.23 UI missing ${token}`);
+  assert(v2.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab25'"),'Renderer lab.23 marker missing');
   console.log('PACKAGED V2 QWEN SPEED lab.23 OK · sampling · hidden OFF · predictor top-k · B1/B2/B4/B8 · VRAM guard');
   app.exit(0);
 }catch(e){console.error(e.stack||e);app.exit(1);}});

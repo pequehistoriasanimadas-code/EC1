@@ -19,8 +19,8 @@ function writePcm16Wav(file,{seconds=20,sampleRate=16000,amp=.18}={}){
 
 (async()=>{
   const pkg=JSON.parse(read('package.json')),ui=read('src/renderer-v2lab.js'),worker=read('src/tts_lab_worker.py'),routing=read('src/services/releaseV2Lab.js'),prod=read('src/services/releaseV2ProductionFidelity.js'),automation=read('src/services/automation0325.js');
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.24');
+  assert.strictEqual(pkg.version,'2.0.0-lab.26');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.25');
 
   assert(!ui.includes('id="v2ReadingSpeed"')&&!ui.includes('Velocidad de lectura'),'Lab.16 no debe mostrar velocidad de lectura');
   assert(ui.includes('Consistencia de voz: Automática ✓'),'La UI debe explicar consistencia sin parámetros técnicos');

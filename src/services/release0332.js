@@ -166,10 +166,7 @@ function installRelease0332(){
     return projectFullQueue(this,s,baseDisplay.call(this,s)||[]);
   };
   const baseReset=p.resetSessionCounters;
-  p.resetSessionCounters=function(){
-    this.__ec0332PlanRegistry=new Map();this.__ec0332PlanContext='';
-    return baseReset.call(this);
-  };
+  p.resetSessionCounters=function(){return baseReset.call(this);};
 }
 
 module.exports={installRelease0332,projectFullQueue,managerSequence,normalizePositions,isNewsRow};

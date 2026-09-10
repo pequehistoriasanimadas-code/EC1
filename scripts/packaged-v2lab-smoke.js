@@ -6,7 +6,7 @@ app.whenReady().then(()=>{let tmp='';try{
   const required=['src/bootstrap-v2lab.js','src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','src/services/v2LabDataPath.js','src/services/releaseV2Lab.js','src/services/releaseV2Optimization.js','src/services/ttsLabRuntime.js','src/renderer-v2lab.js','src/control-v2lab.css','src/tts_lab_worker.py','scripts/check-v2lab.js','scripts/check-v2lab-data-path.js'];
   for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert(pkg.version==='2.0.0-lab.24','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.24');
+  assert(pkg.version==='2.0.0-lab.26','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.26');
   assert(pkg.main==='src/bootstrap-v2lab.js','Bootstrap V2 Lab no es entry point');
   assert(pkg.name==='ec-automatic-news','Identidad interna del paquete cambió');
   const boot=fs.readFileSync(path.join(appRoot,'src','bootstrap-v2lab.js'),'utf8'),pathGuard=fs.readFileSync(path.join(appRoot,'src','services','v2LabDataPath.js'),'utf8');
