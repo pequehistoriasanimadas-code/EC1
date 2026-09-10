@@ -28,20 +28,21 @@
   function enforceOptimizationBadge(){
     const badge=q('#ecOptimizeState0321');if(!badge||!optimizationState)return;
     const valid=optimizationState.compatible===true&&!!optimizationState.profile&&optimizationState.profileMatch?.ok!==false;
-    const text=valid?'OPTIMIZADA ✓':'SIN OPTIMIZAR';if(badge.textContent!==text)badge.textContent=text;
-    badge.dataset.lab28Resolved=valid?'valid':'invalid';
+    const text=valid?'OPTIMIZADA ✓':'SIN OPTIMIZAR',resolved=valid?'valid':'invalid';
+    if(badge.textContent!==text)badge.textContent=text;
+    if(badge.dataset.lab28Resolved!==resolved)badge.dataset.lab28Resolved=resolved;
     const profile=optimizationState.profile,root=q('#ecOptimizer0321');
-    if(root&&profile){const note=root.querySelector('.ec-opt-result .note, .ec-opt-grid p.note[data-profile-status]');if(note)note.dataset.profileScoped='true';}
+    if(root&&profile){const note=root.querySelector('.ec-opt-result .note, .ec-opt-grid p.note[data-profile-status]');if(note&&note.dataset.profileScoped!=='true')note.dataset.profileScoped='true';}
   }
   async function refreshOptimization(){if(optimizationBusy||typeof window.ECAPI.optimizationV2Status!=='function')return;optimizationBusy=true;try{optimizationState=await window.ECAPI.optimizationV2Status();enforceOptimizationBadge();}catch{}finally{optimizationBusy=false;}}
   const optObserver=new MutationObserver(()=>enforceOptimizationBadge());
-  function watchOptimization(){const badge=q('#ecOptimizeState0321');if(badge)optObserver.observe(badge,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['class']});refreshOptimization();}
+  function watchOptimization(){const badge=q('#ecOptimizeState0321');if(badge)optObserver.observe(badge,{childList:true,characterData:true,subtree:true});refreshOptimization();}
 
   function enhanceNetworkPermissionFeedback(){
     const button=q('#ecNetworkPermissionsConfigure');if(!button||button.dataset.lab28Feedback)return;button.dataset.lab28Feedback='1';
     button.addEventListener('click',()=>{
       const badge=q('#ecNetworkPermissionsState'),info=q('#ecNetworkPermissionsInfo');
-      if(badge){badge.textContent='SOLICITANDO';badge.className='mini-pill';}
+      if(badge){badge.textContent='SOLICITANDO';badge.className='status-pill ok';}
       if(info)info.textContent='Solicitando autorización de administrador a Windows… Si tu organización bloquea UAC, GEC mostrará el motivo al finalizar.';
       button.dataset.originalLabel=button.dataset.originalLabel||button.textContent;button.textContent='Esperando a Windows…';
       const restore=()=>{if(!button.disabled)button.textContent=button.dataset.originalLabel||'Configurar permisos de red';};setTimeout(restore,1200);setTimeout(restore,8000);
