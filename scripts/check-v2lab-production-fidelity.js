@@ -31,7 +31,7 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   const preload=read('src/preload.js');
   const bootstrap=read('src/bootstrap-v2lab.js');
 
-  assert.strictEqual(pkg.version,'2.0.0-lab.27');
+  assert.strictEqual(pkg.version,'2.0.0-lab.28');
   assert.strictEqual(PROFILE_VERSION,'2.0-lab.25');
   assert(service.includes('active-production-profile.json'),'Falta fuente única de verdad persistente');
   const localPolicy=read('src/services/version0320LocalPolicy.js');
