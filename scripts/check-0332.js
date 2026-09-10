@@ -52,7 +52,7 @@ const output0331=fs.readFileSync(path.join(__dirname,'..','src','output-0331.js'
 const policy0328=fs.readFileSync(path.join(__dirname,'..','src','services','version0328Policy.js'),'utf8');
 assert(output0331.includes("outputMode==='standby'"),'la recuperación de música debe quedar limitada al standby real');
 assert(output0331.includes("a==='skip'"),'Output debe reconocer Siguiente sin activar standby');
-assert(output0331.includes('block-standby-recovery'),'contenido/anuncio deben bloquear reintentos de música de standby');
+assert(output0331.includes("story-${nextMode}-music-stopped")&&output0331.includes("(outputMode==='content'||outputMode==='ad')"),'contenido/anuncio deben detener música y bloquear su recuperación');
 assert(policy0328.includes("this.controlOutput('skip')"),'Siguiente no debe usar stop porque stop activa el standby y su música');
 assert(policy0328.includes('__ec0328LastSkipKey')&&policy0328.includes('__ec0328LastSkipAt'),'Siguiente debe ignorar pulsaciones duplicadas sobre el mismo elemento');
 console.log('0.3.32 queue planner + stable renderer + safe skip audio checks OK');
