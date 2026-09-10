@@ -71,7 +71,7 @@ function createControlWindow(){
     uiReady=true;
     clearTimeout(slowTimer);
     logEvent('CONTROL_READY',`interfaz utilizable · intento=${loadAttempts}`);
-    logEvent('CONTROL_UI_READY','interfaz V2 lab.24 verificada antes de recursos secundarios');
+    logEvent('CONTROL_UI_READY','interfaz V2 lab.25 verificada antes de recursos secundarios');
     showControl();
     broadcastOutputState();
     if(automation)sendControl('automation:state',automation.getState());
@@ -83,7 +83,7 @@ function createControlWindow(){
     try{
       for(let i=0;i<80;i++){
         try{
-          const ok=await controlWindow.webContents.executeJavaScript("Boolean(document.querySelector('.layout')&&window.ECAPI&&window.__gecV2TtsLabUi===true&&window.__GEC_V2LAB_RENDERER_RESPONSIVE__==='lab24')",true);
+          const ok=await controlWindow.webContents.executeJavaScript("Boolean(document.querySelector('.layout')&&window.ECAPI&&window.__gecV2TtsLabUi===true&&window.__GEC_V2LAB_RENDERER_RESPONSIVE__==='lab25')",true);
           if(ok){publishUiReady();return;}
         }catch{}
         await new Promise(r=>setTimeout(r,250));
