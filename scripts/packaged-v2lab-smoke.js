@@ -3,14 +3,14 @@ const fs=require('fs'),path=require('path'),os=require('os');
 const {app}=require('electron');
 const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked','resources')),appRoot=path.join(resourcesDir,'app.asar'),assert=(v,m)=>{if(!v)throw new Error(m);};
 app.whenReady().then(()=>{let tmp='';try{
-  const required=['src/bootstrap-v2lab.js','src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','src/services/v2LabDataPath.js','src/services/releaseV2Lab.js','src/services/releaseV2Optimization.js','src/services/ttsLabRuntime.js','src/renderer-v2lab.js','src/control-v2lab.css','src/tts_lab_worker.py','scripts/check-v2lab.js','scripts/check-v2lab-data-path.js'];
+  const required=['src/bootstrap-v2lab.js','src/bootstrap-0332.js','src/services/release0332.js','src/renderer-0332.js','src/services/v2LabDataPath.js','src/services/releaseV2Lab.js','src/services/releaseV2Optimization.js','src/services/releaseV2Stabilization.js','src/renderer-stabilization-lab28.js','src/output-stabilization-lab28.js','src/services/ttsLabRuntime.js','src/renderer-v2lab.js','src/control-v2lab.css','src/tts_lab_worker.py','scripts/check-v2lab.js','scripts/check-v2lab-data-path.js','scripts/check-v2lab-stabilization-lab28.js'];
   for(const rel of required)assert(fs.existsSync(path.join(appRoot,rel)),`Falta en app.asar: ${rel}`);
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert(pkg.version==='2.0.0-lab.27','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.27');
+  assert(pkg.version==='2.0.0-lab.28','Versión empaquetada no es V2 TTS Lab 2.0.0-lab.28');
   assert(pkg.main==='src/bootstrap-v2lab.js','Bootstrap V2 Lab no es entry point');
   assert(pkg.name==='ec-automatic-news','Identidad interna del paquete cambió');
   const boot=fs.readFileSync(path.join(appRoot,'src','bootstrap-v2lab.js'),'utf8'),pathGuard=fs.readFileSync(path.join(appRoot,'src','services','v2LabDataPath.js'),'utf8');
-  assert(boot.includes('canonicalLabBase')&&boot.includes('GEC_V2_TTS_LAB_ROOT')&&boot.includes('recoverNestedLabData'),'Bootstrap empaquetado debe mantener una sola ruta V2 Lab tras app.relaunch');
+  assert(boot.includes('canonicalLabBase')&&boot.includes('GEC_V2_TTS_LAB_ROOT')&&boot.includes('recoverNestedLabData')&&boot.includes('releaseV2Stabilization'),'Bootstrap empaquetado debe mantener una sola ruta V2 Lab y cargar estabilización Lab.28');
   assert(pathGuard.includes('while(isLabDir(base)&&isLabDir(path.dirname(base)))')&&pathGuard.includes('recoverNestedLabData'),'Guard empaquetado debe colapsar rutas duplicadas y recuperar perfiles');
   const preload=fs.readFileSync(path.join(appRoot,'src','preload.js'),'utf8');
   assert(preload.indexOf('renderer-v2lab.js')>preload.indexOf('renderer-0332.js'),'V2 UI debe cargarse después de 0.3.32');
@@ -25,6 +25,6 @@ app.whenReady().then(()=>{let tmp='';try{
   const {normalizeProfileTts}=require(path.join(appRoot,'src','services','releaseV2Lab.js'));const profile=normalizeProfileTts({engine:'qwen3tts',style:'news',referenceVoiceId:'ref-test'});assert(profile.engine==='qwen3tts'&&profile.referenceVoiceId==='ref-test','Normalización de perfil TTS Lab falló');const cb=normalizeProfileTts({engine:'chatterbox',engineParams:{chatterbox:{}}});assert(cb.engineParams.chatterbox.variant==='latam','Chatterbox debe migrar por defecto al modelo LatAm');
   const r32=require(path.join(appRoot,'src','services','release0332.js'));assert(typeof r32.projectFullQueue==='function','Base 0.3.32 no expone planificador final');
   fs.rmSync(tmp,{recursive:true,force:true});
-  console.log('PACKAGED V2 TTS LAB lab.23 OK · LatAm · warm-up/cache versionada · watchdog · GPU coordinada · herencia 0.3.32 preservada');
+  console.log('PACKAGED V2 TTS LAB lab.28 OK · estabilización + LatAm · warm-up/cache versionada · watchdog · GPU coordinada · herencia 0.3.32 preservada');
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
