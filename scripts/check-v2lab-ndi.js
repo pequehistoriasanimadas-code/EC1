@@ -51,8 +51,10 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
   assert(html.includes('output-ndi-audio.js'),'Output local debe cargar el tap NDI en modo no-op y activarlo solo con ?ndi=1');
   assert(ui.includes('Salida NDI®')&&ui.includes('outputNdiConfigure')&&ui.includes('outputNdiStatus'),'La UI debe permitir activar y diagnosticar NDI');
   assert(ui.includes('NDI® is a registered trademark of Vizrt NDI AB')&&ui.includes('openNdiWebsite'),'La UI debe conservar atribución y enlace oficial NDI');
-  assert(cpp.includes('LoadLibraryExW')&&cpp.includes('Processing.NDI.Lib.x64.dll')&&cpp.includes('NDIlib_send_send_video_v2')&&cpp.includes('NDIlib_send_send_audio_v3'),'Bridge debe cargar el runtime instalado dinámicamente y enviar video/audio');
-  assert(cpp.includes('--self-test')&&cpp.includes('NDI_BGRA')&&cpp.includes('NDI_FLTP'),'Bridge debe incluir smoke autónomo y formatos High Bandwidth esperados');
+  assert(cpp.includes('LoadLibraryExW')&&cpp.includes('Processing.NDI.Lib.x64.dll')&&cpp.includes('NDIlib_send_send_video_v2')&&cpp.includes('NDIlib_send_send_audio_v2'),'Bridge debe cargar el runtime instalado dinámicamente y enviar video/audio');
+  assert(cpp.includes('NDIlib_v6_load')&&cpp.includes('NDIlib_v5_load')&&cpp.includes('slots[50]')&&cpp.includes('slots[52]'),'Bridge OSS debe usar el cargador dinámico documentado v5/v6 cuando no hay exports directos');
+  assert(cpp.includes('NDI 6 Tools\\\\Runtime'),'Bridge debe detectar la ruta actual de NDI 6 Tools Runtime');
+  assert(cpp.includes('--self-test')&&cpp.includes('NDI_BGRA')&&cpp.includes('NDIlib_audio_frame_v2_t'),'Bridge debe incluir smoke autónomo y formatos High Bandwidth esperados');
   assert(!main.includes('require(\'Processing.NDI.Lib.x64.dll\')'),'GEC no debe depender de una DLL NDI cargada dentro de Electron');
   const ndiService=read('src/services/outputNdi.js');assert(ndiService.includes('this.connections>0')&&ndiService.includes('this.connections<1'),'Transport NDI debe dormir cuando no hay receptor conectado');
 
