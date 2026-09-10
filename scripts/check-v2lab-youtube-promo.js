@@ -11,6 +11,11 @@ for(const file of [
   'src/output-youtube-promo.css'
 ])assert(fs.existsSync(file),`Falta ${file}`);
 
+const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+assert.strictEqual(pkg.version,'2.0.0-lab.27','La build debe identificarse como 2.0.0-lab.27');
+assert(pkg.scripts.check.includes('check-v2lab-youtube-promo.js'),'La suite principal debe ejecutar la prueba de Lab.27');
+assert((pkg.build.files||[]).includes('scripts/check-v2lab-youtube-promo.js'),'El paquete debe incluir la prueba Lab.27 para smoke/auditoría');
+
 const core=require('../src/services/youtubePromoLab27');
 for(const [url,id] of [
   ['https://www.youtube.com/watch?v=dQw4w9WgXcQ','dQw4w9WgXcQ'],
@@ -63,6 +68,8 @@ assert(!/transition[^;]*opacity[^;]*out/i.test(css),'No debe existir una animaci
 
 const web=fs.readFileSync('src/output-web.html','utf8');
 assert(web.includes('output-youtube-promo.css')&&web.includes('output-youtube-promo.js'),'Output LAN debe cargar la promo');
+const lan=fs.readFileSync('src/services/outputLanServer.js','utf8');
+assert(lan.includes("'output-youtube-promo.js'")&&lan.includes("'output-youtube-promo.css'"),'Output LAN debe servir los assets de promo Lab.27');
 const boot=fs.readFileSync('src/bootstrap-v2lab.js','utf8');
 assert(boot.includes('releaseV2YoutubePromo'),'Bootstrap debe instalar Lab.27');
 
