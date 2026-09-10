@@ -45,5 +45,7 @@ function req(url,opts={}){return new Promise((resolve,reject)=>{const u=new URL(
  assert(mode.includes("let muted=monitor"),'monitor audio must default to muted');
  assert(mode.includes("muted=!muted"),'monitor must allow local audio toggle');
  assert(out26.includes('p.startAtSec')&&outBase.includes('p.startAtSec'),'LAN reconnect must seek news and videos');
+ assert(main.includes('standbyVideoUrl:fileUrl(raw.standbyVideo)')&&main.includes('delete incomingOutput.standbyVideoUrl'),'standby URL debe recalcularse desde la ruta persistida y no guardar URL sintética obsoleta');
+ assert(outBase.includes('await stopMusicForCanned();if(serial!==contentSerial)return;const previous=activeKind'),'contenido/anuncio debe apagar música incluso al entrar directamente desde standby');
  console.log('check-v2lab-lan-output: OK · one LAN link · direct Electron monitor · hidden master · range streaming · no double queue authority');
 })().catch(e=>{console.error(e);process.exit(1);});
