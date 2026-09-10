@@ -14,6 +14,8 @@ function runtimeCandidates(){
   [
     path.join(pf,'NDI','NDI 6 Runtime','v6'),
     path.join(pf,'NDI','NDI 6 Runtime'),
+    path.join(pf,'NDI','NDI 6 Tools','Runtime'),
+    path.join(pf,'NDI','NDI 5 Tools','Runtime'),
     path.join(pf,'NDI','NDI 5 Runtime','v5'),
     path.join(pf,'NDI','NDI 5 Runtime'),
     path.join(pf,'NDI','NDI Tools'),
