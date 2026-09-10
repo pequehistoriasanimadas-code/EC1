@@ -37,11 +37,13 @@ function req(url,opts={}){return new Promise((resolve,reject)=>{const u=new URL(
  assert(main.includes("outputLan?.updateMasterPlayback(event)"),'master progress must drive reconnection timing');
  assert(preload.includes('outputLanStatus')&&preload.includes('outputLanConfigure'),'LAN IPC bridge missing');
  assert(renderer.includes('Monitor de emisión')&&renderer.includes('Output por red local'),'monitor/LAN UI missing');
- assert(renderer.includes('function ensureMonitorFrame()')&&renderer.includes("window.addEventListener('load'")&&renderer.includes("document.readyState==='complete'"),'monitor iframe debe montarse después del load principal para no bloquear CONTROL_READY');
+ assert(preload.includes('outputMonitorFrame')&&main.includes("ipcMain.handle('output:monitorFrame'")&&main.includes('capturePage()'),'monitor interno debe capturar el Output directamente por Electron');
+ assert(renderer.includes('outputMonitorFrame()')&&renderer.includes('ecMonitorImage')&&!renderer.includes('function ensureMonitorFrame()'),'monitor interno no debe depender de iframe/localhost');
+ assert(renderer.includes("tab?.classList.contains('show')")&&renderer.includes('optimizerActive()'),'captura del monitor debe pausarse fuera de Automático y durante optimización');
  assert(renderer.includes('una sola')||renderer.includes('este único enlace'),'UI must expose one LAN link');
  assert(web.includes("outputPlayback:e=>{if(e?.type==='error')"),'web viewer must never report ended/progress into master queue');
  assert(mode.includes("let muted=monitor"),'monitor audio must default to muted');
  assert(mode.includes("muted=!muted"),'monitor must allow local audio toggle');
  assert(out26.includes('p.startAtSec')&&outBase.includes('p.startAtSec'),'LAN reconnect must seek news and videos');
- console.log('check-v2lab-lan-output: OK · one LAN link · audio · local monitor mute toggle · hidden master · range streaming · no double queue authority');
+ console.log('check-v2lab-lan-output: OK · one LAN link · direct Electron monitor · hidden master · range streaming · no double queue authority');
 })().catch(e=>{console.error(e);process.exit(1);});
