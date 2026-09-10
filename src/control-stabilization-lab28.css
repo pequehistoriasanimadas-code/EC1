@@ -1,0 +1,31 @@
+/* Lab.28 operator-layout stabilization: reduce vertical stacking without shrinking live controls. */
+#tab-auto.lab28-auto-compact .auto-cols{gap:14px;align-items:start}
+#tab-auto.lab28-auto-compact .auto-cols>div:first-child{display:grid;gap:12px;align-content:start}
+#tab-auto.lab28-auto-compact .auto-cols>div:first-child>.card{margin-top:0!important}
+#tab-auto.lab28-auto-compact .lab28-preparation-card,
+#tab-auto.lab28-auto-compact .lab28-emission-card,
+#tab-auto.lab28-auto-compact .lab28-exclusive-card{padding-top:14px;padding-bottom:14px}
+#tab-auto.lab28-auto-compact .lab28-preparation-card>.note:first-of-type,
+#tab-auto.lab28-auto-compact .lab28-emission-card>.note:first-of-type{margin:6px 0 10px;line-height:1.35}
+#tab-auto.lab28-auto-compact .lab28-preparation-card .buttons,
+#tab-auto.lab28-auto-compact .lab28-emission-card .buttons{margin-top:8px;margin-bottom:6px;gap:7px;flex-wrap:wrap}
+#tab-auto.lab28-auto-compact .lab28-preparation-card .form-grid{margin-top:8px;gap:8px}
+#tab-auto.lab28-auto-compact .lab28-preparation-card .switch-row{margin-top:8px;padding-top:8px;padding-bottom:8px}
+#tab-auto.lab28-auto-compact .lab28-preparation-card .switch-row small{display:none}
+#tab-auto.lab28-auto-compact #processingDetail{margin:6px 0}
+#tab-auto.lab28-auto-compact .lab28-exclusive-card .section-head{margin-bottom:6px}
+#tab-auto.lab28-auto-compact .lab28-exclusive-card .section-head p.note{display:none}
+#tab-auto.lab28-auto-compact .lab28-exclusive-card .exclusive-frequency-row{display:grid;grid-template-columns:minmax(210px,.9fr) minmax(0,1.1fr);gap:10px;align-items:end}
+#tab-auto.lab28-auto-compact .lab28-exclusive-card .exclusive-frequency-row .note{margin:0 0 3px;line-height:1.35}
+#tab-auto.lab28-auto-compact .lab28-exclusive-card .switch-row{margin-top:8px;padding-top:8px;padding-bottom:8px}
+#tab-auto.lab28-auto-compact .lab28-exclusive-card .switch-row small{display:none}
+#tab-auto.lab28-auto-compact #exclusiveOpenInfo{display:none}
+#tab-auto.lab28-auto-compact .lab28-emission-card #nextCannedInfo{margin:6px 0 0}
+#tab-auto.lab28-auto-compact #ecAutoRightColumn{gap:12px}
+#tab-auto.lab28-auto-compact #ecAutoRightColumn>.queue-card .section-head{margin-bottom:8px}
+#tab-auto.lab28-auto-compact #ecAutoRightColumn>.queue-card .queue-subtitle{margin-top:2px;margin-bottom:0}
+#tab-auto.lab28-auto-compact #ecAutoRightColumn>.queue-card .queue-summary{margin-top:6px;margin-bottom:6px}
+.ec-lab28-promo-design .section-head{margin-bottom:10px}.ec-lab28-promo-design .note{line-height:1.4}.ec-lab28-field-help{margin:6px 0 0!important}
+#ecOptimizeState0321[data-lab28-resolved="valid"]{border-color:rgba(68,184,112,.65);color:#79dfa0}
+@media(max-width:1200px){#tab-auto.lab28-auto-compact .lab28-exclusive-card .exclusive-frequency-row{grid-template-columns:1fr}}
+@media(max-width:900px){#tab-auto.lab28-auto-compact .auto-cols>div:first-child{gap:10px}}
