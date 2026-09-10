@@ -6,7 +6,6 @@ let failed=0;
 function fail(msg){failed++;console.error('FAIL:',msg);}
 function ok(cond,msg){if(!cond)fail(msg);else console.log('OK:',msg);}
 function read(rel){const file=path.join(root,rel);if(!fs.existsSync(file)){fail(`missing ${rel}`);return'';}return fs.readFileSync(file,'utf8');}
-function count(text,needle){return text.split(needle).length-1;}
 
 const helper=read('src/native/network_permissions.cpp');
 ok(helper.includes('GEC Automatic News - NDI Bridge'),'helper owns exact NDI firewall rule');
@@ -27,6 +26,8 @@ ok(net.includes('Start-Process')&&net.includes('-Verb RunAs'),'network service r
 ok(net.includes('windowsHide:true'),'elevation orchestration does not open a visible console');
 ok(net.includes('status()')||net.includes('async status('),'network service exposes non-elevated status');
 ok(net.includes('configure()')||net.includes('async configure('),'network service exposes one configure operation');
+ok(net.includes('classifyElevationFailure'),'Lab.28 classifies cancellation separately from policy/elevation blocks');
+ok(/policyManaged|policy-blocked/.test(net),'Lab.28 reports policy-managed elevation failures explicitly');
 ok(!/password|contrase(?:n|ñ)a/i.test(net),'network service does not handle administrator passwords');
 
 const release=read('src/services/releaseV2NetworkPermissions.js');
@@ -42,19 +43,21 @@ ok(preload.includes('outputNetworkPermissionsStatus'),'preload exposes read-only
 ok(preload.includes('configureOutputNetworkPermissions'),'preload exposes one configure action');
 
 const renderer=read('src/renderer-lan-output.js');
+const lab28Renderer=read('src/renderer-stabilization-lab28.js');
 ok(renderer.includes('Permisos de red'),'Emisión UI includes network permissions card');
 ok(renderer.includes('Configurar permisos de red'),'UI has the single combined configure action');
 ok(renderer.includes('ecNetworkPermissionsConfigure'),'combined configure button has a stable id');
-ok(!/type=["']password["']/i.test(renderer),'renderer contains no administrator credential field');
+ok(!/type=["']password["']/i.test(renderer+lab28Renderer),'renderer contains no administrator credential field');
 ok(renderer.includes('refreshNetworkPermissions'),'renderer can refresh permission state');
 ok(/async function applyLan\([\s\S]*?refreshNetworkPermissions\(\)/.test(renderer),'changing Output LAN configuration refreshes firewall permission status');
+ok(lab28Renderer.includes('SOLICITANDO')&&lab28Renderer.includes('Esperando a Windows'),'Lab.28 gives immediate visible feedback while UAC/elevation is pending');
+ok(lab28Renderer.includes('política')||lab28Renderer.includes('organización'),'Lab.28 explains policy-managed UAC blocking to the operator');
 
 const css=read('src/control-lan-output.css');
 ok(css.includes('ec-network-permissions'),'network permission card has dedicated compact styling');
 
 const pkgText=read('package.json');
 let pkg={};try{pkg=JSON.parse(pkgText);}catch(e){fail('package.json parses: '+e.message);}
-ok(pkg.version==='2.0.0-lab.27','package version is 2.0.0-lab.27');
 ok(pkg?.build?.portable?.requestExecutionLevel==='user','Portable continues to run as a normal user');
 ok(String(pkg?.scripts?.check||'').includes('check-v2lab-network-permissions.js'),'npm check gates the network permission regression check');
 ok((pkg?.build?.files||[]).includes('scripts/packaged-v2lab-network-permissions-smoke.js'),'packaged smoke script is included');
