@@ -16,6 +16,8 @@ const out31=read('src/output-0331.js');
 const r31=read('src/renderer-0331.js');
 const r32=read('src/renderer-0332.js');
 const rLan=read('src/renderer-lan-output.js');
+const monitorLab27=read('src/renderer-monitor-live-lab27.js');
+const youtubeRelease=read('src/services/releaseV2YoutubePromo.js');
 const optimizer=read('src/renderer-0321.js');
 const lanServer=read('src/services/outputLanServer.js');
 
@@ -44,8 +46,8 @@ assert(main.includes("ipcMain.handle('output:monitorFrame'")&&main.includes('cap
 assert(preload.includes('outputMonitorFrame')&&rLan.includes('outputMonitorFrame()')&&rLan.includes('ecMonitorImage'),'bridge/UI del monitor directo faltante');
 assert(!rLan.includes('function ensureMonitorFrame()'),'monitor interno no debe volver a depender de iframe/localhost');
 assert(preload.includes('outputMonitorAudio')&&main.includes("ipcMain.handle('output:monitorAudio'")&&rLan.includes('Audio monitor: OFF'),'monitor debe conservar audio local opcional sin iframe');
-assert(!rLan.includes('productionGpuBusy()'),'IA/TTS normal no debe congelar el monitor; solo optimización/benchmark puede suspender captura');
-assert(rLan.includes('optimizerActive()')&&rLan.includes('Monitor pausado durante la optimización'),'la pausa del monitor debe quedar limitada al benchmark/optimización explícita');
+assert(monitorLab27.includes('refreshDuringProduction')&&monitorLab27.includes('productionBusy()')&&monitorLab27.includes('outputMonitorFrame()'),'Lab.27 debe suplir la captura mientras IA/TTS ocupa GPU para evitar congelar el monitor');
+assert(monitorLab27.includes('optimizerActiveLab27()')&&youtubeRelease.includes("injectFile(win,'renderer-monitor-live-lab27.js','js')"),'la corrección del monitor debe cargarse y seguir respetando la pausa explícita de optimización/benchmark');
 
 // 6. Optimización: Chatterbox/Qwen deben medirse con renderizadores secundarios liberados.
 assert(optimizer.includes('outputBenchmarkQuiesce')&&optimizer.includes('outputBenchmarkRestore'),'optimizador debe aislar Output/monitor/NDI');
