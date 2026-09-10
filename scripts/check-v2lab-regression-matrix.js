@@ -35,15 +35,19 @@ assert(out31.includes('video.loop=true')&&out31.includes("if(a==='stop')setTimeo
 // 4. Música: jamás sobre contenido/anuncio, incluido el primer contenido tras standby.
 assert(out.includes('await stopMusicForCanned();if(serial!==contentSerial)return;const previous=activeKind'),'contenido debe cortar música antes de evaluar transición de origen');
 assert(out31.includes("(outputMode==='content'||outputMode==='ad')")&&out31.includes('musicEl.pause()'),'watchdog no puede reactivar música durante contenido/anuncio');
+assert(out.includes("music.loop=design.musicLoop!==false"),'música debe conservar loop configurado durante noticias y continuidad desde standby');
 
 // 5. Monitor: captura directa del Output, no localhost/iframe.
 assert(main.includes("ipcMain.handle('output:monitorFrame'")&&main.includes('captureOutputMonitorFrame')&&main.includes('capturePage()'),'monitor debe capturar el Output directamente');
 assert(preload.includes('outputMonitorFrame')&&rLan.includes('outputMonitorFrame()')&&rLan.includes('ecMonitorImage'),'bridge/UI del monitor directo faltante');
 assert(!rLan.includes('function ensureMonitorFrame()'),'monitor interno no debe volver a depender de iframe/localhost');
+assert(preload.includes('outputMonitorAudio')&&main.includes("ipcMain.handle('output:monitorAudio'")&&rLan.includes('Audio monitor: OFF'),'monitor debe conservar audio local opcional sin iframe');
+assert(rLan.includes('productionGpuBusy()'),'monitor debe dejar de capturar mientras IA/TTS ocupa GPU');
 
 // 6. Optimización: Chatterbox/Qwen deben medirse con renderizadores secundarios liberados.
 assert(optimizer.includes('outputBenchmarkQuiesce')&&optimizer.includes('outputBenchmarkRestore'),'optimizador debe aislar Output/monitor/NDI');
 assert(main.includes('quiesceOutputForBenchmark')&&main.includes('destroyNdiWindow()'),'main debe liberar renderizadores secundarios durante benchmark');
+assert(main.includes("autoState?.emission?.running")&&main.includes("outputState.source==='manual'"),'optimizador no debe destruir una emisión real para hacer benchmark');
 
 // 7. Contenidos/anuncios: identidad real y selección manual.
 assert(rel31.includes('scheduleSpecificContent')&&rel31.includes('mediaByPath(this.canned,folder,wanted)'),'programar contenido específico debe conservarse');
@@ -54,4 +58,9 @@ assert(rel32.includes("sourceType:'content'")&&rel32.includes("sourceType:'ad'")
 assert(main.includes("outputWindow.on('close',e=>{if(!controlledShutdown()){e.preventDefault();outputWindow.hide()"),'cerrar Output debe ocultar, no destruir durante operación');
 assert(lanServer.includes("this.config.enabled?'0.0.0.0':'127.0.0.1'")&&lanServer.includes('server.listen(port,host'),'Output LAN debe escuchar en 0.0.0.0 cuando LAN está activo');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor · optimization · content/ad · LAN');
+// 9. NDI: señal continua, reconexión a programa actual y sin coste de transporte si no hay receptor.
+const ndi=read('src/services/outputNdi.js');
+assert(main.includes('startNdiFrameClock')&&main.includes('seedNdiProgram')&&main.includes('currentOutputProgram'),'NDI debe mantener frames constantes y recuperar el programa actual al reiniciar');
+assert(ndi.includes('this.connections>0')&&ndi.includes('this.connections<1'),'NDI no debe copiar frames/audio crudos si no hay receptores');
+
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor/audio · optimization · content/ad · LAN · NDI');
