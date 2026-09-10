@@ -58,7 +58,7 @@ assert(main.includes("autoState?.emission?.running")&&main.includes("outputState
 assert(rel31.includes('scheduleSpecificContent')&&rel31.includes('mediaByPath(this.canned,folder,wanted)'),'programar contenido específico debe conservarse');
 assert(rel31.includes('await this.playAdAfterCanned'),'anuncio posterior a contenido debe conservarse');
 assert(rel32.includes("sourceType:'content'")&&rel32.includes("sourceType:'ad'")&&rel32.includes('plan.content.name')&&rel32.includes('plan.ad.name'),'cola debe mostrar nombres reales de contenido/anuncio');
-assert(youtubeRelease.includes('installAutomationPromoForwarding')&&youtubeRelease.includes("payload?.mediaRole==='content'")&&youtubeRelease.includes('youtubePromo:promo'),'el snapshot YouTube del contenido debe viajar al Output y nunca aplicarse al anuncio posterior');
+assert(youtubeRelease.includes('installAutomationSnapshot')&&youtubeRelease.includes("String(payload?.mediaRole||'')==='content'")&&youtubeRelease.includes('this.currentCanned?.youtubePromo')&&youtubeRelease.includes("String(payload?.mediaRole||'')==='ad'")&&youtubeRelease.includes('youtubePromo:null'),'el snapshot YouTube del contenido debe viajar al Output y nunca aplicarse al anuncio posterior');
 
 // 8. Output local/LAN: ocultar no mata la emisión y servidor LAN sigue expuesto a la red cuando está activo.
 assert(main.includes("outputWindow.on('close',e=>{if(!controlledShutdown()){e.preventDefault();outputWindow.hide()"),'cerrar Output debe ocultar, no destruir durante operación');
