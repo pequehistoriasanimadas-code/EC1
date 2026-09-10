@@ -9,7 +9,7 @@ function writeMarker(rt,rootDir=rt.cudaRoot){const site=path.join(rootDir,'site-
 
 (async()=>{
   const pkg=JSON.parse(read('package.json')),runtimeSource=read('src/services/ttsLabRuntime.js'),worker=read('src/tts_lab_worker.py'),release=read('src/services/releaseV2Lab.js'),renderer=read('src/renderer-v2lab.js'),boot=read('src/bootstrap-v2lab.js'),main=read('src/main.js');
-  assert.strictEqual(pkg.version,'2.0.0-lab.27');
+  assert.strictEqual(pkg.version,'2.0.0-lab.28');
   assert.strictEqual(QWEN_ASSET_REVISION,2);
   assert(boot.includes('requestSingleInstanceLock')&&boot.includes("if(!gotLock){app.quit();}else{")&&boot.indexOf("require('./bootstrap-0332')")>boot.indexOf("if(!gotLock)"),'Lab.14 debe impedir que una segunda instancia inicialice servicios');
   assert(runtimeSource.includes('withMaintenance')&&runtimeSource.includes('waitForWorkersIdle')&&runtimeSource.includes('workerStops'),'Falta coordinador global de mantenimiento/lifecycle TTS');
