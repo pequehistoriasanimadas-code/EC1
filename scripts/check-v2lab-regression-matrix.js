@@ -41,13 +41,14 @@ assert(out.includes('await stopMusicForCanned();if(serial!==contentSerial)return
 assert(out31.includes("(outputMode==='content'||outputMode==='ad')")&&out31.includes('musicEl.pause()'),'watchdog no puede reactivar música durante contenido/anuncio');
 assert(out.includes("music.loop=design.musicLoop!==false"),'música debe conservar loop configurado durante noticias y continuidad desde standby');
 
-// 5. Monitor: captura directa del Output, no localhost/iframe, y debe seguir refrescando durante IA/TTS normal.
+// 5. Monitor Lab.28: una sola captura directa del Output a 15 FPS, sin iframe ni segundo loop, y con prioridad para IA/TTS/GPU.
 assert(main.includes("ipcMain.handle('output:monitorFrame'")&&main.includes('captureOutputMonitorFrame')&&main.includes('capturePage()'),'monitor debe capturar el Output directamente');
 assert(preload.includes('outputMonitorFrame')&&rLan.includes('outputMonitorFrame()')&&rLan.includes('ecMonitorImage'),'bridge/UI del monitor directo faltante');
 assert(!rLan.includes('function ensureMonitorFrame()'),'monitor interno no debe volver a depender de iframe/localhost');
 assert(preload.includes('outputMonitorAudio')&&main.includes("ipcMain.handle('output:monitorAudio'")&&rLan.includes('Audio monitor: OFF'),'monitor debe conservar audio local opcional sin iframe');
-assert(monitorLab27.includes('refreshDuringProduction')&&monitorLab27.includes('productionBusy()')&&monitorLab27.includes('outputMonitorFrame()'),'Lab.27 debe suplir la captura mientras IA/TTS ocupa GPU para evitar congelar el monitor');
-assert(monitorLab27.includes('optimizerActiveLab27()')&&youtubeRelease.includes("injectFile(win,'renderer-monitor-live-lab27.js','js')"),'la corrección del monitor debe cargarse y seguir respetando la pausa explícita de optimización/benchmark');
+assert(/MONITOR_FPS\s*=\s*15/.test(rLan)&&rLan.includes('MONITOR_INTERVAL_MS')&&rLan.includes('productionGpuBusy()'),'Lab.28 debe usar un único monitor a 15 FPS conservando prioridad IA/TTS/GPU');
+assert(!monitorLab27.includes('setInterval')&&!monitorLab27.includes('outputMonitorFrame()'),'Lab.28 debe neutralizar el segundo loop de captura heredado de Lab.27');
+assert(youtubeRelease.includes("injectFile(win,'renderer-monitor-live-lab27.js','js')"),'el asset de compatibilidad Lab.27 debe seguir cargando sin crear un segundo capturador');
 
 // 6. Optimización: Chatterbox/Qwen deben medirse con renderizadores secundarios liberados.
 assert(optimizer.includes('outputBenchmarkQuiesce')&&optimizer.includes('outputBenchmarkRestore'),'optimizador debe aislar Output/monitor/NDI');
@@ -69,4 +70,4 @@ const ndi=read('src/services/outputNdi.js');
 assert(main.includes('startNdiFrameClock')&&main.includes('seedNdiProgram')&&main.includes('currentOutputProgram'),'NDI debe mantener frames constantes y recuperar el programa actual al reiniciar');
 assert(ndi.includes('this.connections>0')&&ndi.includes('this.connections<1'),'NDI no debe copiar frames/audio crudos si no hay receptores');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor-live/audio · optimization · content/ad + YouTube promo · LAN · NDI');
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor 15 FPS · optimization · content/ad + YouTube promo · LAN · NDI');
