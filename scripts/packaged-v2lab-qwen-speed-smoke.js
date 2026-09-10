@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.25');
+  assert.strictEqual(pkg.version,'2.0.0-lab.26');
   const {TTSLabRuntime,CACHE_REVISION}=require(path.join(appRoot,'src','services','ttsLabRuntime.js'));
   const rt=Object.create(TTSLabRuntime.prototype);
   rt.qwenCapabilities=async()=>({flash_attention_2:false,sdpa:true,fp16:true,bf16:true,gpu_name:'RTX TEST',gpu_vram_mb:12288});

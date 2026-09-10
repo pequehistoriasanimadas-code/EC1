@@ -18,7 +18,7 @@ const {PROFILE_VERSION}=require(path.join(root,'src','services','releaseV2Produc
   const routing=read('src/services/releaseV2Lab.js');
   const optimizer=read('src/renderer-0321.js');
 
-  assert.strictEqual(pkg.version,'2.0.0-lab.25');
+  assert.strictEqual(pkg.version,'2.0.0-lab.26');
   assert.strictEqual(PROFILE_VERSION,'2.0-lab.25');
 
   const migrated=normalizeProfileTts({engine:'chatterbox',engineParams:{chatterbox:{variant:'multilingual'}}});
