@@ -205,7 +205,6 @@ async function captureOutputMonitorFrame(){
 }
 async function quiesceOutputForBenchmark(){
   if(outputBenchmarkSuspended)return{ok:true,already:true};
-  if(outputState.source!=='none')return{ok:false,error:'Detén cualquier salida manual o al aire antes de optimizar GEC.'};
   const ndiState=outputNdi?.status?.()||{},restore={hadOutput:outputReady(),wasVisible:outputReady()?outputWindow.isVisible():false,ndiWasRunning:ndiState.running===true};
   outputBenchmarkRestoreState=restore;outputBenchmarkSuspended=true;monitorCaptureBusy=false;
   try{if(restore.ndiWasRunning)await outputNdi.stop(false);}catch(e){logEvent('OUTPUT_BENCHMARK_NDI_STOP',e?.message||e);}
