@@ -30,7 +30,7 @@ function req(url,opts={}){return new Promise((resolve,reject)=>{const u=new URL(
 
  const main=fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8'),preload=fs.readFileSync(path.join(__dirname,'../src/preload.js'),'utf8'),renderer=fs.readFileSync(path.join(__dirname,'../src/renderer-lan-output.js'),'utf8'),web=fs.readFileSync(path.join(__dirname,'../src/output-web-adapter.js'),'utf8'),mode=fs.readFileSync(path.join(__dirname,'../src/output-web-mode.js'),'utf8'),out26=fs.readFileSync(path.join(__dirname,'../src/output-0326.js'),'utf8'),outBase=fs.readFileSync(path.join(__dirname,'../src/output.js'),'utf8');
  assert(main.includes("createOutputWindow(false)"),'automatic emission must create hidden master output');
- assert(main.includes("setAudioMuted(true)")||main.includes("setAudioMuted(!show)"),'hidden master must be muted, not paused');
+ assert(main.includes('syncOutputAudioMute()')&&main.includes('monitorAudioEnabled'),'hidden master audio must be controlled by visibility + optional monitor audio, not paused');
  assert(!main.includes("outputWindow=null;automation?.outputClosed()"),'hiding local output must not pause automation');
  assert(main.includes("outputLan?.publishStory(enriched)"),'same program must be fanned out to LAN');
  assert(main.includes("outputLan?.publishControl(action)"),'pause/play/stop must fan out to LAN spectators');
@@ -39,7 +39,8 @@ function req(url,opts={}){return new Promise((resolve,reject)=>{const u=new URL(
  assert(renderer.includes('Monitor de emisión')&&renderer.includes('Output por red local'),'monitor/LAN UI missing');
  assert(preload.includes('outputMonitorFrame')&&main.includes("ipcMain.handle('output:monitorFrame'")&&main.includes('capturePage()'),'monitor interno debe capturar el Output directamente por Electron');
  assert(renderer.includes('outputMonitorFrame()')&&renderer.includes('ecMonitorImage')&&!renderer.includes('function ensureMonitorFrame()'),'monitor interno no debe depender de iframe/localhost');
- assert(renderer.includes("tab?.classList.contains('show')")&&renderer.includes('optimizerActive()'),'captura del monitor debe pausarse fuera de Automático y durante optimización');
+ assert(renderer.includes("tab?.classList.contains('show')")&&renderer.includes('optimizerActive()')&&renderer.includes('productionGpuBusy()'),'captura del monitor debe pausarse fuera de Automático, durante optimización y cuando IA/TTS usa GPU');
+ assert(preload.includes('outputMonitorAudio')&&main.includes("ipcMain.handle('output:monitorAudio'")&&renderer.includes('ecMonitorAudio'),'monitor local debe conservar audio opcional activable');
  assert(renderer.includes('una sola')||renderer.includes('este único enlace'),'UI must expose one LAN link');
  assert(web.includes("outputPlayback:e=>{if(e?.type==='error')"),'web viewer must never report ended/progress into master queue');
  assert(mode.includes("let muted=monitor"),'monitor audio must default to muted');
