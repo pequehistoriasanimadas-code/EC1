@@ -47,6 +47,7 @@ for(const file of ['renderer-ui.js','renderer-patches.js','renderer-0324.js','re
 const finalRenderer=fs.readFileSync(path.join(__dirname,'..','src','renderer-0332.js'),'utf8');
 assert(finalRenderer.includes("window.__ecQueueRenderOwner='0332'"));
 assert(!/setTimeout\(\(\)=>renderQueueDirect\(s\),80\)/.test(finalRenderer));
+assert(finalRenderer.includes('syncSessionCounters(snapshot)')&&finalRenderer.includes("#sessionNewsEmitted")&&finalRenderer.includes('sessionPollTimer'),'el renderer final debe mantener vivos los contadores de sesión y tener fallback de estado');
 
 const output0331=fs.readFileSync(path.join(__dirname,'..','src','output-0331.js'),'utf8');
 const policy0328=fs.readFileSync(path.join(__dirname,'..','src','services','version0328Policy.js'),'utf8');
