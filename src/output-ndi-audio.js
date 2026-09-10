@@ -7,15 +7,14 @@
     const AudioCtx=window.AudioContext||window.webkitAudioContext;if(!AudioCtx)return;
     let ctx;try{ctx=new AudioCtx({sampleRate:48000,latencyHint:'interactive'});}catch{try{ctx=new AudioCtx();}catch{return;}}
     const mix=ctx.createGain(),processor=ctx.createScriptProcessor(1024,2,2),silent=ctx.createGain();silent.gain.value=0;mix.connect(processor);processor.connect(silent);silent.connect(ctx.destination);
-    const attached=new WeakSet(),rows=[];
+    const attached=new WeakSet();
     const attach=el=>{
       if(!el||attached.has(el))return;attached.add(el);
-      try{const source=ctx.createMediaElementSource(el),gain=ctx.createGain();source.connect(gain);gain.connect(mix);rows.push({el,gain});}catch{}
+      try{const source=ctx.createMediaElementSource(el);source.connect(mix);}catch{}
     };
     const scan=root=>{if(root&&root.matches&&root.matches('audio,video'))attach(root);for(const el of root&&root.querySelectorAll?root.querySelectorAll('audio,video'):[])attach(el);};
     scan(document);
     const observer=new MutationObserver(records=>{for(const r of records)for(const n of r.addedNodes)if(n.nodeType===1)scan(n);});observer.observe(document.documentElement,{childList:true,subtree:true});
-    const sync=()=>{for(const row of rows){const v=row.el.muted?0:Math.max(0,Math.min(1,Number(row.el.volume)));if(Math.abs(row.gain.gain.value-v)>.001)row.gain.gain.value=v;}requestAnimationFrame(sync);};requestAnimationFrame(sync);
     processor.onaudioprocess=e=>{
       try{
         const input=e.inputBuffer,samples=input.length;if(!samples)return;
