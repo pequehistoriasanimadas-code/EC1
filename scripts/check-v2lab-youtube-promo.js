@@ -65,7 +65,7 @@ assert(/ended/.test(out)&&/error/.test(out)&&/stop/.test(out),'Debe limpiarse en
 assert(/fade|opacity|visible/.test(out),'Debe activar fade in');
 const css=fs.readFileSync('src/output-youtube-promo.css','utf8');
 assert(/opacity/.test(css)&&/transition/.test(css),'La promo debe tener fade in CSS');
-assert(!/transition[^;]*opacity[^;]*out/i.test(css),'No debe existir una animación fade out dedicada');
+assert(/\.ec-youtube-promo\.instant-clear\{[^}]*opacity:0!important;[^}]*transition:none!important/.test(css),'La retirada debe ser instantánea y sin fade out');
 
 const web=fs.readFileSync('src/output-web.html','utf8');
 assert(web.includes('output-youtube-promo.css')&&web.includes('output-youtube-promo.js'),'Output LAN debe cargar la promo');
