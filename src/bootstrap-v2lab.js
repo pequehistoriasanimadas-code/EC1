@@ -27,4 +27,5 @@ if(!gotLock){app.quit();}else{
   require('./services/releaseV2Lab').installReleaseV2Lab();
   require('./services/releaseV2Optimization').installV2Optimization();
   require('./services/releaseV2ProductionFidelity').installV2ProductionFidelity();
+  require('./services/releaseV2NetworkPermissions').installReleaseV2NetworkPermissions();
 }
