@@ -1,7 +1,7 @@
 {
   "name": "ec-automatic-news",
-  "version": "2.0.0-lab.25",
-  "description": "GEC Automatic News V2.0 TTS Lab + NDI Output - basado en GEC 0.3.32",
+  "version": "2.0.0-lab.26",
+  "description": "GEC Automatic News V2.0 TTS Lab + NDI Output + permisos de red - basado en GEC 0.3.32",
   "author": "Carls Mayo",
   "main": "src/bootstrap-v2lab.js",
   "private": true,
@@ -76,7 +76,8 @@
       "scripts/check-v2lab-ndi.js",
       "scripts/packaged-v2lab-ndi-smoke.js",
       "scripts/check-v2lab-regression-matrix.js",
-      "scripts/check-v2lab-long-session.js"
+      "scripts/check-v2lab-long-session.js",
+      "scripts/packaged-v2lab-network-permissions-smoke.js"
     ],
     "extraResources": [
       {
