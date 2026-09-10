@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),pathGuard=read('src/services/v2LabDataPath.js'),mainSource=read('src/main.js'),profilePolicy=read('src/services/profilePolicy0329.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),production=read('src/services/releaseV2ProductionFidelity.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),queueRenderer=read('src/renderer-0332.js'),baseOptimizerUi=read('src/renderer-0321.js'),automation=read('src/services/automation0325.js'),localRuntime=read('src/services/localRuntime.js'),localPolicy=read('src/services/version0320LocalPolicy.js'),providers=read('src/services/providers.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
 require(path.join(root,'src','services','releaseV2Optimization.js'));
-assert.strictEqual(pkg.version,'2.0.0-lab.27','La build debe identificarse como 2.0.0-lab.27');
+assert.strictEqual(pkg.version,'2.0.0-lab.28','La build debe identificarse como 2.0.0-lab.28');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
 assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','V2 Lab debe conservar el appId técnico');
 assert.strictEqual(pkg.build.productName,'EC Automatic News','V2 Lab debe conservar el productName técnico para compatibilidad');
@@ -100,4 +100,4 @@ assert(renderer.includes('currentOptimizationKey')&&renderer.includes('selectedF
 assert(prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
 assert(workflow.includes('Packaged 0.3.32 queue planner and stable renderer test'),'V2 Lab debe conservar el smoke 0.3.32');
 assert(workflow.includes('GEC-V2.0-TTS-Lab-Windows-Portable-EXE'),'Workflow no distingue el artefacto V2');
-console.log('check-v2lab: OK · lab.23 · production profile · tuned fidelity · stable voice chunks · UI responsiva · CUDA isolation');
+console.log('check-v2lab: OK · lab.28 · production profile · tuned fidelity · stable voice chunks · UI responsiva · CUDA isolation');
