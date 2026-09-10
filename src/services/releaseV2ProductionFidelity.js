@@ -10,8 +10,8 @@ const {AutomationEngine}=require('./automation0325');
 const {optimizationKey,qwenModelIdentity,ttsRuntimeSignature}=require('./releaseV2Lab');
 
 const PROFILE_SCHEMA=1;
-const PROFILE_VERSION='2.0-lab.24';
-const COMPATIBLE_PROFILE_VERSIONS=new Set(['2.0-lab.22','2.0-lab.23','2.0-lab.24']);
+const PROFILE_VERSION='2.0-lab.25';
+const COMPATIBLE_PROFILE_VERSIONS=new Set(['2.0-lab.22','2.0-lab.23','2.0-lab.24','2.0-lab.25']);
 const PROFILE_FILE='active-production-profile.json';
 const PIPELINE_MODES=new Set(['split','simultaneous','gpu-coordinated','gpu-swap']);
 const clone=v=>v==null?v:JSON.parse(JSON.stringify(v));
