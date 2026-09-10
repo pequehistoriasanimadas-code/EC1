@@ -33,7 +33,7 @@ function req(url,opts={}){return new Promise((resolve,reject)=>{const u=new URL(
  assert(main.includes('syncOutputAudioMute()')&&main.includes('monitorAudioEnabled'),'hidden master audio must be controlled by visibility + optional monitor audio, not paused');
  assert(!main.includes("outputWindow=null;automation?.outputClosed()"),'hiding local output must not pause automation');
  assert(main.includes("outputLan?.publishStory(enriched)"),'same program must be fanned out to LAN');
- assert(main.includes("outputLan?.publishControl(action)"),'pause/play/stop must fan out to LAN spectators');
+ assert(main.includes("outputLan?.publishControl(a)"),'pause/play/stop must fan out to LAN spectators');
  assert(main.includes("outputLan?.updateMasterPlayback(event)"),'master progress must drive reconnection timing');
  assert(preload.includes('outputLanStatus')&&preload.includes('outputLanConfigure'),'LAN IPC bridge missing');
  assert(renderer.includes('Monitor de emisión')&&renderer.includes('Output por red local'),'monitor/LAN UI missing');
