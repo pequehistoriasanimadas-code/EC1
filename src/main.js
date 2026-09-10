@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, screen, shell } = require('electron');
 app.commandLine.appendSwitch('autoplay-policy','no-user-gesture-required');
 const path = require('path');
 const fs = require('fs');
@@ -18,8 +18,9 @@ const { AutomationEngine } = require('./services/automation0324');
 const { CustomVoiceManager } = require('./services/customVoices');
 const { FontManager } = require('./services/fonts');
 const { OutputLanServer } = require('./services/outputLanServer');
+const { OutputNdi } = require('./services/outputNdi');
 
-let controlWindow,outputWindow,settingsStore,localRuntime,pronunciation,kokoro,providers,history,canned,ads,documents,automation,voiceManager,fontManager,outputLan;
+let controlWindow,outputWindow,ndiWindow,settingsStore,localRuntime,pronunciation,kokoro,providers,history,canned,ads,documents,automation,voiceManager,fontManager,outputLan,outputNdi;
 let appQuitting=false,controlledRelaunch=false;
 const controlledShutdown=()=>appQuitting||controlledRelaunch||global.__ecProfileRelaunching===true;
 let dataDir,resourcesDir,startupLogFile='';
@@ -40,7 +41,7 @@ function currentDesign(){return enrichDesign(settingsStore?.load()?.visual?.outp
 function broadcastOutputState(){sendControl('output:state',{...outputState});}
 function setOutputState(patch){outputState={...outputState,...patch};broadcastOutputState();}
 function nativeOutputSize(format,win=null){const px=format==='9:16'?{width:1080,height:1920,resolution:'1080×1920'}:{width:1920,height:1080,resolution:'1920×1080'};let scaleFactor=1;try{const d=win&&!win.isDestroyed()?screen.getDisplayMatching(win.getBounds()):screen.getPrimaryDisplay();scaleFactor=Number(d?.scaleFactor)||1;}catch{}return{...px,dipWidth:Math.max(1,Math.round(px.width/scaleFactor)),dipHeight:Math.max(1,Math.round(px.height/scaleFactor)),scaleFactor};}
-function sendDesignLive(){const d=currentDesign();if(outputWindow&&!outputWindow.isDestroyed())outputWindow.webContents.send('output:design',d);try{outputLan?.publishDesign(d);}catch{}}
+function sendDesignLive(){const d=currentDesign();if(outputWindow&&!outputWindow.isDestroyed())outputWindow.webContents.send('output:design',d);if(ndiWindow&&!ndiWindow.isDestroyed())ndiWindow.webContents.send('output:design',d);try{outputLan?.publishDesign(d);}catch{}}
 function secureWebPreferences(extra={}){return{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,...extra};}
 async function syncVoiceArchive(rebuild=false){if(!voiceManager||!kokoro)return;try{if(rebuild)await voiceManager.rebuild();const archive=voiceManager.effectiveArchive();if(archive&&fs.existsSync(archive)&&kokoro.voices!==archive){await kokoro.stopAndWait?.('voices-changed');kokoro.voices=archive;kokoro.voiceCache=null;kokoro.voiceCachePromise=null;}else if(rebuild){await kokoro.stopAndWait?.('voices-changed');kokoro.voiceCache=null;kokoro.voiceCachePromise=null;}}catch(e){logEvent('CUSTOM_VOICE',e.message||e);throw e;}}
 function ensureVoiceFallbackSync(){try{const s=settingsStore.load(),custom=String(s.tts?.voice||'').startsWith('ecv_');if(custom&&!voiceManager.has(s.tts.voice)){s.tts.voice=String(s.tts.fallbackVoice||'ef_dora');settingsStore.save(s);logEvent('VOICE_FALLBACK',`missing custom voice -> ${s.tts.voice}`);}}catch{}}
