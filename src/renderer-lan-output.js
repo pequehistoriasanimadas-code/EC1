@@ -2,7 +2,7 @@
 (function installLanOutputUi(){
   if(!window.ECAPI||!document.querySelector('#tab-auto')||!document.querySelector('#tab-emission')){setTimeout(installLanOutputUi,120);return;}
   if(window.__ecLanOutputUiInstalled)return;window.__ecLanOutputUiInstalled=true;
-  const q=s=>document.querySelector(s);let lanState=null,ndiState=null,lastFormat='16:9',pollTimer=null,monitorReady=false,monitorBusy=false,lastLanPollAt=0;
+  const q=s=>document.querySelector(s);let lanState=null,ndiState=null,lastFormat='16:9',pollTimer=null,monitorReady=false,monitorBusy=false,monitorAudioEnabled=false,lastLanPollAt=0;
 
   function injectMonitor(){
     const grid=q('#tab-auto .auto-cols'),queue=grid?.querySelector('.queue-card');if(!grid||!queue||q('#ecLanMonitorCard'))return;
@@ -10,8 +10,8 @@
     const card=document.createElement('div');card.id='ecLanMonitorCard';card.className='card ec-lan-monitor-card';card.innerHTML=`
       <div class="section-head"><div><h3>Monitor de emisión</h3><p class="note">Vista local directa del Output. No depende del enlace LAN, del navegador ni de permisos de administrador.</p></div><span id="ecMonitorState" class="status-pill neutral">STANDBY</span></div>
       <div id="ecMonitorFrameHost" class="ec-monitor-frame-host format-16-9"><img id="ecMonitorImage" class="ec-monitor-image hidden" alt="Monitor de emisión"><div id="ecMonitorEmpty" class="ec-monitor-empty">Iniciando monitor…</div></div>
-      <div class="ec-monitor-footer"><span id="ecMonitorLanHint">Monitor local · no controla la cola</span><span id="ecMonitorClients">LAN: 0 conexiones</span></div>`;
-    right.insertBefore(card,queue);
+      <div class="ec-monitor-footer"><span id="ecMonitorLanHint">Monitor local · no controla la cola</span><button id="ecMonitorAudio" class="dark compact" type="button">Audio monitor: OFF</button><span id="ecMonitorClients">LAN: 0 conexiones</span></div>`;
+    right.insertBefore(card,queue);const audioBtn=q('#ecMonitorAudio');if(audioBtn)audioBtn.onclick=async()=>{try{const r=await window.ECAPI.outputMonitorAudio(!monitorAudioEnabled);monitorAudioEnabled=!!r.enabled;audioBtn.textContent=`Audio monitor: ${monitorAudioEnabled?'ON':'OFF'}`;if(typeof status==='function')status(monitorAudioEnabled?'Audio del monitor activado.':'Audio del monitor desactivado.');}catch(e){if(typeof status==='function')status(`Monitor: ${e.message||e}`);}};
     const left=q('#tab-auto .auto-cols > div:first-child'),emission=[...(left?.querySelectorAll('.card')||[])].find(x=>/Emisión automática|Control de emisión/i.test(x.textContent||''));const note=emission?.querySelector('p.note');if(note)note.textContent='El Output maestro se abre automáticamente al iniciar la emisión. Ocultar la ventana Output no detiene el monitor ni la salida LAN.';
   }
 
@@ -109,10 +109,12 @@
 
   function monitorActive(){const tab=q('#tab-auto');return!!(tab?.classList.contains('show')&&!document.hidden);}
   function optimizerActive(){const box=q('#ecOptimizeResult0321');return!!box?.dataset?.live;}
+  function productionGpuBusy(){try{const p=typeof automationState!=='undefined'?automationState?.processing:null;return!!(p?.gpuStageBusy||p?.voiceBusy||p?.aiBusy);}catch{return false;}}
   async function refreshMonitor(){
     if(!monitorActive()||monitorBusy)return;
     const img=q('#ecMonitorImage'),empty=q('#ecMonitorEmpty');if(!img||!empty)return;
     if(optimizerActive()){empty.classList.remove('hidden');empty.textContent='Monitor pausado durante la optimización…';img.classList.add('hidden');return;}
+    if(productionGpuBusy()){if(!monitorReady){empty.classList.remove('hidden');empty.textContent='Priorizando IA/TTS · el monitor retomará al liberar GPU…';}return;}
     monitorBusy=true;
     try{
       const r=await window.ECAPI.outputMonitorFrame();
@@ -125,7 +127,7 @@
   }
   async function refreshLan(){try{let s=await window.ECAPI.outputLanStatus();if(!s?.localUrl&&window.ECAPI.outputLanEnsure)s=await window.ECAPI.outputLanEnsure();renderLan(s);}catch{}}
   function applyFormat(format){lastFormat=format==='9:16'?'9:16':'16:9';const host=q('#ecMonitorFrameHost');if(host){host.classList.toggle('format-9-16',lastFormat==='9:16');host.classList.toggle('format-16-9',lastFormat!=='9:16');}}
-  function renderOutputState(s){if(!s)return;applyFormat(s.format);const pill=q('#ecMonitorState');if(pill){const k=s.kind==='ad'?'ANUNCIO':s.kind==='canned'?'CONTENIDO':s.source==='automatic'||s.source==='manual'?'AL AIRE':'STANDBY';pill.textContent=k;pill.className=`status-pill ${k==='STANDBY'?'neutral':'live'}`;}setTimeout(()=>{const top=q('#outputStatus'),btn=q('#openOutput');if(top&&s.open&&!s.visible){const res=s.resolution||(s.format==='9:16'?'1080×1920':'1920×1080');top.textContent=`OUTPUT · ${res} · oculto${s.source==='automatic'?' · Automático':''}`;top.className=`status-pill ${s.source==='automatic'?'live':'ok'}`;if(btn)btn.textContent='Abrir Output';}else if(btn&&s.open&&s.visible)btn.textContent='Ocultar Output';},0);}
+  function renderOutputState(s){if(!s)return;if(s.monitorAudio!=null){monitorAudioEnabled=!!s.monitorAudio;const ab=q('#ecMonitorAudio');if(ab)ab.textContent=`Audio monitor: ${monitorAudioEnabled?'ON':'OFF'}`;}applyFormat(s.format);const pill=q('#ecMonitorState');if(pill){const k=s.kind==='ad'?'ANUNCIO':s.kind==='canned'?'CONTENIDO':s.source==='automatic'||s.source==='manual'?'AL AIRE':'STANDBY';pill.textContent=k;pill.className=`status-pill ${k==='STANDBY'?'neutral':'live'}`;}setTimeout(()=>{const top=q('#outputStatus'),btn=q('#openOutput');if(top&&s.open&&!s.visible){const res=s.resolution||(s.format==='9:16'?'1080×1920':'1920×1080');top.textContent=`OUTPUT · ${res} · oculto${s.source==='automatic'?' · Automático':''}`;top.className=`status-pill ${s.source==='automatic'?'live':'ok'}`;if(btn)btn.textContent='Abrir Output';}else if(btn&&s.open&&s.visible)btn.textContent='Ocultar Output';},0);}
 
   function installOutputButtonGuard(){
     const btn=q('#openOutput');if(!btn||btn.dataset.ecLanGuard)return;btn.dataset.ecLanGuard='1';btn.addEventListener('click',async e=>{e.preventDefault();e.stopImmediatePropagation();try{const s=await window.ECAPI.outputStatus();if(s?.visible){const r=await window.ECAPI.closeOutput();renderOutputState(r.state||await window.ECAPI.outputStatus());if(typeof status==='function')status('Ventana Output oculta. La emisión, el monitor y LAN continúan.');}else{const r=await window.ECAPI.openOutput();renderOutputState(r.state||await window.ECAPI.outputStatus());if(typeof status==='function')status('Ventana Output visible.');}}catch(err){if(typeof status==='function')status(`Output: ${err.message||err}`);}},true);
@@ -133,7 +135,7 @@
 
   injectMonitor();injectLanSettings();injectNdiSettings();installOutputButtonGuard();window.ECAPI.outputStatus().then(renderOutputState).catch(()=>{});refreshNdi();
   window.ECAPI.on('output:lanState',s=>renderLan(s));window.ECAPI.on('output:ndiState',s=>renderNdi(s));window.ECAPI.on('output:state',s=>renderOutputState(s));window.ECAPI.on('profile:changed',async()=>{monitorReady=false;const img=q('#ecMonitorImage');if(img){img.removeAttribute('src');img.classList.add('hidden');}try{if(window.ECAPI.outputLanEnsure)renderLan(await window.ECAPI.outputLanEnsure());}catch{}refreshLan();refreshNdi();refreshMonitor();});
-  const startMonitorRuntime=()=>{refreshMonitor();refreshLan();refreshNdi();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden){refreshMonitor();const now=Date.now();if(now-lastLanPollAt>2400){lastLanPollAt=now;refreshLan();refreshNdi();}}},650);};
+  const startMonitorRuntime=()=>{refreshMonitor();refreshLan();refreshNdi();if(!pollTimer)pollTimer=setInterval(()=>{if(!document.hidden){refreshMonitor();const now=Date.now();if(now-lastLanPollAt>2400){lastLanPollAt=now;refreshLan();refreshNdi();}}},900);};
   if(document.readyState==='complete')setTimeout(startMonitorRuntime,0);else window.addEventListener('load',()=>setTimeout(startMonitorRuntime,0),{once:true});
   window.addEventListener('beforeunload',()=>clearInterval(pollTimer),{once:true});
 })();
