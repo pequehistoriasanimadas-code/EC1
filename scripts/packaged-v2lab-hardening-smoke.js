@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
+  assert.strictEqual(pkg.version,'2.0.0-lab.27');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js'),bootPath=path.join(appRoot,'src','bootstrap-v2lab.js');
   const {TTSLabRuntime,QWEN_ASSET_REVISION}=require(runtimePath);
   const source=fs.readFileSync(runtimePath,'utf8'),boot=fs.readFileSync(bootPath,'utf8'),renderer=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8'),worker=fs.readFileSync(path.join(appRoot,'src','tts_lab_worker.py'),'utf8'),release=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8'),main=fs.readFileSync(path.join(appRoot,'src','main.js'),'utf8');
@@ -15,7 +15,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(source.includes('cuda-transaction.json')&&source.includes('recoverLegacyCudaOrphans')&&source.includes('activation-pending'),'Journal/recovery CUDA no empaquetado');
   assert(source.includes('site-packages.candidate')&&source.includes('requireMarker:false')&&source.includes('TTS_ENGINE_ROLLBACK_FAILED'),'Engine staging/rollback no empaquetado');
   assert(source.includes("PYTHONPATH:[engineSite,cudaSite]")&&!source.includes('engineSite,cudaSite,existingPy'),'Aislamiento PYTHONPATH no empaquetado');
-  assert(renderer.includes('v2InstallProgress')&&renderer.includes('Reintentar activación')&&renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab24'"),'UX lab.23 no empaquetada');
+  assert(renderer.includes('v2InstallProgress')&&renderer.includes('Reintentar activación')&&renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab25'"),'UX lab.23 no empaquetada');
   assert(worker.includes('GEC_TTS_MODEL_OVERLAYS')&&worker.includes('chunk-heartbeat')&&worker.includes('QWEN_SHARED_REVISION = 2'),'Overlay/heartbeat Qwen no empaquetado');
   assert(release.includes('fallbackFrom:engine')&&release.includes('recoverAllTransactions'),'Fallback/recovery startup no empaquetado');
   assert(main.includes("show:false,title:'EC Automatic News'")&&main.includes('CONTROL_LOAD_SLOW')&&main.includes("controlWindow.on('unresponsive'"),'Startup renderer guard no empaquetado');

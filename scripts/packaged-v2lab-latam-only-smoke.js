@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
+  assert.strictEqual(pkg.version,'2.0.0-lab.27');
   const ui=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8');
   const worker=fs.readFileSync(path.join(appRoot,'src','tts_lab_worker.py'),'utf8');
   const runtime=fs.readFileSync(path.join(appRoot,'src','services','ttsLabRuntime.js'),'utf8');
@@ -22,7 +22,7 @@ app.whenReady().then(async()=>{try{
   assert(runtime.includes("chatterboxVariant(params={}){return'latam';}")&&runtime.includes('checkChatterboxConsistency'));
   assert(routing.includes("bind('tts-lab:checkConsistency'"));
   assert(preload.includes('ttsLabCheckConsistency'));
-  assert(prod.includes("const PROFILE_VERSION='2.0-lab.24'"));
+  assert(prod.includes("const PROFILE_VERSION='2.0-lab.25'"));
 
   console.log('PACKAGED V2 LATAM ONLY lab.23 OK · no Multilingual route · consistency comparison packaged');
   app.exit(0);

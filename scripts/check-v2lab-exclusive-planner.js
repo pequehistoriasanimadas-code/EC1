@@ -36,6 +36,18 @@ assert.equal(engine.exclusiveReserve.length,10);
 assert.equal(engine.queue.length,0,'Las exclusivas reservadas no deben entrar a la cola de emisión');
 assert.equal(engine.queuedUrls.size,10,'La reserva debe bloquear duplicados sin inflar la cola');
 
+// La preparación proyecta la cola futura: P,P,P exige E aunque todavía no se haya emitido nada.
+engine.newsSinceExclusive=0;engine.queue=[pub(1),pub(2),pub(3)];
+let prep=engine.processingSchedulerState(settings);
+assert.equal(prep.due,true,'Tres públicas preparadas deben habilitar inmediatamente el cuarto slot exclusivo');
+assert.equal(prep.activeNews,3);
+engine.queue=[pub(1),pub(2),pub(3),ex(1)];
+prep=engine.processingSchedulerState(settings);
+assert.equal(prep.due,false,'La exclusiva preparada debe reiniciar la cadencia proyectada');
+assert.equal(prep.nonExclusiveNeeded,3);
+engine.queue=[pub(1),pub(2),pub(3),ex(1),pub(4),pub(5),pub(6)];
+assert.equal(engine.processingSchedulerState(settings).due,true,'La secuencia P P P E P P P debe volver a exigir exclusiva');
+
 // Elección estricta de emisión.
 let q=[ex(1),pub(1),pub(2),pub(3)];
 engine.queue=q;engine.exclusiveReserve=[];engine.exclusiveReserveKeys.clear();
@@ -61,6 +73,7 @@ const source=fs.readFileSync(path.join(__dirname,'../src/services/automation0325
 assert(source.includes("exclusiveContentModeRequested:s?.automation?.openExclusiveArticles===true?'full':'public-preview'"));
 assert(source.includes("holder.exclusiveContentModeRequested==='full'"));
 assert(source.includes("result:{...result,ttsScript:locution.text,exclusiveContentMode:holder.exclusiveContentMode}"));
+assert(source.includes('sched=this.processingSchedulerState(s)')&&source.includes('const selectionMode=needDueExclusive?{exclusiveOnly:true}:{publicOnly:true}'),'El productor debe usar cadencia proyectada y reservar el cuarto slot a la exclusiva');
 
 const ui=fs.readFileSync(path.join(__dirname,'../src/renderer-final-0324.js'),'utf8');
 assert(ui.includes("#tab-auto .auto-cols > div:first-child"),'Frecuencia debe estar en Automático');
@@ -68,4 +81,4 @@ assert(ui.includes('id="openExclusiveArticles"'),'Falta Abrir exclusivas');
 assert(ui.includes('solo afecta exclusivas que aún no comenzaron IA/TTS'));
 assert(!ui.includes("const host=$q('#globalExclusiveClose')"),'La frecuencia ya no debe inyectarse en Ajustes');
 
-console.log('check-v2lab-exclusive-planner: OK · public-first · reserva fuera de cola · 1/4 estricto · Abrir exclusivas futuro-only · contenido/anuncio intactos');
+console.log('check-v2lab-exclusive-planner: OK · preparación P-P-P-E · reserva fuera de cola · 1/4 estricto · Abrir exclusivas futuro-only · contenido/anuncio intactos');
