@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.26');
+  assert.strictEqual(pkg.version,'2.0.0-lab.27');
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime}=require(runtimePath);
   const source=fs.readFileSync(runtimePath,'utf8'),renderer=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8'),optimizer=fs.readFileSync(path.join(appRoot,'src','renderer-0321.js'),'utf8'),release=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8');

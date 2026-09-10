@@ -16,6 +16,8 @@ const out31=read('src/output-0331.js');
 const r31=read('src/renderer-0331.js');
 const r32=read('src/renderer-0332.js');
 const rLan=read('src/renderer-lan-output.js');
+const monitorLab27=read('src/renderer-monitor-live-lab27.js');
+const youtubeRelease=read('src/services/releaseV2YoutubePromo.js');
 const optimizer=read('src/renderer-0321.js');
 const lanServer=read('src/services/outputLanServer.js');
 
@@ -39,22 +41,24 @@ assert(out.includes('await stopMusicForCanned();if(serial!==contentSerial)return
 assert(out31.includes("(outputMode==='content'||outputMode==='ad')")&&out31.includes('musicEl.pause()'),'watchdog no puede reactivar música durante contenido/anuncio');
 assert(out.includes("music.loop=design.musicLoop!==false"),'música debe conservar loop configurado durante noticias y continuidad desde standby');
 
-// 5. Monitor: captura directa del Output, no localhost/iframe.
+// 5. Monitor: captura directa del Output, no localhost/iframe, y debe seguir refrescando durante IA/TTS normal.
 assert(main.includes("ipcMain.handle('output:monitorFrame'")&&main.includes('captureOutputMonitorFrame')&&main.includes('capturePage()'),'monitor debe capturar el Output directamente');
 assert(preload.includes('outputMonitorFrame')&&rLan.includes('outputMonitorFrame()')&&rLan.includes('ecMonitorImage'),'bridge/UI del monitor directo faltante');
 assert(!rLan.includes('function ensureMonitorFrame()'),'monitor interno no debe volver a depender de iframe/localhost');
 assert(preload.includes('outputMonitorAudio')&&main.includes("ipcMain.handle('output:monitorAudio'")&&rLan.includes('Audio monitor: OFF'),'monitor debe conservar audio local opcional sin iframe');
-assert(rLan.includes('productionGpuBusy()'),'monitor debe dejar de capturar mientras IA/TTS ocupa GPU');
+assert(monitorLab27.includes('refreshDuringProduction')&&monitorLab27.includes('productionBusy()')&&monitorLab27.includes('outputMonitorFrame()'),'Lab.27 debe suplir la captura mientras IA/TTS ocupa GPU para evitar congelar el monitor');
+assert(monitorLab27.includes('optimizerActiveLab27()')&&youtubeRelease.includes("injectFile(win,'renderer-monitor-live-lab27.js','js')"),'la corrección del monitor debe cargarse y seguir respetando la pausa explícita de optimización/benchmark');
 
 // 6. Optimización: Chatterbox/Qwen deben medirse con renderizadores secundarios liberados.
 assert(optimizer.includes('outputBenchmarkQuiesce')&&optimizer.includes('outputBenchmarkRestore'),'optimizador debe aislar Output/monitor/NDI');
 assert(main.includes('quiesceOutputForBenchmark')&&main.includes('destroyNdiWindow()'),'main debe liberar renderizadores secundarios durante benchmark');
 assert(main.includes("autoState?.emission?.running")&&main.includes("outputState.source==='manual'"),'optimizador no debe destruir una emisión real para hacer benchmark');
 
-// 7. Contenidos/anuncios: identidad real y selección manual.
+// 7. Contenidos/anuncios: identidad real, selección manual y promo YouTube propagada solo al contenido.
 assert(rel31.includes('scheduleSpecificContent')&&rel31.includes('mediaByPath(this.canned,folder,wanted)'),'programar contenido específico debe conservarse');
 assert(rel31.includes('await this.playAdAfterCanned'),'anuncio posterior a contenido debe conservarse');
 assert(rel32.includes("sourceType:'content'")&&rel32.includes("sourceType:'ad'")&&rel32.includes('plan.content.name')&&rel32.includes('plan.ad.name'),'cola debe mostrar nombres reales de contenido/anuncio');
+assert(youtubeRelease.includes('installAutomationSnapshot')&&youtubeRelease.includes("String(payload?.mediaRole||'')==='content'")&&youtubeRelease.includes('this.currentCanned?.youtubePromo')&&youtubeRelease.includes("String(payload?.mediaRole||'')==='ad'")&&youtubeRelease.includes('youtubePromo:null'),'el snapshot YouTube del contenido debe viajar al Output y nunca aplicarse al anuncio posterior');
 
 // 8. Output local/LAN: ocultar no mata la emisión y servidor LAN sigue expuesto a la red cuando está activo.
 assert(main.includes("outputWindow.on('close',e=>{if(!controlledShutdown()){e.preventDefault();outputWindow.hide()"),'cerrar Output debe ocultar, no destruir durante operación');
@@ -65,4 +69,4 @@ const ndi=read('src/services/outputNdi.js');
 assert(main.includes('startNdiFrameClock')&&main.includes('seedNdiProgram')&&main.includes('currentOutputProgram'),'NDI debe mantener frames constantes y recuperar el programa actual al reiniciar');
 assert(ndi.includes('this.connections>0')&&ndi.includes('this.connections<1'),'NDI no debe copiar frames/audio crudos si no hay receptores');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor/audio · optimization · content/ad · LAN · NDI');
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor-live/audio · optimization · content/ad + YouTube promo · LAN · NDI');

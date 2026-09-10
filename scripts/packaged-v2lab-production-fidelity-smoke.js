@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.26');
+  assert.strictEqual(pkg.version,'2.0.0-lab.27');
 
   const servicePath=path.join(appRoot,'src','services','releaseV2ProductionFidelity.js');
   const localPath=path.join(appRoot,'src','services','localRuntime.js');

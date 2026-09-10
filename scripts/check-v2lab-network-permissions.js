@@ -54,7 +54,7 @@ ok(css.includes('ec-network-permissions'),'network permission card has dedicated
 
 const pkgText=read('package.json');
 let pkg={};try{pkg=JSON.parse(pkgText);}catch(e){fail('package.json parses: '+e.message);}
-ok(pkg.version==='2.0.0-lab.26','package version is 2.0.0-lab.26');
+ok(pkg.version==='2.0.0-lab.27','package version is 2.0.0-lab.27');
 ok(pkg?.build?.portable?.requestExecutionLevel==='user','Portable continues to run as a normal user');
 ok(String(pkg?.scripts?.check||'').includes('check-v2lab-network-permissions.js'),'npm check gates the network permission regression check');
 ok((pkg?.build?.files||[]).includes('scripts/packaged-v2lab-network-permissions-smoke.js'),'packaged smoke script is included');
