@@ -43,6 +43,8 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
   assert(main.includes('offscreen:true')&&main.includes("webContents.on('paint'")&&main.includes('toBitmap()'),'NDI debe capturar el Output completo mediante una ventana offscreen aislada');
   assert(main.includes("ipcMain.handle('output:ndiStatus'")&&main.includes("ipcMain.handle('output:ndiConfigure'")&&main.includes("ipcMain.on('output:ndiAudio'"),'Main debe exponer estado/configuración y transportar audio NDI');
   assert(main.includes("ndiWindow.webContents.send('output:story'")&&main.includes("ndiWindow.webContents.send('output:control'"),'NDI debe reflejar la misma historia y controles del Output maestro');
+  assert(main.includes('currentOutputProgram')&&main.includes('seedNdiProgram')&&main.includes('replayOutputSec()'),'NDI debe retomar el programa actual al activarse/reiniciarse');
+  assert(main.includes('startNdiFrameClock')&&main.includes('webContents.invalidate()'),'NDI debe forzar frames a la cadencia configurada incluso en escenas estáticas');
   assert(preload.includes("if(!isNdiMirror)ipcRenderer.send('output:playback'"),'El espejo NDI no debe duplicar eventos de fin/progreso hacia automatización');
   assert(preload.includes("if(isNdiMirror)ipcRenderer.send('output:ndiAudio'"),'Solo el espejo NDI puede enviar muestras de audio');
   assert(audio.includes("window.__GEC_NDI_AUDIO_TAP__='lab25'")&&audio.includes('createMediaElementSource')&&audio.includes('createScriptProcessor'),'El espejo NDI debe mezclar el audio real de los elementos multimedia');
@@ -52,6 +54,7 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
   assert(cpp.includes('LoadLibraryExW')&&cpp.includes('Processing.NDI.Lib.x64.dll')&&cpp.includes('NDIlib_send_send_video_v2')&&cpp.includes('NDIlib_send_send_audio_v3'),'Bridge debe cargar el runtime instalado dinámicamente y enviar video/audio');
   assert(cpp.includes('--self-test')&&cpp.includes('NDI_BGRA')&&cpp.includes('NDI_FLTP'),'Bridge debe incluir smoke autónomo y formatos High Bandwidth esperados');
   assert(!main.includes('require(\'Processing.NDI.Lib.x64.dll\')'),'GEC no debe depender de una DLL NDI cargada dentro de Electron');
+  const ndiService=read('src/services/outputNdi.js');assert(ndiService.includes('this.connections>0')&&ndiService.includes('this.connections<1'),'Transport NDI debe dormir cuando no hay receptor conectado');
 
   console.log('check-v2lab-ndi: OK · sender aislado · BGRA + audio 48k · runtime dinámico · UI + fallback no fatal');
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
