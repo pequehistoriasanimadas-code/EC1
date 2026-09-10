@@ -34,11 +34,11 @@ std::wstring fromBstr(BSTR value) {
 bool isElevated() {
   HANDLE token = nullptr;
   if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
-  TOKEN_ELEVATION TokenElevation{};
+  TOKEN_ELEVATION elevation{};
   DWORD size = 0;
-  const BOOL ok = GetTokenInformation(token, TokenElevation, &TokenElevation, sizeof(TokenElevation), &size);
+  const BOOL ok = GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size);
   CloseHandle(token);
-  return ok && TokenElevation.TokenIsElevated != 0;
+  return ok && elevation.TokenIsElevated != 0;
 }
 
 std::wstring argValue(int argc, wchar_t** argv, const wchar_t* key) {
