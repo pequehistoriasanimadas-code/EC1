@@ -65,6 +65,7 @@ jobs:
       - name: Prepare bundled local runtimes
         shell: pwsh
         run: ./scripts/prepare-windows-runtime.ps1
+
       - name: Build NDI output bridge
         shell: pwsh
         run: |
@@ -91,6 +92,32 @@ jobs:
           & $bridge --self-test
           if ($LASTEXITCODE -ne 0) { throw "NDI bridge self-test failed with code $LASTEXITCODE" }
 
+      - name: Build network permission helper
+        shell: pwsh
+        run: |
+          $networkDir = Join-Path $PWD 'runtime\network'
+          New-Item -ItemType Directory -Force -Path $networkDir | Out-Null
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw "vswhere not found: $vswhere" }
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'MSVC x64 build tools not found' }
+          $dev = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
+          if (-not (Test-Path $dev)) { throw "VsDevCmd not found: $dev" }
+          $cmdFile = Join-Path $env:RUNNER_TEMP 'build-gec-network-permissions.cmd'
+          @"
+          @echo off
+          call "$dev" -no_logo -arch=x64 -host_arch=x64
+          if errorlevel 1 exit /b %errorlevel%
+          cl /nologo /std:c++17 /O2 /EHsc /DUNICODE /D_UNICODE src\native\network_permissions.cpp /Fe:runtime\network\gec-network-permissions.exe
+          exit /b %errorlevel%
+          "@ | Set-Content -Path $cmdFile -Encoding ASCII
+          & cmd.exe /d /c $cmdFile
+          if ($LASTEXITCODE -ne 0) { throw "Network permission helper compilation failed with code $LASTEXITCODE" }
+          $helper = Join-Path $networkDir 'gec-network-permissions.exe'
+          if (-not (Test-Path $helper)) { throw "Compiled network permission helper missing: $helper" }
+          & $helper --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Network permission helper self-test failed with code $LASTEXITCODE" }
+
       - name: Build GEC V2.0 TTS Lab portable EXE
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -102,7 +129,7 @@ jobs:
         run: |
           $exe = Join-Path $PWD 'dist\win-unpacked\EC Automatic News.exe'
           if (-not (Test-Path $exe)) { throw "Missing V2 Lab executable: $exe" }
-          $root = Join-Path $env:RUNNER_TEMP ("gec-lab25-startup-" + [guid]::NewGuid().ToString("N"))
+          $root = Join-Path $env:RUNNER_TEMP ("gec-lab26-startup-" + [guid]::NewGuid().ToString("N"))
           New-Item -ItemType Directory -Force -Path $root | Out-Null
           $env:GEC_V2_TTS_LAB_ROOT = $root
           $proc = Start-Process -FilePath $exe -ArgumentList '--startup-smoke' -PassThru
@@ -148,6 +175,15 @@ jobs:
           $resources = Join-Path $PWD 'dist\win-unpacked\resources'
           node scripts/packaged-v2lab-ndi-smoke.js $resources
           if ($LASTEXITCODE -ne 0) { throw "Packaged V2 NDI smoke test failed with code $LASTEXITCODE" }
+
+      - name: Packaged V2.0 network permission helper smoke test
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          $resources = Join-Path $PWD 'dist\win-unpacked\resources'
+          node scripts/packaged-v2lab-network-permissions-smoke.js $resources
+          if ($LASTEXITCODE -ne 0) { throw "Packaged V2 network permission smoke test failed with code $LASTEXITCODE" }
+
       - name: Packaged V2.0 TTS Lab architecture smoke test
         shell: pwsh
         timeout-minutes: 4
