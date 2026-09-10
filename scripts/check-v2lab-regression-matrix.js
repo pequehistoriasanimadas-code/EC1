@@ -8,6 +8,7 @@ const main=read('src/main.js');
 const preload=read('src/preload.js');
 const automation=read('src/services/automation.js');
 const auto25=read('src/services/automation0325.js');
+const rel30=read('src/services/release0330.js');
 const rel31=read('src/services/release0331.js');
 const rel32=read('src/services/release0332.js');
 const out=read('src/output.js');
@@ -22,6 +23,7 @@ const lanServer=read('src/services/outputLanServer.js');
 assert(automation.includes('this.newsEmitted=0')&&auto25.includes('this.newsEmitted++'),'contador de noticias emitidas debe existir e incrementarse al terminar cada noticia');
 assert(automation.includes('this.cannedPlayed=0')&&automation.includes('this.adsPlayed=0'),'contadores de contenido/anuncio deben existir');
 assert(r32.includes('syncSessionCounters(snapshot)')&&r32.includes('lastAutomationStateAt')&&r32.includes('sessionPollTimer'),'renderer final debe actualizar/pollear contadores de sesión');
+assert(!rel30.includes("this.__ec0330ContentAnchorNews=0;return baseReset.call(this)")&&!rel31.includes("this.__ec0331MediaPlan=null;this.__ec0331SkippedContent=false;return baseReset.call(this)")&&!rel32.includes("this.__ec0332PlanRegistry=new Map();this.__ec0332PlanContext='';\n    return baseReset.call(this)"),'Reiniciar contadores visibles no debe alterar frecuencia, selección ni identidad de contenidos programados');
 
 // 2. Exclusivas: la preparación debe respetar la frecuencia, no esperar a llenar todo con públicas.
 assert(auto25.includes('processingSchedulerState(settings')&&auto25.includes('sched=this.processingSchedulerState(s)'),'productor debe proyectar la cadencia de exclusivas sobre la cola en preparación');
