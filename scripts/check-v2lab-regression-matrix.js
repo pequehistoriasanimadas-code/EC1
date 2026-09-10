@@ -54,10 +54,11 @@ assert(optimizer.includes('outputBenchmarkQuiesce')&&optimizer.includes('outputB
 assert(main.includes('quiesceOutputForBenchmark')&&main.includes('destroyNdiWindow()'),'main debe liberar renderizadores secundarios durante benchmark');
 assert(main.includes("autoState?.emission?.running")&&main.includes("outputState.source==='manual'"),'optimizador no debe destruir una emisión real para hacer benchmark');
 
-// 7. Contenidos/anuncios: identidad real y selección manual.
+// 7. Contenidos/anuncios: identidad real, selección manual y promo YouTube propagada solo al contenido.
 assert(rel31.includes('scheduleSpecificContent')&&rel31.includes('mediaByPath(this.canned,folder,wanted)'),'programar contenido específico debe conservarse');
 assert(rel31.includes('await this.playAdAfterCanned'),'anuncio posterior a contenido debe conservarse');
 assert(rel32.includes("sourceType:'content'")&&rel32.includes("sourceType:'ad'")&&rel32.includes('plan.content.name')&&rel32.includes('plan.ad.name'),'cola debe mostrar nombres reales de contenido/anuncio');
+assert(youtubeRelease.includes('installAutomationPromoForwarding')&&youtubeRelease.includes("payload?.mediaRole==='content'")&&youtubeRelease.includes('youtubePromo:promo'),'el snapshot YouTube del contenido debe viajar al Output y nunca aplicarse al anuncio posterior');
 
 // 8. Output local/LAN: ocultar no mata la emisión y servidor LAN sigue expuesto a la red cuando está activo.
 assert(main.includes("outputWindow.on('close',e=>{if(!controlledShutdown()){e.preventDefault();outputWindow.hide()"),'cerrar Output debe ocultar, no destruir durante operación');
@@ -68,4 +69,4 @@ const ndi=read('src/services/outputNdi.js');
 assert(main.includes('startNdiFrameClock')&&main.includes('seedNdiProgram')&&main.includes('currentOutputProgram'),'NDI debe mantener frames constantes y recuperar el programa actual al reiniciar');
 assert(ndi.includes('this.connections>0')&&ndi.includes('this.connections<1'),'NDI no debe copiar frames/audio crudos si no hay receptores');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor-live/audio · optimization · content/ad · LAN · NDI');
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor-live/audio · optimization · content/ad + YouTube promo · LAN · NDI');
