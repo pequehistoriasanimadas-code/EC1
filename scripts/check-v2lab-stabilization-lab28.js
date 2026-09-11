@@ -4,9 +4,9 @@ const assert=require('assert');
 const read=file=>fs.readFileSync(file,'utf8');
 
 const pkg=JSON.parse(read('package.json'));
-assert.strictEqual(pkg.version,'2.0.0-lab.28','La build debe identificarse como Lab.28');
-assert(pkg.scripts.check.includes('check-v2lab-stabilization-lab28.js'),'npm check debe ejecutar el gate de Lab.28');
-assert((pkg.build.files||[]).includes('scripts/check-v2lab-stabilization-lab28.js'),'El gate Lab.28 debe quedar dentro del paquete para auditoría');
+assert.strictEqual(pkg.version,'2.0.0-lab.29','La build debe identificarse como Lab.29');
+assert(pkg.scripts.check.includes('check-v2lab-stabilization-lab28.js'),'npm check debe ejecutar el gate de estabilización heredado');
+assert((pkg.build.files||[]).includes('scripts/check-v2lab-stabilization-lab28.js'),'El gate de estabilización debe quedar dentro del paquete para auditoría');
 
 for(const file of [
   'src/services/releaseV2Stabilization.js',
@@ -40,7 +40,6 @@ const legacyMonitor=read('src/renderer-monitor-live-lab27.js');
 assert(!legacyMonitor.includes('setInterval'),'No puede quedar el segundo loop Lab.27');
 assert(!legacyMonitor.includes('outputMonitorFrame()'),'El suplemento Lab.27 no debe duplicar capturePage');
 
-// Lab.29: YouTube is protected from stale generic saves.
 const lab29Release=read('src/services/releaseV2Lab29.js');
 const lab29Ui=read('src/renderer-lab29.js');
 assert(lab29Release.includes('preserveYoutubePromoState'),'Lab.29 debe proteger YouTube de guardados genéricos stale');
@@ -49,8 +48,6 @@ assert(lab29Release.includes('__youtubePromoConfigLab29'),'La configuración ena
 assert(lab29Ui.includes('__youtubePromoConfigLab29'),'La UI debe usar la ruta dedicada para enabled/leadSeconds');
 assert(!/saveYoutubeConfig\(\)[\s\S]{0,800}youtubePromo\.links\s*=/.test(lab29Ui),'La UI de configuración no debe reescribir links/videos');
 assert(lab29Release.includes('protectedYoutubePromo'),'El guard debe conservar íntegros links/videos ya persistidos');
-
-// Lab.29: one effective capture owner; 15 FPS normally and 5 FPS while production is busy.
 assert(/MONITOR_FPS\s*=\s*15/.test(lab29Ui),'Monitor Lab.29 debe operar a 15 FPS en estado normal');
 assert(/MONITOR_BUSY_FPS\s*=\s*5/.test(lab29Ui),'Monitor Lab.29 debe seguir vivo a 5 FPS durante IA/TTS');
 assert(lab29Ui.includes('monitorCaptureInterval'),'Lab.29 debe tener una cadencia adaptativa de captura');
