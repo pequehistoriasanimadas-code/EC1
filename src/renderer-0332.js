@@ -6,7 +6,7 @@
   window.__ecQueueRenderOwner='0332';
 
   const q=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  let latest=null,raf=0,rendering=false;
+  let latest=null,raf=0,rendering=false,lastAutomationStateAt=0,sessionPollTimer=null;
 
   function rowKind(row){return row?.sourceType==='content'?'content':row?.sourceType==='ad'?'ad':'news';}
   function rowTypeLabel(row){const k=rowKind(row);return k==='content'?'CONTENIDO':k==='ad'?'ANUNCIO':'NOTICIA';}
@@ -70,12 +70,25 @@
       window.__ec0332QueueAudit={rows:rows.length,rendered:box.querySelectorAll(':scope > .queue-item').length,planned:box.querySelectorAll(':scope > .queue-item.planned').length,exclusive:box.querySelectorAll('.queue-exclusive').length,positions:[...box.querySelectorAll(':scope > .queue-item .queue-index')].map(x=>x.textContent.trim()).filter(Boolean),owner:window.__ecQueueRenderOwner};
     }finally{rendering=false;}
   }
+  function syncSessionCounters(snapshot){
+    const x=snapshot?.session||{},news=q('#sessionNewsEmitted'),canned=q('#sessionCannedEmitted'),ads=q('#sessionAdsEmitted');
+    if(news)news.textContent=String(Number(x.newsEmitted)||0);
+    if(canned)canned.textContent=String(Number(x.cannedEmitted)||0);
+    if(ads)ads.textContent=String(Number(x.adsEmitted)||0);
+    window.__ec0332SessionAudit={newsEmitted:Number(x.newsEmitted)||0,cannedEmitted:Number(x.cannedEmitted)||0,adsEmitted:Number(x.adsEmitted)||0,at:Date.now()};
+  }
+  function acceptAutomationState(snapshot){
+    if(!snapshot)return;
+    latest=snapshot;lastAutomationStateAt=Date.now();syncSessionCounters(snapshot);schedule(snapshot);
+  }
   function schedule(snapshot){latest=snapshot||latest;if(!latest||raf)return;raf=requestAnimationFrame(()=>{raf=0;renderStable(latest);});}
 
   renderQueue=function(snapshot){schedule(snapshot);};
   const refreshBase=typeof refreshAutomation==='function'?refreshAutomation:null;
-  if(refreshBase)refreshAutomation=function(s){const r=refreshBase(s);schedule(s);return r;};
+  if(refreshBase)refreshAutomation=function(s){const r=refreshBase(s);acceptAutomationState(s);return r;};
 
-  window.ECAPI.on('automation:state',s=>schedule(s));
-  window.ECAPI.automationStatus?.().then(s=>schedule(s)).catch(()=>{});
+  window.ECAPI.on('automation:state',s=>acceptAutomationState(s));
+  window.ECAPI.automationStatus?.().then(s=>acceptAutomationState(s)).catch(()=>{});
+  sessionPollTimer=setInterval(()=>{if(document.hidden||Date.now()-lastAutomationStateAt<2200)return;window.ECAPI.automationStatus?.().then(s=>acceptAutomationState(s)).catch(()=>{});},2500);
+  window.addEventListener('beforeunload',()=>clearInterval(sessionPollTimer),{once:true});
 })();

@@ -27,4 +27,7 @@ if(!gotLock){app.quit();}else{
   require('./services/releaseV2Lab').installReleaseV2Lab();
   require('./services/releaseV2Optimization').installV2Optimization();
   require('./services/releaseV2ProductionFidelity').installV2ProductionFidelity();
+  require('./services/releaseV2NetworkPermissions').installReleaseV2NetworkPermissions();
+  require('./services/releaseV2YoutubePromo').installReleaseV2YoutubePromo();
+  require('./services/releaseV2Stabilization').installReleaseV2Stabilization();
 }

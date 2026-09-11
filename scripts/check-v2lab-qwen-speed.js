@@ -5,7 +5,7 @@ const {TTSLabRuntime,CACHE_REVISION}=require(path.join(root,'src','services','tt
 
 (async()=>{
   const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
+  assert.strictEqual(pkg.version,'2.0.0-lab.28');
   const rt=Object.create(TTSLabRuntime.prototype);
   rt.qwenCapabilities=async()=>({flash_attention_2:false,sdpa:true,fp16:true,bf16:true,gpu_name:'RTX TEST',gpu_vram_mb:12288});
   rt.stopAndWait=async()=>true;
