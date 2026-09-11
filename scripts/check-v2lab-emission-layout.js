@@ -84,9 +84,9 @@ assert(!/position\s*:\s*sticky/.test(css),'No debe introducirse preview sticky e
 const outCss=read('src/output-youtube-promo.css');
 for(const variable of ['--yt-x','--yt-y','--yt-scale','--yt-bg-opacity','--yt-thumb-scale','--yt-radius','--yt-title-lines'])assert(outCss.includes(variable),`Falta variable CSS de promo ${variable}`);
 
+const stabilizationGate=read('scripts/check-v2lab-stabilization-lab28.js');
+assert(stabilizationGate.includes("require('./check-v2lab-emission-layout')"),'La suite principal debe ejecutar la regresión de Diseño/Salida mediante el gate Lab.28');
 const pkg=JSON.parse(read('package.json'));
-assert(pkg.scripts.check.includes('check-v2lab-emission-layout.js'),'La suite principal debe ejecutar la regresión de Diseño/Salida');
-assert(pkg.scripts.check.includes('youtubePromoDesignLab29.js'),'El normalizador de Promo debe pasar node --check');
-assert((pkg.build.files||[]).includes('scripts/check-v2lab-emission-layout.js'),'El smoke empaquetado debe incluir la regresión nueva');
+assert((pkg.build.files||[]).includes('src/**/*'),'El normalizador y runtime nuevos deben quedar incluidos por src/**/* en el paquete');
 
 console.log('check-v2lab-emission-layout: OK · diseño completo + salida + promo fresca + responsive + reset seguro');
