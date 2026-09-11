@@ -8,10 +8,10 @@
   const thumb=root.querySelector('.ec-youtube-promo-thumb'),kickerEl=root.querySelector('.ec-youtube-promo-kicker'),titleEl=root.querySelector('.ec-youtube-promo-title'),channelEl=root.querySelector('.ec-youtube-promo-channel');
   const num=(v,fallback)=>Number.isFinite(Number(v))?Number(v):fallback;
   function applyDesign(design={}){
-    const d=design&&typeof design==='object'?design:{};root.dataset.position=String(d.position||'bottom-left');
-    root.style.setProperty('--yt-x',`${num(d.xPercent,4)}%`);root.style.setProperty('--yt-y',`${num(d.yPercent,5)}%`);root.style.setProperty('--yt-scale',String(num(d.scale,1)));
+    const d=design&&typeof design==='object'?design:{},format=String(d.format||stage?.dataset?.format||'16:9')==='9:16'?'9:16':'16:9',thumbScale=num(d.thumbnailScale,1),baseThumb=format==='9:16'?300:250;root.dataset.position=String(d.position||'bottom-left');
+    root.style.setProperty('--yt-x',`${num(d.xPercent,format==='9:16'?5:4)}%`);root.style.setProperty('--yt-y',`${num(d.yPercent,format==='9:16'?8:5)}%`);root.style.setProperty('--yt-scale',String(num(d.scale,format==='9:16'?.9:1)));
     root.style.setProperty('--yt-cta-size',`${num(d.ctaFontSize,22)}px`);root.style.setProperty('--yt-title-size',`${num(d.titleFontSize,18)}px`);root.style.setProperty('--yt-channel-size',`${num(d.channelFontSize,14)}px`);
-    root.style.setProperty('--yt-bg-opacity',String(num(d.backgroundOpacity,.85)));root.style.setProperty('--yt-thumb-scale',String(num(d.thumbnailScale,1)));root.style.setProperty('--yt-radius',`${num(d.borderRadius,14)}px`);root.style.setProperty('--yt-title-lines',String(Math.max(1,Math.min(4,Math.round(num(d.titleMaxLines,2))))));
+    root.style.setProperty('--yt-bg-opacity',String(num(d.backgroundOpacity,.85)));root.style.setProperty('--yt-thumb-scale',String(thumbScale));root.style.setProperty('--yt-thumb-width',`${Math.round(baseThumb*thumbScale)}px`);root.style.setProperty('--yt-radius',`${num(d.borderRadius,14)}px`);root.style.setProperty('--yt-title-lines',String(Math.max(1,Math.min(4,Math.round(num(d.titleMaxLines,2))))));
   }
   function resetDesign(){applyDesign({});}
   function clearYouTubePromo({forget=true}={}){
