@@ -18,7 +18,7 @@
   function arm(p){clearYouTubePromo();const next=validSnapshot(p);if(!next)return;snapshot=next;thumb.src=next.thumbnailDataUrl;titleEl.textContent=next.title;channelEl.textContent=next.channel;}
   function show(){if(!snapshot||shown)return;shown=true;root.classList.remove('instant-clear');root.getBoundingClientRect();root.classList.add('visible');}
   function onTime(){if(!snapshot||!Number.isFinite(cannedVideo.duration)||cannedVideo.duration<=0)return;const remain=Math.max(0,cannedVideo.duration-cannedVideo.currentTime);if(remain<=snapshot.leadSeconds&&remain>0.02){show();return;}if(shown&&remain>snapshot.leadSeconds+0.15){clearYouTubePromo({forget:false});}}
-  cannedVideo.addEventListener('timeupdate',onTime);cannedVideo.addEventListener('durationchange',onTime);cannedVideo.addEventListener('ended',()=>clearYouTubePromo());cannedVideo.addEventListener('error',()=>clearYouTubePromo());cannedVideo.addEventListener('emptied',()=>clearYouTubePromo());
+  cannedVideo.addEventListener('timeupdate',onTime);cannedVideo.addEventListener('durationchange',onTime);cannedVideo.addEventListener('ended',()=>clearYouTubePromo());cannedVideo.addEventListener('error',()=>clearYouTubePromo());cannedVideo.addEventListener('emptied',()=>clearYouTubePromo({forget:false}));
   window.ECAPI.on('output:story',p=>arm(p||{}));
   window.ECAPI.on('output:control',action=>{if(String(action||'')==='stop')clearYouTubePromo();});
   window.addEventListener('beforeunload',()=>clearYouTubePromo(),{once:true});
