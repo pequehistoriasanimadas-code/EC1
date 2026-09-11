@@ -7,6 +7,7 @@ const {AutomationEngine}=require('./automation0325');
 const {SettingsStore}=require('./settings');
 const {getProfileManager}=require('./profileManager0329');
 const fidelity=require('./releaseV2ProductionFidelity');
+const {normalizeYoutubePromoDesign}=require('./youtubePromoDesignLab29');
 
 const SIDE_SCHEMA=1;
 const SIDE_FILE='optimization-lab28.json';
@@ -31,7 +32,18 @@ function sideFile(base=dataRoot(),id=''){const ctx=activeProfile(base),profileId
 function legacyProfileFile(base=dataRoot()){return path.join(base,'tts-lab',LEGACY_PROFILE_FILE);}
 function readSide(base=dataRoot(),id=''){return readJson(sideFile(base,id),null);}
 function writeSide(base,id,value){atomicJson(sideFile(base,id),{schemaVersion:SIDE_SCHEMA,updatedAt:new Date().toISOString(),...value});}
-function promoCta(settings={}){const value=settings?.visual?.output?.youtubePromoCtaText;return value==null?DEFAULT_PROMO_CTA:String(value);}
+function promoCta(settings={}){const out=settings?.visual?.output||{},root=out.youtubePromoDesign;const value=root&&Object.prototype.hasOwnProperty.call(root,'ctaText')?root.ctaText:out.youtubePromoCtaText;return value==null?DEFAULT_PROMO_CTA:String(value);}
+function sameMediaPath(a,b){try{return path.resolve(String(a||'')).normalize('NFKC').toLocaleLowerCase('es')===path.resolve(String(b||'')).normalize('NFKC').toLocaleLowerCase('es');}catch{return String(a||'').replace(/\\/g,'/').toLocaleLowerCase('es')===String(b||'').replace(/\\/g,'/').toLocaleLowerCase('es');}}
+function freshYoutubePromoSnapshot(engine,payload={}){
+  const role=String(payload?.mediaRole||'');if(role!=='content')return null;
+  const s=engine?.getSettings?.()||{},folder=String(s?.canned?.folder||''),current=engine?.currentCanned||{};
+  if(!s?.canned?.youtubePromo?.enabled||!folder||!current?.path)return null;
+  let fresh=null;
+  try{const scan=engine?.canned?.list?.(folder);fresh=scan?.files?.find(x=>sameMediaPath(x?.path,current.path))||null;}catch{return null;}
+  const promo=fresh?.youtubePromo;if(!promo?.enabled)return null;
+  const cta=promoCta(s),format=String(s?.visual?.output?.format||payload?.format||'16:9')==='9:16'?'9:16':'16:9',design=normalizeYoutubePromoDesign(s?.visual?.output?.youtubePromoDesign||{},format,cta);
+  return{...clone(promo),ctaText:cta,design};
+}
 
 function applyProductionProfile(settings,profile){
   const s=settings&&typeof settings==='object'?settings:{};
@@ -138,7 +150,7 @@ function installActualYoutubeSnapshot(){
     const originalSend=this.sendAutomaticOutput;if(typeof originalSend!=='function')return basePlay.apply(this,args);
     this.sendAutomaticOutput=(payload)=>{
       let next=payload;const role=String(payload?.mediaRole||'');
-      if(role==='content'&&this.currentCanned?.youtubePromo){const cta=promoCta(this.getSettings?.()||{});next={...payload,youtubePromo:{...clone(this.currentCanned.youtubePromo),ctaText:cta}};}
+      if(role==='content'){const promo=freshYoutubePromoSnapshot(this,payload);next={...payload,youtubePromo:promo};}
       else if(role==='ad')next={...payload,youtubePromo:null};
       return originalSend.call(this,next);
     };
@@ -152,4 +164,4 @@ function installWindowInjection(){app.on('browser-window-created',(_,win)=>injec
 
 function installReleaseV2Stabilization(){if(installed)return;installed=true;installProfileScopedOptimization();installProducerFallback();installActualYoutubeSnapshot();installWindowInjection();}
 
-module.exports={SIDE_FILE,DEFAULT_PROMO_CTA,dataRoot,sideFile,promoCta,applyProductionProfile,installReleaseV2Stabilization};
+module.exports={SIDE_FILE,DEFAULT_PROMO_CTA,dataRoot,sideFile,promoCta,freshYoutubePromoSnapshot,applyProductionProfile,installReleaseV2Stabilization};
