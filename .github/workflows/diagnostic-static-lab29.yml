@@ -1,0 +1,40 @@
+name: Lab29 static diagnostics
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: lab29-static-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.x'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: npm install
+      - name: Capture static and regression log
+        shell: pwsh
+        run: |
+          npm run check 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\lab29-static-check.log"
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Add-Content "$env:RUNNER_TEMP\lab29-static-check.log"
+          if ($code -ne 0) { exit $code }
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab29-static-check-log
+          path: ${{ runner.temp }}\lab29-static-check.log
+          if-no-files-found: error
