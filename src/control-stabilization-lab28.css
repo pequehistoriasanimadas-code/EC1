@@ -1,4 +1,4 @@
-/* Lab.28 operator-layout stabilization: reduce vertical stacking without shrinking live controls. */
+/* Lab.29 operator-layout stabilization: compact automatic + stable emission/output layouts. */
 #tab-auto.lab28-auto-compact .auto-cols{gap:14px;align-items:start}
 #tab-auto.lab28-auto-compact .auto-cols>div:first-child{display:grid;gap:12px;align-content:start}
 #tab-auto.lab28-auto-compact .auto-cols>div:first-child>.card{margin-top:0!important}
@@ -25,7 +25,29 @@
 #tab-auto.lab28-auto-compact #ecAutoRightColumn>.queue-card .section-head{margin-bottom:8px}
 #tab-auto.lab28-auto-compact #ecAutoRightColumn>.queue-card .queue-subtitle{margin-top:2px;margin-bottom:0}
 #tab-auto.lab28-auto-compact #ecAutoRightColumn>.queue-card .queue-summary{margin-top:6px;margin-bottom:6px}
-.ec-lab28-promo-design .section-head{margin-bottom:10px}.ec-lab28-promo-design .note{line-height:1.4}.ec-lab28-field-help{margin:6px 0 0!important}
+
+/* Diseño de emisión: dos columnas estables, sin reconstrucción al redimensionar. */
+#tab-emission .cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}
+#ecDesignLeft,#ecDesignRight,#ecDesignLeft>.card,#ecDesignRight>.card,#ecDesignBackgroundsCard{min-width:0}
+#ecDesignRight{display:flex;flex-direction:column;gap:14px;min-width:0}
+#ecDesignRight>.card{margin:0!important}
+#ecDesignBackgroundsCard{width:100%;padding:16px;margin:0!important}
+#ecDesignBackgroundsCard .ec25-bg-row{min-width:0}
+
+.ec-lab28-promo-design{min-width:0}.ec-lab28-promo-design .section-head{margin-bottom:10px}.ec-lab28-promo-design .note{line-height:1.4}.ec-lab28-field-help{margin:8px 0 0!important}
+.ec-promo-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;margin-top:10px;min-width:0}.ec-promo-grid label{margin:0;min-width:0}.ec-promo-grid input,.ec-promo-grid select{min-width:0;width:100%}.ec-promo-advanced{margin-top:12px;border:1px solid #303030;border-radius:10px;padding:10px 12px;background:#121212}.ec-promo-advanced summary{cursor:pointer;font-weight:800;color:#ddd}
+
+/* Selector de vista previa: se conserva #designPreview y su ResizeObserver. */
+.ec-preview-modes{display:flex;gap:5px;align-items:center;margin-left:auto}.ec-preview-modes button{background:#252525;color:#bbb;border:1px solid #383838}.ec-preview-modes button.active{background:#f7c600;color:#080808;border-color:#f7c600}.ec28-preview-hidden{display:none!important}
+.ec-youtube-design-preview{position:relative;width:100%;max-width:720px;aspect-ratio:16/9;overflow:hidden;border-radius:12px;background:#050505;min-width:0}.ec-youtube-design-preview.format-9-16{aspect-ratio:9/16;max-width:360px}.ec-youtube-design-video{position:absolute;inset:0;background:radial-gradient(circle at 52% 36%,#6d1730 0,#32101b 30%,#090909 72%)}.ec-youtube-design-video:after{content:"CONTENIDO";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;font-weight:900;letter-spacing:.12em;color:rgba(255,255,255,.28)}
+.ec-youtube-design-card{--preview-x:4%;--preview-y:5%;--preview-scale:1;--preview-bg:.85;--preview-radius:14px;position:absolute;left:var(--preview-x);bottom:var(--preview-y);display:flex;align-items:center;gap:10px;width:63%;min-width:0;padding:10px;border-radius:var(--preview-radius);background:rgb(5 5 5 / var(--preview-bg));transform:scale(var(--preview-scale));transform-origin:left bottom;color:#fff;box-shadow:0 10px 26px rgba(0,0,0,.36)}.ec-youtube-design-card[data-position="bottom-right"]{left:auto;right:var(--preview-x);top:auto;bottom:var(--preview-y);transform-origin:right bottom}.ec-youtube-design-card[data-position="top-left"]{left:var(--preview-x);right:auto;top:var(--preview-y);bottom:auto;transform-origin:left top}.ec-youtube-design-card[data-position="top-right"]{left:auto;right:var(--preview-x);top:var(--preview-y);bottom:auto;transform-origin:right top}.ec-youtube-design-thumb{flex:0 0 32%;aspect-ratio:16/9;border-radius:7px;background:linear-gradient(135deg,#8b1535,#2d0711);border:1px solid rgba(255,255,255,.08)}.ec-youtube-design-copy{min-width:0;flex:1}.ec-youtube-design-cta{font-weight:800;line-height:1.08;color:#fff}.ec-youtube-design-title{font-weight:800;line-height:1.12;color:#fff;margin-top:4px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.ec-youtube-design-channel{font-weight:600;line-height:1.15;color:#bdbdbd;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ec-youtube-design-preview.format-9-16 .ec-youtube-design-card{width:86%;gap:8px;padding:9px}
+
+/* Nueva pestaña Salida: estado maestro + nodos operativos existentes. */
+.ec-output-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start;min-width:0}.ec-output-layout>div,.ec-output-layout .card{min-width:0}.ec-output-wide{grid-column:1/-1}.ec-output-layout .card{margin:0!important}.ec-output-summary .section-head{margin-bottom:12px}.ec-output-flow{display:grid;grid-template-columns:minmax(180px,.65fr) auto minmax(0,1.35fr);gap:12px;align-items:center;min-width:0}.ec-output-master,.ec-output-destinations>div{border:1px solid #303030;border-radius:10px;background:#111;padding:11px 12px;min-width:0}.ec-output-master b,.ec-output-destinations b{display:block;color:#f3f3f3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ec-output-master span,.ec-output-destinations span{display:block;margin-top:4px;color:#888;font-size:9px;font-weight:900;letter-spacing:.08em}.ec-output-arrow{font-size:23px;color:#666;text-align:center}.ec-output-destinations{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;min-width:0}
+#ecNetworkPermissionsHost .card,#ecLanOutputHost .card,#ecNdiOutputHost .card{height:auto;min-width:0}#ecLanUrl,#ecNdiName,#ec0331StandbyInfo{min-width:0;overflow:hidden;text-overflow:ellipsis}.ec-lan-url-row{min-width:0}.ec-lan-url-row input{min-width:0}
+
 #ecOptimizeState0321[data-lab28-resolved="valid"]{border-color:rgba(68,184,112,.65);color:#79dfa0}
-@media(max-width:1200px){#tab-auto.lab28-auto-compact .lab28-exclusive-card .exclusive-frequency-row{grid-template-columns:1fr}}
-@media(max-width:900px){#tab-auto.lab28-auto-compact .auto-cols>div:first-child{gap:10px}}
+
+@media(max-width:1200px){#tab-auto.lab28-auto-compact .lab28-exclusive-card .exclusive-frequency-row{grid-template-columns:1fr}.ec-output-flow{grid-template-columns:1fr}.ec-output-arrow{transform:rotate(90deg)}}
+@media(max-width:1180px){#tab-emission .cols,.ec-output-layout{grid-template-columns:1fr}.ec-output-wide{grid-column:auto}#ecDesignLeft,#ecDesignRight{width:100%;min-width:0}.ec-output-flow{grid-template-columns:1fr}.ec-output-destinations{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){#tab-auto.lab28-auto-compact .auto-cols>div:first-child{gap:10px}.ec-promo-grid{grid-template-columns:1fr}.ec-output-destinations{grid-template-columns:1fr}.ec-preview-modes{width:100%;margin:8px 0 0}.preview-card>.section-head{flex-wrap:wrap}}
