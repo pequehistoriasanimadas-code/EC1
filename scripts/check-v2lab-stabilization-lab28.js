@@ -13,11 +13,14 @@ for(const file of [
   'src/renderer-stabilization-lab28.js',
   'src/control-stabilization-lab28.css',
   'src/output-stabilization-lab28.js',
-  'src/output-stabilization-lab28.css'
+  'src/output-stabilization-lab28.css',
+  'src/services/releaseV2Lab29.js',
+  'src/renderer-lab29.js'
 ])assert(fs.existsSync(file),`Falta ${file}`);
 
 const boot=read('src/bootstrap-v2lab.js');
 assert(boot.includes("releaseV2Stabilization")&&boot.includes('installReleaseV2Stabilization'),'Bootstrap debe instalar la capa de estabilización Lab.28');
+assert(boot.includes("releaseV2Lab29")&&boot.includes('installReleaseV2Lab29'),'Bootstrap debe instalar la corrección Lab.29 después de Lab.28');
 
 const stabilization=read('src/services/releaseV2Stabilization.js');
 assert(stabilization.includes("optimization-lab28.json"),'La optimización debe tener estado asociado al perfil activo');
@@ -30,25 +33,30 @@ assert(/mediaRole\|\|''\)[\s\S]*content/.test(stabilization)||stabilization.incl
 assert(stabilization.includes("role==='ad'")&&stabilization.includes('youtubePromo:null'),'Los ANUNCIOS deben limpiar cualquier promo de YouTube');
 
 const monitor=read('src/renderer-lan-output.js');
-assert(/MONITOR_FPS\s*=\s*15/.test(monitor),'Monitor interno debe quedar fijo en 15 FPS');
-assert(/MONITOR_FRAME_MS\s*=\s*Math\.round\(1000\/MONITOR_FPS\)/.test(monitor),'La cadencia del monitor debe derivarse de MONITOR_FPS');
-assert(monitor.includes('productionGpuBusy()'),'El monitor debe mantener prioridad de IA/TTS/GPU');
+assert(/MONITOR_FPS\s*=\s*15/.test(monitor),'Monitor interno base debe quedar en 15 FPS');
+assert(/MONITOR_FRAME_MS\s*=\s*Math\.round\(1000\/MONITOR_FPS\)/.test(monitor),'La cadencia base debe derivarse de MONITOR_FPS');
+assert(monitor.includes('productionGpuBusy()'),'El monitor base debe mantener detección de carga IA/TTS/GPU');
 const legacyMonitor=read('src/renderer-monitor-live-lab27.js');
-assert(!legacyMonitor.includes('setInterval'),'No puede quedar un segundo loop de captura del monitor');
+assert(!legacyMonitor.includes('setInterval'),'No puede quedar el segundo loop Lab.27');
 assert(!legacyMonitor.includes('outputMonitorFrame()'),'El suplemento Lab.27 no debe duplicar capturePage');
 
-// Lab.29 regression gates: YouTube state must survive unrelated settings saves and
-// the monitor must remain live (reduced cadence) while IA/TTS is busy.
-const youtubeRelease=read('src/services/releaseV2YoutubePromo.js');
-const youtubeUi=read('src/renderer-youtube-promo.js');
-assert(/preserveYoutubePromoState|protectedYoutubePromo|youtubePromoProtected/i.test(youtubeRelease),'Lab.29 debe proteger YouTube de guardados genéricos stale');
-assert(/action==='configure'/.test(youtubeRelease),'Lab.29 debe guardar enabled/leadSeconds por una ruta dedicada');
-assert(/command\(['"]configure['"]/.test(youtubeUi),'La UI YouTube debe usar comando dedicado para enabled/leadSeconds');
-assert(!/async function saveGlobal\(\)[\s\S]{0,900}saveSettings\(s\)/.test(youtubeUi),'saveGlobal no debe sobrescribir links/videos con una copia stale');
-assert(/MONITOR_BUSY_FPS\s*=\s*5/.test(monitor),'Durante IA/TTS el monitor debe seguir vivo a 5 FPS');
-assert(!/if\(productionGpuBusy\(\)\)\{[\s\S]{0,350}return;\}/.test(monitor),'IA/TTS no debe congelar completamente el monitor');
-assert(/monitorCaptureInterval|effectiveMonitorInterval|busyFrameMs/i.test(monitor),'Debe existir una cadencia adaptativa de captura');
-assert(/__ecMonitorRuntimeDiagnostics/.test(monitor),'Debe quedar diagnóstico mínimo de FPS efectivo del monitor');
+// Lab.29: YouTube is protected from stale generic saves.
+const lab29Release=read('src/services/releaseV2Lab29.js');
+const lab29Ui=read('src/renderer-lab29.js');
+assert(lab29Release.includes('preserveYoutubePromoState'),'Lab.29 debe proteger YouTube de guardados genéricos stale');
+assert(lab29Release.includes('baseLoad.call(this)'),'La protección debe releer el estado persistido antes de guardar');
+assert(lab29Release.includes('__youtubePromoConfigLab29'),'La configuración enabled/lead debe tener una ruta dedicada');
+assert(lab29Ui.includes('__youtubePromoConfigLab29'),'La UI debe usar la ruta dedicada para enabled/leadSeconds');
+assert(!/saveYoutubeConfig\(\)[\s\S]{0,800}youtubePromo\.links\s*=/.test(lab29Ui),'La UI de configuración no debe reescribir links/videos');
+assert(lab29Release.includes('protectedYoutubePromo'),'El guard debe conservar íntegros links/videos ya persistidos');
+
+// Lab.29: one effective capture owner; 15 FPS normally and 5 FPS while production is busy.
+assert(/MONITOR_FPS\s*=\s*15/.test(lab29Ui),'Monitor Lab.29 debe operar a 15 FPS en estado normal');
+assert(/MONITOR_BUSY_FPS\s*=\s*5/.test(lab29Ui),'Monitor Lab.29 debe seguir vivo a 5 FPS durante IA/TTS');
+assert(lab29Ui.includes('monitorCaptureInterval'),'Lab.29 debe tener una cadencia adaptativa de captura');
+assert(lab29Ui.includes('__ecMonitorRuntimeDiagnostics'),'Debe quedar diagnóstico mínimo de FPS efectivo');
+assert(lab29Ui.includes("card.innerHTML=")&&lab29Ui.includes('ecMonitor29Image'),'Lab.29 debe reemplazar los IDs del monitor para neutralizar el capturador base sin crear capturas dobles');
+assert(!/if\(productionGpuBusy\(\)\)\{[\s\S]{0,300}return;\}/.test(lab29Ui),'La carga IA/TTS no debe congelar el monitor Lab.29');
 
 const ui=read('src/renderer-stabilization-lab28.js');
 assert(ui.includes('Promo de YouTube')&&ui.includes('ecYoutubePromoCtaTextLab28'),'Diseño de emisión debe incluir CTA editable de YouTube');
@@ -66,9 +74,9 @@ assert(out.includes("kind!=='canned'")&&out.includes("role!=='content'"),'Output
 const tts=read('src/services/ttsLabRuntime.js'),worker=read('src/tts_lab_worker.py');
 assert(tts.includes("automaticConsistency")&&tts.includes('productionSeed')&&tts.includes("'stable-v1'"),'Producción TTS debe fijar identidad/seed estable automáticamente');
 assert(tts.includes("identity=id==='chatterbox'")&&tts.includes("+'|'+variant"),'El seed Chatterbox debe depender de la voz de referencia y variante');
-assert(worker.includes('exaggeration = float(params.get("exaggeration", 0.42))'),'Lab.28 no debe sustituir la expresividad configurada de Chatterbox');
-assert(worker.includes('cfg = float(params.get("cfgWeight", 0.35))'),'Lab.28 no debe sustituir el CFG configurado de Chatterbox');
+assert(worker.includes('exaggeration = float(params.get("exaggeration", 0.42))'),'Lab.29 no debe sustituir la expresividad configurada de Chatterbox');
+assert(worker.includes('cfg = float(params.get("cfgWeight", 0.35))'),'Lab.29 no debe sustituir el CFG configurado de Chatterbox');
 assert(worker.includes('production_temperature')||worker.includes('productionTemperature'),'Chatterbox debe conservar temperatura de producción estable');
 assert(worker.includes('variant = "latam"'),'Chatterbox debe seguir restringido a Latinoamérica');
 
-console.log('Lab.28/29 stabilization gates: perfiles + exclusivas + YouTube persistente + monitor adaptativo + UX + Chatterbox estable: OK');
+console.log('Lab.29 stabilization gates: YouTube persistente + monitor adaptativo + perfiles/exclusivas/UX/TTS preservados: OK');
