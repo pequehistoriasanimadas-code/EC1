@@ -5,6 +5,7 @@ const vm=require('vm');
 
 for(const file of [
   'src/services/youtubePromoLab27.js',
+  'src/services/youtubePromoDesignLab29.js',
   'src/services/releaseV2YoutubePromo.js',
   'src/services/releaseV2Stabilization.js',
   'src/renderer-youtube-promo.js',
@@ -37,6 +38,11 @@ assert.deepStrictEqual(normalized.links,{});
 assert.deepStrictEqual(normalized.videos,{});
 assert.strictEqual(core.TTL_MS,24*60*60*1000);
 
+const design=require('../src/services/youtubePromoDesignLab29');
+const designRoot=design.normalizeYoutubePromoDesignRoot({});
+assert.strictEqual(designRoot.ctaText,'Puedes ver el video aquí:');
+assert(designRoot.formats['16:9']&&designRoot.formats['9:16'],'La promo debe mantener diseño independiente por formato');
+
 const release=fs.readFileSync('src/services/releaseV2YoutubePromo.js','utf8');
 assert(release.includes('youtube-promo-machine.json'),'La API key debe vivir fuera de perfiles');
 assert(/encryptSecret/.test(release)&&/decryptSecret/.test(release),'La API key debe usar cifrado de SettingsStore');
@@ -49,9 +55,12 @@ assert(/mediaRole/.test(release)||/adsFolder/.test(release),'Los anuncios deben 
 const stab=fs.readFileSync('src/services/releaseV2Stabilization.js','utf8');
 assert(stab.includes("const {AutomationEngine}=require('./automation0325')"),'Lab.28 debe parchear el AutomationEngine usado realmente por release0331');
 assert(stab.includes('installActualYoutubeSnapshot'),'Falta integración final de promo en la ruta real de contenido');
-assert(/role==='content'&&this\.currentCanned\?\.youtubePromo/.test(stab),'Todo contenido vinculado debe llevar su promo al Output');
+assert(stab.includes('freshYoutubePromoSnapshot'),'La promo debe volver a resolverse al reproducir para evitar snapshots de reserva obsoletos');
+assert(stab.includes("engine?.canned?.list?.(folder)"),'La resolución fresca debe consultar la biblioteca actual sin consumir la reserva');
+assert(/if\(role==='content'\).*freshYoutubePromoSnapshot/.test(stab),'Todo contenido debe resolver el estado vigente de su promo al salir al aire');
 assert(/role==='ad'[^\n]*youtubePromo:null/.test(stab),'Los anuncios nunca deben heredar una promo');
 assert(stab.includes('promoCta'),'El payload final debe incluir el CTA configurable');
+assert(stab.includes('normalizeYoutubePromoDesign'),'El payload final debe incluir diseño normalizado por formato');
 const boot=fs.readFileSync('src/bootstrap-v2lab.js','utf8');
 assert(boot.indexOf('releaseV2YoutubePromo')<boot.indexOf('releaseV2Stabilization'),'Lab.28 debe envolver la ruta de playback después de instalar Lab.27');
 
@@ -61,9 +70,10 @@ assert(!/visualizaciones|hace \d|fecha de publicación/i.test(ui),'La UI no debe
 assert(/max-height|youtube/i.test(fs.readFileSync('src/control-youtube-promo.css','utf8')),'La lista debe tener UX compacta/scroll');
 
 const lab28Ui=fs.readFileSync('src/renderer-stabilization-lab28.js','utf8');
-assert(lab28Ui.includes("#tab-emission")&&lab28Ui.includes('Promo de YouTube'),'El CTA editable debe vivir en Diseño de emisión');
-assert(lab28Ui.includes('youtubePromoCtaText'),'El texto de CTA debe persistirse como ajuste de perfil');
-assert(lab28Ui.includes("String(input.value??'')"),'El usuario debe poder guardar el CTA vacío');
+assert(lab28Ui.includes("#tab-emission")&&lab28Ui.includes('Promo de YouTube'),'El editor de promo debe vivir en Diseño de emisión');
+assert(lab28Ui.includes('youtubePromoCtaText'),'El texto de CTA debe mantener compatibilidad con el ajuste heredado');
+assert(lab28Ui.includes('youtubePromoDesign'),'El diseño completo debe persistirse como ajuste del perfil');
+assert(lab28Ui.includes("String(q('#ecYoutubePromoCtaTextLab28')?.value"),'El usuario debe poder guardar el CTA vacío');
 const lab28Out=fs.readFileSync('src/output-stabilization-lab28.js','utf8');
 assert(lab28Out.includes('promo.ctaText'),'Output debe usar el CTA incluido en el snapshot');
 assert(lab28Out.includes('lab28-empty'),'Output debe ocultar el kicker cuando el CTA está vacío');
@@ -86,24 +96,25 @@ assert(/timeupdate/.test(out),'La aparición debe seguir el tiempo restante del 
 assert(/leadSeconds/.test(out),'Debe usar el umbral global 5/7/10');
 assert(/ended/.test(out)&&/error/.test(out)&&/stop/.test(out),'Debe limpiarse en fin, error y stop');
 assert(/fade|opacity|visible/.test(out),'Debe activar fade in');
+assert(out.includes('promo.design')&&out.includes('applyDesign'),'Output debe aplicar el diseño recibido en el snapshot');
 
 // Runtime regression: output:story arma la promo antes de que showCanned() haga video.load().
 // Ese load dispara "emptied"; el evento no puede olvidar el snapshot recién armado.
 function classList(){const set=new Set();return{add:(...x)=>x.forEach(v=>set.add(v)),remove:(...x)=>x.forEach(v=>set.delete(v)),contains:v=>set.has(v)};}
-const promoRoot={id:'',className:'',innerHTML:'',classList:classList(),getBoundingClientRect:()=>({})};
-const thumb={src:'',removeAttribute(n){if(n==='src')this.src='';}},titleNode={textContent:''},channelNode={textContent:''};
-promoRoot.querySelector=sel=>sel.includes('thumb')?thumb:sel.includes('title')?titleNode:channelNode;
+const promoRoot={id:'',className:'',dataset:{},style:{setProperty(){}},innerHTML:'',classList:classList(),getBoundingClientRect:()=>({})};
+const thumb={src:'',removeAttribute(n){if(n==='src')this.src='';}},kicker={textContent:'',classList:classList()},titleNode={textContent:''},channelNode={textContent:''};
+promoRoot.querySelector=sel=>sel.includes('thumb')?thumb:sel.includes('kicker')?kicker:sel.includes('title')?titleNode:channelNode;
 const mediaListeners={};
 const cannedVideoMock={duration:20,currentTime:0,addEventListener(name,fn){(mediaListeners[name]??=[]).push(fn);},fire(name){for(const fn of mediaListeners[name]||[])fn();}};
 const ipcListeners={};
 const windowMock={ECAPI:{on(name,fn){(ipcListeners[name]??=[]).push(fn);}},addEventListener(){}};
 const documentMock={createElement(){return promoRoot;}};
-const stageMock={appendChild(node){this.child=node;}};
+const stageMock={dataset:{format:'16:9'},appendChild(node){this.child=node;}};
 const context={window:windowMock,document:documentMock,stage:stageMock,cannedVideo:cannedVideoMock,requestAnimationFrame:fn=>fn(),setTimeout:fn=>fn(),console};
 vm.createContext(context);vm.runInContext(out,context,{filename:'output-youtube-promo.js'});
 const storyHandler=ipcListeners['output:story']?.[0];
 assert.strictEqual(typeof storyHandler,'function','Output promo no registró output:story');
-storyHandler({kind:'canned',mediaRole:'content',youtubePromo:{enabled:true,videoId:'abc123xyz',title:'Video vinculado',channel:'Canal',thumbnailDataUrl:'data:image/jpeg;base64,AAAA',leadSeconds:5}});
+storyHandler({kind:'canned',mediaRole:'content',youtubePromo:{enabled:true,videoId:'abc123xyz',title:'Video vinculado',channel:'Canal',thumbnailDataUrl:'data:image/jpeg;base64,AAAA',leadSeconds:5,design:{format:'16:9',scale:1}}});
 cannedVideoMock.fire('emptied');
 cannedVideoMock.currentTime=16;
 cannedVideoMock.fire('timeupdate');
@@ -120,4 +131,4 @@ const lan=fs.readFileSync('src/services/outputLanServer.js','utf8');
 assert(lan.includes("'output-youtube-promo.js'")&&lan.includes("'output-youtube-promo.css'"),'Output LAN debe servir los assets base de promo');
 assert(boot.includes('releaseV2Stabilization'),'Bootstrap debe instalar la estabilización Lab.28');
 
-console.log('Lab.29 YouTube content promo: ruta real + runtime emptied/load + CTA + trigger 5/7/10 OK');
+console.log('Lab.29 YouTube content promo: estado fresco en primer playback + diseño por formato + runtime emptied/load + CTA + trigger 5/7/10 OK');
