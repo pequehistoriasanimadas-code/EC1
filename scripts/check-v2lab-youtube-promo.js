@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('fs');
 const assert=require('assert');
+const vm=require('vm');
 
 for(const file of [
   'src/services/youtubePromoLab27.js',
@@ -45,8 +46,6 @@ assert(/videoId/.test(release),'La integración debe deduplicar por videoId');
 assert(/decorate/.test(release),'La librería debe decorar contenidos con snapshot de promo');
 assert(/mediaRole/.test(release)||/adsFolder/.test(release),'Los anuncios deben quedar fuera de la promo');
 
-// Lab.27 parcheaba el prototipo base; Lab.28 debe envolver el AutomationEngine efectivo
-// después de release0331 y justo antes de enviar el payload final al Output.
 const stab=fs.readFileSync('src/services/releaseV2Stabilization.js','utf8');
 assert(stab.includes("const {AutomationEngine}=require('./automation0325')"),'Lab.28 debe parchear el AutomationEngine usado realmente por release0331');
 assert(stab.includes('installActualYoutubeSnapshot'),'Falta integración final de promo en la ruta real de contenido');
@@ -87,6 +86,29 @@ assert(/timeupdate/.test(out),'La aparición debe seguir el tiempo restante del 
 assert(/leadSeconds/.test(out),'Debe usar el umbral global 5/7/10');
 assert(/ended/.test(out)&&/error/.test(out)&&/stop/.test(out),'Debe limpiarse en fin, error y stop');
 assert(/fade|opacity|visible/.test(out),'Debe activar fade in');
+
+// Runtime regression: output:story arma la promo antes de que showCanned() haga video.load().
+// Ese load dispara "emptied"; el evento no puede olvidar el snapshot recién armado.
+function classList(){const set=new Set();return{add:(...x)=>x.forEach(v=>set.add(v)),remove:(...x)=>x.forEach(v=>set.delete(v)),contains:v=>set.has(v)};}
+const promoRoot={id:'',className:'',innerHTML:'',classList:classList(),getBoundingClientRect:()=>({})};
+const thumb={src:'',removeAttribute(n){if(n==='src')this.src='';}},titleNode={textContent:''},channelNode={textContent:''};
+promoRoot.querySelector=sel=>sel.includes('thumb')?thumb:sel.includes('title')?titleNode:channelNode;
+const mediaListeners={};
+const cannedVideoMock={duration:20,currentTime:0,addEventListener(name,fn){(mediaListeners[name]??=[]).push(fn);},fire(name){for(const fn of mediaListeners[name]||[])fn();}};
+const ipcListeners={};
+const windowMock={ECAPI:{on(name,fn){(ipcListeners[name]??=[]).push(fn);}},addEventListener(){}};
+const documentMock={createElement(){return promoRoot;}};
+const stageMock={appendChild(node){this.child=node;}};
+const context={window:windowMock,document:documentMock,stage:stageMock,cannedVideo:cannedVideoMock,requestAnimationFrame:fn=>fn(),setTimeout:fn=>fn(),console};
+vm.createContext(context);vm.runInContext(out,context,{filename:'output-youtube-promo.js'});
+const storyHandler=ipcListeners['output:story']?.[0];
+assert.strictEqual(typeof storyHandler,'function','Output promo no registró output:story');
+storyHandler({kind:'canned',mediaRole:'content',youtubePromo:{enabled:true,videoId:'abc123xyz',title:'Video vinculado',channel:'Canal',thumbnailDataUrl:'data:image/jpeg;base64,AAAA',leadSeconds:5}});
+cannedVideoMock.fire('emptied');
+cannedVideoMock.currentTime=16;
+cannedVideoMock.fire('timeupdate');
+assert(promoRoot.classList.contains('visible'),'REGRESIÓN: video.load() disparó emptied y olvidó la promo antes de los últimos segundos');
+
 const css=fs.readFileSync('src/output-youtube-promo.css','utf8');
 assert(/opacity/.test(css)&&/transition/.test(css),'La promo debe tener fade in CSS');
 assert(/\.ec-youtube-promo\.instant-clear\{[^}]*opacity:0!important;[^}]*transition:none!important/.test(css),'La retirada debe ser instantánea y sin fade out');
@@ -98,4 +120,4 @@ const lan=fs.readFileSync('src/services/outputLanServer.js','utf8');
 assert(lan.includes("'output-youtube-promo.js'")&&lan.includes("'output-youtube-promo.css'"),'Output LAN debe servir los assets base de promo');
 assert(boot.includes('releaseV2Stabilization'),'Bootstrap debe instalar la estabilización Lab.28');
 
-console.log('Lab.28 YouTube content promo: ruta real de playback + CTA editable + trigger 5/7/10 OK');
+console.log('Lab.29 YouTube content promo: ruta real + runtime emptied/load + CTA + trigger 5/7/10 OK');
