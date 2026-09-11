@@ -30,7 +30,7 @@
     const valid=optimizationState.compatible===true&&!!optimizationState.profile&&optimizationState.profileMatch?.ok!==false;
     const text=valid?'OPTIMIZADA ✓':'SIN OPTIMIZAR',resolved=valid?'valid':'invalid';
     if(badge.textContent!==text)badge.textContent=text;
-    if(badge.dataset.lab28Resolved!==resolved)badge.dataset.lab28Resolved=resolved;
+    if(badge.getAttribute('data-lab28-resolved')!==resolved)badge.setAttribute('data-lab28-resolved',resolved);
     const profile=optimizationState.profile,root=q('#ecOptimizer0321');
     if(root&&profile){const note=root.querySelector('.ec-opt-result .note, .ec-opt-grid p.note[data-profile-status]');if(note&&note.dataset.profileScoped!=='true')note.dataset.profileScoped='true';}
   }
