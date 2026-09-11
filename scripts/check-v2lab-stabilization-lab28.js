@@ -37,6 +37,19 @@ const legacyMonitor=read('src/renderer-monitor-live-lab27.js');
 assert(!legacyMonitor.includes('setInterval'),'No puede quedar un segundo loop de captura del monitor');
 assert(!legacyMonitor.includes('outputMonitorFrame()'),'El suplemento Lab.27 no debe duplicar capturePage');
 
+// Lab.29 regression gates: YouTube state must survive unrelated settings saves and
+// the monitor must remain live (reduced cadence) while IA/TTS is busy.
+const youtubeRelease=read('src/services/releaseV2YoutubePromo.js');
+const youtubeUi=read('src/renderer-youtube-promo.js');
+assert(/preserveYoutubePromoState|protectedYoutubePromo|youtubePromoProtected/i.test(youtubeRelease),'Lab.29 debe proteger YouTube de guardados genéricos stale');
+assert(/action==='configure'/.test(youtubeRelease),'Lab.29 debe guardar enabled/leadSeconds por una ruta dedicada');
+assert(/command\(['"]configure['"]/.test(youtubeUi),'La UI YouTube debe usar comando dedicado para enabled/leadSeconds');
+assert(!/async function saveGlobal\(\)[\s\S]{0,900}saveSettings\(s\)/.test(youtubeUi),'saveGlobal no debe sobrescribir links/videos con una copia stale');
+assert(/MONITOR_BUSY_FPS\s*=\s*5/.test(monitor),'Durante IA/TTS el monitor debe seguir vivo a 5 FPS');
+assert(!/if\(productionGpuBusy\(\)\)\{[\s\S]{0,350}return;\}/.test(monitor),'IA/TTS no debe congelar completamente el monitor');
+assert(/monitorCaptureInterval|effectiveMonitorInterval|busyFrameMs/i.test(monitor),'Debe existir una cadencia adaptativa de captura');
+assert(/__ecMonitorRuntimeDiagnostics/.test(monitor),'Debe quedar diagnóstico mínimo de FPS efectivo del monitor');
+
 const ui=read('src/renderer-stabilization-lab28.js');
 assert(ui.includes('Promo de YouTube')&&ui.includes('ecYoutubePromoCtaTextLab28'),'Diseño de emisión debe incluir CTA editable de YouTube');
 assert(ui.includes("OPTIMIZADA ✓")&&ui.includes('SIN OPTIMIZAR'),'El badge de optimización debe reflejar el perfil activo');
@@ -58,4 +71,4 @@ assert(worker.includes('cfg = float(params.get("cfgWeight", 0.35))'),'Lab.28 no 
 assert(worker.includes('production_temperature')||worker.includes('productionTemperature'),'Chatterbox debe conservar temperatura de producción estable');
 assert(worker.includes('variant = "latam"'),'Chatterbox debe seguir restringido a Latinoamérica');
 
-console.log('Lab.28 stabilization: perfiles + exclusivas + promo YouTube + monitor 15 FPS + UX + Chatterbox estable: OK');
+console.log('Lab.28/29 stabilization gates: perfiles + exclusivas + YouTube persistente + monitor adaptativo + UX + Chatterbox estable: OK');
