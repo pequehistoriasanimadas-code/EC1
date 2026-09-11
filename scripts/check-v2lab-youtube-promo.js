@@ -100,7 +100,7 @@ assert(out.includes('promo.design')&&out.includes('applyDesign'),'Output debe ap
 
 // Runtime regression: output:story arma la promo antes de que showCanned() haga video.load().
 // Ese load dispara "emptied"; el evento no puede olvidar el snapshot recién armado.
-function classList(){const set=new Set();return{add:(...x)=>x.forEach(v=>set.add(v)),remove:(...x)=>x.forEach(v=>set.delete(v)),contains:v=>set.has(v)};}
+function classList(){const set=new Set();return{add:(...x)=>x.forEach(v=>set.add(v)),remove:(...x)=>x.forEach(v=>set.delete(v)),contains:v=>set.has(v),toggle(v,force){if(arguments.length>1){if(force){set.add(v);return true;}set.delete(v);return false;}if(set.has(v)){set.delete(v);return false;}set.add(v);return true;}};}
 const promoRoot={id:'',className:'',dataset:{},style:{setProperty(){}},innerHTML:'',classList:classList(),getBoundingClientRect:()=>({})};
 const thumb={src:'',removeAttribute(n){if(n==='src')this.src='';}},kicker={textContent:'',classList:classList()},titleNode={textContent:''},channelNode={textContent:''};
 promoRoot.querySelector=sel=>sel.includes('thumb')?thumb:sel.includes('kicker')?kicker:sel.includes('title')?titleNode:channelNode;
