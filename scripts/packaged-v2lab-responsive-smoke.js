@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.28');
+  assert(['2.0.0-lab.28','2.0.0-lab.29'].includes(pkg.version),`Versión V2 Lab no compatible con este smoke: ${pkg.version}`);
   const runtimePath=path.join(appRoot,'src','services','ttsLabRuntime.js');
   const {TTSLabRuntime}=require(runtimePath);
   const source=fs.readFileSync(runtimePath,'utf8'),renderer=fs.readFileSync(path.join(appRoot,'src','renderer-v2lab.js'),'utf8'),optimizer=fs.readFileSync(path.join(appRoot,'src','renderer-0321.js'),'utf8'),release=fs.readFileSync(path.join(appRoot,'src','services','releaseV2Lab.js'),'utf8');
@@ -26,6 +26,6 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(ticks>=10,`Event loop empaquetado bloqueado (ticks=${ticks})`);
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 RESPONSIVE lab.28 OK · no spawnSync · q fixed · session CUDA cache · event loop alive');
+  console.log(`PACKAGED V2 RESPONSIVE ${pkg.version} OK · no spawnSync · q fixed · session CUDA cache · event loop alive`);
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});
