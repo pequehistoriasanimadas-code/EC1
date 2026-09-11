@@ -31,7 +31,7 @@ assert(stabilization.includes("role==='ad'")&&stabilization.includes('youtubePro
 
 const monitor=read('src/renderer-lan-output.js');
 assert(/MONITOR_FPS\s*=\s*15/.test(monitor),'Monitor interno debe quedar fijo en 15 FPS');
-assert(/MONITOR_INTERVAL_MS/.test(monitor),'La cadencia del monitor debe derivarse de una constante');
+assert(/MONITOR_FRAME_MS\s*=\s*Math\.round\(1000\/MONITOR_FPS\)/.test(monitor),'La cadencia del monitor debe derivarse de MONITOR_FPS');
 assert(monitor.includes('productionGpuBusy()'),'El monitor debe mantener prioridad de IA/TTS/GPU');
 const legacyMonitor=read('src/renderer-monitor-live-lab27.js');
 assert(!legacyMonitor.includes('setInterval'),'No puede quedar un segundo loop de captura del monitor');
