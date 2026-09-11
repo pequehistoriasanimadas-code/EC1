@@ -76,4 +76,5 @@ assert(worker.includes('cfg = float(params.get("cfgWeight", 0.35))'),'Lab.29 no 
 assert(worker.includes('production_temperature')||worker.includes('productionTemperature'),'Chatterbox debe conservar temperatura de producción estable');
 assert(worker.includes('variant = "latam"'),'Chatterbox debe seguir restringido a Latinoamérica');
 
+require('./check-v2lab-emission-layout');
 console.log('Lab.29 stabilization gates: YouTube persistente + monitor adaptativo + perfiles/exclusivas/UX/TTS preservados: OK');
