@@ -9,6 +9,7 @@ for(const file of [
   'src/control-audio-repair-lab29.css',
   'src/control-ux-cleanup-lab29.css',
   'src/renderer-ux-cleanup-lab29.js',
+  'src/control-auto-operator-compact-lab29.css',
   'src/services/releaseV2UxRepairLab29.js'
 ])assert(fs.existsSync(file),`Falta ${file}`);
 
@@ -20,7 +21,7 @@ const audioRepairCss=read('src/control-audio-repair-lab29.css');
 const cleanCss=read('src/control-ux-cleanup-lab29.css');
 const cleanUi=read('src/renderer-ux-cleanup-lab29.js');
 const autoUi=read('src/renderer-auto-ux-lab29.js');
-const autoCss=read('src/control-auto-ux-lab29.css');
+const autoCompactCss=read('src/control-auto-operator-compact-lab29.css');
 const release=read('src/services/releaseV2UxRepairLab29.js');
 const boot=read('src/bootstrap-v2lab.js');
 
@@ -42,7 +43,7 @@ assert(designRepair.includes('ec-v2-editing-badge'),'Editando 16:9 debe converti
 assert(designRepair.includes('ec-v2-note-head-compact'),'Ajustes de Nota debe tener cabecera compacta');
 assert(designRepair.includes('ec-v2-transition-grid'),'Transiciones debe agrupar sus dos controles en una sola fila');
 assert(designRepairCss.includes('.ec-v2-note-head-compact')&&designRepairCss.includes('justify-content:space-between'),'Cabecera de Nota debe alinear título y formato en extremos');
-assert(/\.ec-v2-transition-grid\{[^}]*grid-template-columns:minmax\(0,1\.85fr\) minmax\(120px,1fr\)/s.test(designRepairCss),'Transiciones debe usar proporción aproximada 65/35');
+assert(/\.ec-v2-transition-card-compact \.ec-v2-transition-grid\{[^}]*grid-template-columns:minmax\(0,1\.85fr\) minmax\(120px,1fr\)/s.test(designRepairCss),'Transiciones debe usar proporción aproximada 65/35');
 
 // Fondos/casillas: símbolos compactos y valor de opacidad contenido.
 for(const symbol of ['■','▢','◐'])assert(designRepair.includes(`'${symbol}'`)||designRepair.includes(`>${symbol}<`),`Fondos y casillas debe restaurar símbolo ${symbol}`);
@@ -85,14 +86,14 @@ for(const id of ['emissionStart','emissionPause','emissionResume','ec28EmissionN
 assert(autoUi.includes('syncEmissionControlState'),'Pausar/Reanudar deben alternarse según el estado real de emisión');
 assert(autoUi.includes("pause.classList.toggle('hidden'")&&autoUi.includes("resume.classList.toggle('hidden'"),'Pausar/Reanudar deben ocupar el mismo espacio de forma contextual');
 assert(!autoUi.includes("q('#emissionStart').onclick")&&!autoUi.includes("q('#emissionPause').onclick")&&!autoUi.includes("q('#emissionResume').onclick")&&!autoUi.includes("q('#ec28EmissionNext').onclick")&&!autoUi.includes("q('#emissionStop').onclick"),'Auto UX debe mover los botones existentes sin reemplazar sus listeners');
-assert(autoCss.includes('.ec-auto-monitor-controls'),'Monitor debe tener estilos compactos para la botonera integrada');
-assert(autoCss.includes('.ec-auto-emission-card-absorbed')&&autoCss.includes('display:none!important'),'La tarjeta Control de emisión separada debe desaparecer tras mover sus controles');
-assert(autoCss.includes('.ec-auto-monitor-legacy-copy')&&autoCss.includes('display:none!important'),'Título/descripción redundantes del monitor deben quedar fuera de la vista');
-assert(autoCss.includes('.ec-auto-icon-action'),'Pausar/Reanudar/Siguiente/Detener deben presentarse como controles por símbolo');
+assert(autoCompactCss.includes('.ec-auto-monitor-controls'),'Monitor debe tener estilos compactos para la botonera integrada');
+assert(autoCompactCss.includes('.ec-auto-emission-card-absorbed')&&autoCompactCss.includes('display:none!important'),'La tarjeta Control de emisión separada debe desaparecer tras mover sus controles');
+assert(autoCompactCss.includes('.ec-auto-monitor-legacy-copy')&&autoCompactCss.includes('display:none!important'),'Título/descripción redundantes del monitor deben quedar fuera de la vista');
+assert(autoCompactCss.includes('.ec-auto-icon-action'),'Pausar/Reanudar/Siguiente/Detener deben presentarse como controles por símbolo');
 
 // Orden de carga: base de Diseño primero, reparaciones después; assets incluidos por src/**/*.
 assert(boot.includes('releaseV2UxRepairLab29')&&boot.includes('installReleaseV2UxRepairLab29'),'Bootstrap debe instalar la capa de reparación');
 assert(boot.indexOf('installReleaseV2EmissionDesign')<boot.indexOf('installReleaseV2UxRepairLab29'),'Repair debe instalarse después del renderer de Diseño V2');
-for(const file of ['control-emission-design-repair-lab29.css','control-audio-repair-lab29.css','control-ux-cleanup-lab29.css','renderer-emission-design-repair-lab29.js','renderer-ux-cleanup-lab29.js'])assert(release.includes(file),`Release debe inyectar ${file}`);
+for(const file of ['control-emission-design-repair-lab29.css','control-audio-repair-lab29.css','control-ux-cleanup-lab29.css','control-auto-operator-compact-lab29.css','renderer-emission-design-repair-lab29.js','renderer-ux-cleanup-lab29.js'])assert(release.includes(file),`Release debe inyectar ${file}`);
 
 console.log('check-v2lab-ux-regression-lab29: OK · Diseño compacto + degradado/WYSIWYG + Audio final + Contenidos columnas + títulos globales + monitor operativo');
