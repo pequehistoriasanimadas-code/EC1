@@ -21,6 +21,7 @@ function injectWindow(win){
     injectFile(win,'control-emission-design-repair-lab29.css','css');
     injectFile(win,'control-audio-repair-lab29.css','css');
     injectFile(win,'control-ux-cleanup-lab29.css','css');
+    injectFile(win,'control-auto-operator-compact-lab29.css','css');
     injectFile(win,'renderer-emission-design-repair-lab29.js','js');
     injectFile(win,'renderer-ux-cleanup-lab29.js','js');
   };
