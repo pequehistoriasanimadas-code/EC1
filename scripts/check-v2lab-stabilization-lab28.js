@@ -79,4 +79,5 @@ assert(worker.includes('variant = "latam"'),'Chatterbox debe seguir restringido 
 require('./check-v2lab-emission-layout');
 require('./check-v2lab-emission-design-v2');
 require('./check-v2lab-manual-content-selection');
+require('./check-v2lab-audio-ux-lab29');
 console.log('Lab.29 stabilization gates: YouTube persistente + monitor adaptativo + perfiles/exclusivas/UX/TTS + próximo contenido manual preservados: OK');
