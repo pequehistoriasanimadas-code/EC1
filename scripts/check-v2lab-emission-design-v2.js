@@ -65,6 +65,17 @@ assert(custom.widthPercent<=safe.right-safe.left+.001,'Tarjeta vertical no puede
 const horizontal=design.normalizePromoFormat({preset:'custom',centerXPercent:50,centerYPercent:50,widthPercent:88,minHeightPercent:25},'16:9',{tiktokSafe:false});
 assert(horizontal.centerXPercent-horizontal.widthPercent/2>=0&&horizontal.centerXPercent+horizontal.widthPercent/2<=100,'Promo 16:9 debe quedar dentro del canvas');
 
+// Persistence/injection contract: this intentionally fails until the release layer exists.
+assert(fs.existsSync('src/services/releaseV2EmissionDesign.js'),'Falta la capa de persistencia/inyección Emission Design V2');
+const release=fs.readFileSync('src/services/releaseV2EmissionDesign.js','utf8');
+assert(release.includes('SettingsStore.prototype'),'La capa V2 debe normalizar SettingsStore');
+assert(release.includes('normalizeNoteDesignRoot')&&release.includes('materializeEffectiveOutput'),'La persistencia debe migrar y materializar Nota por formato');
+assert(release.includes('normalizePromoDesignRoot'),'La persistencia debe normalizar Promo por formato');
+assert(release.includes('renderer-emission-design-v2.js')&&release.includes('output-emission-design-v2.js'),'La capa debe inyectar editor y Output V2');
+const boot=fs.readFileSync('src/bootstrap-v2lab.js','utf8');
+assert(boot.includes('releaseV2EmissionDesign')&&boot.includes('installReleaseV2EmissionDesign'),'Bootstrap debe instalar Emission Design V2');
+assert(boot.indexOf('releaseV2Lab29')<boot.indexOf('releaseV2EmissionDesign'),'Emission Design V2 debe instalarse después de Lab.29');
+
 if(fs.existsSync('src/renderer-emission-design-v2.js')){
   const ui=fs.readFileSync('src/renderer-emission-design-v2.js','utf8');
   for(const font of ['Arial','Segoe UI','Verdana','Georgia','Impact'])assert(ui.includes(font),`UI debe inicializar fuente base ${font}`);
@@ -75,4 +86,4 @@ if(fs.existsSync('src/renderer-emission-design-v2.js')){
   assert(!ui.includes('Máximo de líneas'),'UI no debe volver a exponer máximo de líneas');
 }
 
-console.log('Emission Design V2 model/geometry regression gate: OK');
+console.log('Emission Design V2 model/persistence/geometry regression gate: OK');
