@@ -12,14 +12,31 @@
     save:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg>',
     trash:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 10v7M14 10v7"/></svg>'
   }[name]||'');
-  const engineLabel=()=>{const id=q('#v2TtsEngine')?.value||'kokoro';return id==='chatterbox'?'Chatterbox V3 · LatAm':id==='qwen3tts'?'Qwen3-TTS':'Kokoro';};
-  let referenceAudio=null,enhanceTimer=null,enhancing=false,lastGenerationText='Última generación: sin pruebas en esta sesión.';
+  const engineId=()=>q('#v2TtsEngine')?.value||'kokoro';
+  const engineLabel=()=>engineId()==='chatterbox'?'Chatterbox V3 · LatAm':engineId()==='qwen3tts'?'Qwen3-TTS':'Kokoro';
+  let referenceAudio=null,enhanceTimer=null,enhancing=false,lastGenerationText='Última generación: sin pruebas en esta sesión.',learningObserver27=null,learningObserver28=null;
 
   function makeDetails(id,summary){
     let d=q('#'+id);if(d)return d;
     d=document.createElement('details');d.id=id;d.className='ec29-audio-details';
     const s=document.createElement('summary');s.textContent=summary;d.appendChild(s);
     return d;
+  }
+
+  function normalizeSpeechCopy(){
+    const normalizer=q('#speechNormalizerEnabled')?.closest('.switch-row')?.querySelector('small');
+    if(normalizer)normalizer.textContent='Prepara cifras, monedas, porcentajes, horas y puntuación antes de enviarlas al motor TTS activo.';
+    const oldDiag=q('#speechDiagnostic0326');if(oldDiag)oldDiag.classList.add('ec29-legacy-speech-diag-hidden');
+    const oldHead=q('#refreshSpeechDiag')?.closest('.section-head');if(oldHead)oldHead.classList.add('ec29-legacy-speech-diag-hidden');
+    const speech=q('#speech0326');if(speech){speech.classList.add('ec29-speech-flat');const head=speech.querySelector(':scope > .section-head');if(head)head.classList.add('ec29-speech-heading-hidden');}
+  }
+
+  function syncEngineSpecificControls(){
+    const engine=engineId(),showKokoro=engine==='kokoro';
+    const attack=q('#initialAttackProtection')?.closest('.switch-row'),padding=q('#initialAttackPaddingMs')?.closest('label');
+    attack?.classList.toggle('ec29-engine-specific-hidden',!showKokoro);
+    padding?.classList.toggle('ec29-engine-specific-hidden',!showKokoro);
+    normalizeSpeechCopy();
   }
 
   function restructureAudio(){
@@ -45,7 +62,7 @@
     const musicCard=q('#musicEnabled')?.closest('.card');
     const pronSlot=q('#ec27PronSlot'),speechSlot=q('#ec27SpeechSlot');
     const pronCard=pronSlot?.closest('.ec27-card');
-    const learningCard=q('#ec27LearningList')?.closest('.ec27-card');
+    const learningCard=(q('#ec28LearningList')||q('#ec27LearningList'))?.closest('.ec27-card');
     const normCard=q('#ec27NormalizerBadge')?.closest('.ec27-card')||q('#ec27RuleVersion')?.closest('.ec27-card');
 
     if(voiceCard)voiceCard.classList.add('ec29-voice-card');
@@ -61,7 +78,8 @@
       if(speechSlot&&speechSlot.parentElement!==pronCard){speechSlot.classList.add('ec29-speech-common');pronCard.appendChild(speechSlot);}
       else speechSlot?.classList.add('ec29-speech-common');
       let testDetails=q('#ec27PronTestDetails');
-      if(!testDetails){testDetails=makeDetails('ec27PronTestDetails','Prueba y diagnóstico de pronunciación');pronCard.appendChild(testDetails);}
+      if(!testDetails){testDetails=makeDetails('ec27PronTestDetails','Probar locución procesada');pronCard.appendChild(testDetails);}
+      else if(testDetails.querySelector('summary'))testDetails.querySelector('summary').textContent='Probar locución procesada';
       for(const el of [q('#testPronunciation'),q('#pronunciationTestResult'),q('#pronunciationTestAudio')])if(el&&el.parentElement!==testDetails)testDetails.appendChild(el);
     }
 
@@ -99,17 +117,29 @@
         const preview=q('#v2VoicePreview');if(preview)preview.insertAdjacentElement('afterend',line);else engineBox.appendChild(line);
       }
     }
+    normalizeSpeechCopy();syncEngineSpecificControls();compactLearningToolbar();
   }
 
+  function iconify(button,name,title,extraClass){
+    if(!button)return;
+    button.classList.add(extraClass);button.title=title;button.setAttribute('aria-label',title);
+    if(!button.dataset.iconified){button.dataset.iconified='1';button.innerHTML=icon(name);}
+  }
   function compactLearningActions(){
-    qa('#ec27LearningList .ec27-save').forEach(b=>{
-      b.classList.add('ec27-icon-action');b.title='Guardar corrección';b.setAttribute('aria-label','Guardar corrección');
-      if(!b.dataset.iconified){b.dataset.iconified='1';b.innerHTML=icon('save');}
-    });
-    qa('#ec27LearningList .ec27-delete').forEach(b=>{
-      b.classList.add('ec27-icon-action','danger');b.title='Eliminar pronunciación';b.setAttribute('aria-label','Eliminar pronunciación');
-      if(!b.dataset.iconified){b.dataset.iconified='1';b.innerHTML=icon('trash');}
-    });
+    qa('#ec27LearningList .ec27-save').forEach(b=>iconify(b,'save','Guardar corrección','ec27-icon-action'));
+    qa('#ec27LearningList .ec27-delete').forEach(b=>{iconify(b,'trash','Eliminar pronunciación','ec27-icon-action');b.classList.add('danger');});
+    qa('#ec28LearningList .ec28-save').forEach(b=>iconify(b,'save','Guardar corrección','ec28-icon-action'));
+    qa('#ec28LearningList .ec28-delete').forEach(b=>{iconify(b,'trash','Eliminar pronunciación','ec28-icon-action');b.classList.add('danger');});
+  }
+  function compactLearningToolbar(){
+    const buttons=q('#ec27LearningButtons'),add=q('#ec28ToggleAdd'),clear=q('#clearPronunciationLearning');
+    if(buttons&&add&&add.parentElement!==buttons)buttons.appendChild(add);
+    if(clear){iconify(clear,'trash','Borrar aprendizaje','ec29-clear-learning-icon');clear.classList.add('danger');}
+  }
+  function ensureLearningObservers(){
+    const l27=q('#ec27LearningList'),l28=q('#ec28LearningList');
+    if(l27&&!learningObserver27){learningObserver27=new MutationObserver(compactLearningActions);learningObserver27.observe(l27,{childList:true,subtree:true});}
+    if(l28&&!learningObserver28){learningObserver28=new MutationObserver(compactLearningActions);learningObserver28.observe(l28,{childList:true,subtree:true});}
   }
 
   async function enhanceReferences(){
@@ -141,7 +171,7 @@
     }catch{}finally{enhancing=false;}
   }
 
-  function scheduleEnhance(){clearTimeout(enhanceTimer);enhanceTimer=setTimeout(()=>{restructureAudio();compactLearningActions();enhanceReferences();},80);}
+  function scheduleEnhance(){clearTimeout(enhanceTimer);enhanceTimer=setTimeout(()=>{restructureAudio();compactLearningActions();compactLearningToolbar();ensureLearningObservers();enhanceReferences();syncEngineSpecificControls();},80);}
 
   async function renderGenericDiagnostic(){
     const out=q('#ec27SpeechDiagnostic');if(!out)return;
@@ -171,13 +201,13 @@
     }else if(line.textContent!==lastGenerationText)line.textContent=lastGenerationText;
   }
 
-  restructureAudio();compactLearningActions();enhanceReferences();renderGenericDiagnostic();monitorLastGeneration();
+  restructureAudio();compactLearningActions();compactLearningToolbar();ensureLearningObservers();enhanceReferences();renderGenericDiagnostic();monitorLastGeneration();syncEngineSpecificControls();
+  setTimeout(scheduleEnhance,250);setTimeout(scheduleEnhance,900);
 
-  const learn=q('#ec27LearningList');if(learn)new MutationObserver(compactLearningActions).observe(learn,{childList:true,subtree:true});
   const refs=q('#v2ReferenceList');if(refs)new MutationObserver(scheduleEnhance).observe(refs,{childList:true,subtree:true});
   const engineAction=q('#v2EngineAction');if(engineAction)new MutationObserver(monitorLastGeneration).observe(engineAction,{childList:true,characterData:true,subtree:true});
   const diag=q('#ec27SpeechDiagnostic');if(diag)new MutationObserver(()=>setTimeout(renderGenericDiagnostic,0)).observe(diag,{childList:true,characterData:true,subtree:true});
-  q('#v2TtsEngine')?.addEventListener('change',()=>setTimeout(()=>{scheduleEnhance();renderGenericDiagnostic();},120));
+  q('#v2TtsEngine')?.addEventListener('change',()=>setTimeout(()=>{scheduleEnhance();renderGenericDiagnostic();syncEngineSpecificControls();},120));
   q('#v2ReferenceVoice')?.addEventListener('change',()=>setTimeout(scheduleEnhance,120));
   q('#ec27RefreshDiag')?.addEventListener('click',()=>setTimeout(renderGenericDiagnostic,250));
 })();
