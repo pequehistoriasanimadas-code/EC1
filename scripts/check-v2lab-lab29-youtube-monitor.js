@@ -27,4 +27,5 @@ assert(!/if\(productionGpuBusy\(\)\)\{[\s\S]{0,350}return;\}/.test(ui),'La carga
 assert(/MONITOR_FPS\s*=\s*15/.test(baseMonitor),'Se preserva la base de monitor 15 FPS de Lab.28');
 
 require('./check-v2lab-auto-ux-lab29');
+require('./check-v2lab-ux-regression-lab29');
 console.log('Lab.29 YouTube persistence + monitor adaptive cadence checks: OK');
