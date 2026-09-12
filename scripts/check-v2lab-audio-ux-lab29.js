@@ -11,8 +11,8 @@ const runtime=read('src/services/ttsLabRuntime.js');
 const release=read('src/services/releaseV2Lab.js');
 
 // Un solo selector de motor y el reproductor de prueba siguen siendo la autoridad.
-assert.strictEqual((v2.match(/id=\\?"v2TtsEngine\\?"/g)||[]).length,1,'Audio debe tener un solo selector de motor TTS');
-assert(v2.includes('id=\\"v2VoicePreview\\"')&&v2.includes("const audio=q('#v2VoicePreview')"),'Probar voz debe conservar su reproductor de audio');
+assert.strictEqual((v2.match(/id="v2TtsEngine"/g)||[]).length,1,'Audio debe tener un solo selector de motor TTS');
+assert(v2.includes('id="v2VoicePreview"')&&v2.includes("const audio=q('#v2VoicePreview')"),'Probar voz debe conservar su reproductor de audio');
 
 // La biblioteca puede tener varias referencias y muestra cuál usa el perfil sin sugerir rotación.
 assert(v2.includes('labStatus?.voices||[]'),'La biblioteca de referencias debe renderizar múltiples voces');
@@ -29,7 +29,7 @@ assert(release.includes('profileSidecar')&&release.includes('tts-v2.json'),'La s
 
 // Pronunciación + normalización son comunes a todos los motores y el diagnóstico deja de decir Kokoro.
 assert(r27.includes('Pronunciación y normalización'),'La preparación de locución debe agrupar pronunciación y normalizador ES-PE');
-assert(r27.includes('id=\\"ec27SpeechSlot\\"')&&r27.indexOf('ec27SpeechSlot')<r27.indexOf('Reglas actualizables'),'Normalizador ES-PE debe quedar en el bloque común de preparación');
+assert(r27.includes('id="ec27SpeechSlot"')&&r27.indexOf('ec27SpeechSlot')<r27.indexOf('Reglas actualizables'),'Normalizador ES-PE debe quedar en el bloque común de preparación');
 assert(r27.includes('Texto enviado al motor TTS')||r27.includes('TEXTO ENVIADO AL MOTOR TTS'),'El diagnóstico debe nombrar el destino genérico TTS');
 assert(!r27.includes('ENVIADO REALMENTE A KOKORO'),'La UI no debe afirmar que todo se envía a Kokoro');
 assert(r27.includes('ec27DiagnosticDetails'),'Diagnóstico completo debe quedar plegable por defecto');
@@ -38,8 +38,8 @@ assert(r27.includes('ec27DiagnosticDetails'),'Diagnóstico completo debe quedar 
 assert(r27.includes('ec27PronTestDetails')&&r27.includes("q('#testPronunciation')"),'Probar pronunciación debe conservarse dentro de un bloque avanzado');
 
 // Filas compactas: iconos accesibles, no botones largos.
-assert(r27.includes('aria-label=\\"Guardar corrección\\"')&&r27.includes('title=\\"Guardar corrección\\"'),'Guardar corrección debe ser un icono accesible');
-assert(r27.includes('aria-label=\\"Eliminar pronunciación\\"')&&r27.includes('title=\\"Eliminar pronunciación\\"'),'Eliminar pronunciación debe ser un icono accesible');
+assert(r27.includes('aria-label="Guardar corrección"')&&r27.includes('title="Guardar corrección"'),'Guardar corrección debe ser un icono accesible');
+assert(r27.includes('aria-label="Eliminar pronunciación"')&&r27.includes('title="Eliminar pronunciación"'),'Eliminar pronunciación debe ser un icono accesible');
 assert(css27.includes('.ec27-icon-action'),'CSS debe soportar acciones compactas por icono');
 
 // Última generación queda como texto compacto, no tabla independiente.
