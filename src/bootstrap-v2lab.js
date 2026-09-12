@@ -31,4 +31,5 @@ if(!gotLock){app.quit();}else{
   require('./services/releaseV2YoutubePromo').installReleaseV2YoutubePromo();
   require('./services/releaseV2Stabilization').installReleaseV2Stabilization();
   require('./services/releaseV2Lab29').installReleaseV2Lab29();
+  require('./services/releaseV2EmissionDesign').installReleaseV2EmissionDesign();
 }
