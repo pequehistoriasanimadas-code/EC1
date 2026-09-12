@@ -13,6 +13,18 @@
 #ecEmissionV2PreviewCard .ec-v2-safe-guide{z-index:7}
 #ecEmissionV2PreviewCard .ec-v2-promo-preview{z-index:6}
 
+/* Ajustes de Nota: título + formato en una sola cabecera. */
+#ecEmissionV2NoteCard .ec-v2-note-head-compact{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin-bottom:10px!important}
+#ecEmissionV2NoteCard .ec-v2-note-head-compact>div{min-width:0}
+#ecEmissionV2NoteCard .ec-v2-note-head-compact h3{margin:0!important}
+#ecEmissionV2NoteCard .ec-v2-editing-badge{margin:0!important;padding:4px 8px!important;border:1px solid #303030;border-radius:999px;background:#111;color:#9da1a8;font-size:10px;line-height:1;white-space:nowrap}
+#ecEmissionV2NoteCard .ec-v2-editing-badge b{color:#d8d8d8}
+
+/* Transiciones: selector y duración comparten una sola fila 65/35. */
+.ec-v2-transition-card-compact .ec-v2-transition-grid{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(120px,1fr);gap:10px;align-items:end;min-width:0;margin-top:8px}
+.ec-v2-transition-card-compact .ec-v2-transition-grid>label{margin:0!important;min-width:0}
+.ec-v2-transition-card-compact .ec-v2-transition-grid select,.ec-v2-transition-card-compact .ec-v2-transition-grid input{width:100%;min-width:0}
+
 /* Fondos y casillas: recuperar lectura por símbolos y evitar overflow de 100%. */
 #ecEmissionV2NoteCard .ec-v2-bg-grid{display:grid;gap:8px}
 #ecEmissionV2NoteCard .ec-v2-bg-item{display:grid!important;grid-template-columns:minmax(105px,.9fr) 82px 82px minmax(0,1.65fr)!important;gap:8px!important;align-items:center!important;padding:8px 10px!important;min-width:0;overflow:hidden}
@@ -33,6 +45,7 @@
   #ecEmissionV2NoteCard .ec-v2-opacity-control{grid-column:1/-1!important;grid-template-columns:22px minmax(100px,1fr) 76px!important}
 }
 @media(max-width:760px){
+  .ec-v2-transition-card-compact .ec-v2-transition-grid{grid-template-columns:1fr}
   #ecEmissionV2NoteCard .ec-v2-bg-item{grid-template-columns:minmax(0,1fr) 82px!important}
   #ecEmissionV2NoteCard .ec-v2-bg-item>b{grid-column:1/-1}
   #ecEmissionV2NoteCard .ec-v2-opacity-control{grid-column:1/-1!important}
