@@ -30,7 +30,6 @@ assert(fs.existsSync('src/services/releaseV2EmissionDesign.js'),'Falta release E
 const release=fs.readFileSync('src/services/releaseV2EmissionDesign.js','utf8');assert(release.includes('SettingsStore.prototype'));assert(release.includes('normalizeNoteDesignRoot')&&release.includes('materializeEffectiveOutput'));assert(release.includes('normalizePromoDesignRoot'));assert(release.includes('renderer-emission-design-v2.js')&&release.includes('output-emission-design-v2.js'));
 const boot=fs.readFileSync('src/bootstrap-v2lab.js','utf8');assert(boot.includes('releaseV2EmissionDesign')&&boot.includes('installReleaseV2EmissionDesign'));assert(boot.indexOf('releaseV2Lab29')<boot.indexOf('releaseV2EmissionDesign'));
 
-// Editor UX contract: intentionally RED until the new renderer/CSS are added.
 assert(fs.existsSync('src/renderer-emission-design-v2.js'),'Falta renderer-emission-design-v2.js');
 assert(fs.existsSync('src/control-emission-design-v2.css'),'Falta control-emission-design-v2.css');
 const ui=fs.readFileSync('src/renderer-emission-design-v2.js','utf8'),css=fs.readFileSync('src/control-emission-design-v2.css','utf8');
@@ -41,8 +40,8 @@ assert(!ui.includes('Mostrar Categoría')&&!ui.includes('Mostrar Fecha')&&!ui.in
 assert(ui.includes('categoryVisible')&&ui.includes('dateVisible')&&ui.includes('exclusiveBadgeVisible'),'Visibilidad debe ser visual y separada');
 for(const id of presetNames)assert(ui.includes(id),`UI debe incluir preset ${id}`);
 assert(ui.includes('Personalizado'),'UI debe identificar posición personalizada');
-assert((ui.match(/type="range"/g)||[]).length>=6,'X/Y/ancho/alto y avanzados deben usar sliders');
-assert(ui.includes('type="number"'),'Tamaños tipográficos deben seguir siendo numéricos');
+for(const id of ['ecV2PromoX','ecV2PromoY','ecV2PromoWidth','ecV2PromoHeight','ecV2PromoThumb','ecV2PromoOpacity','ecV2PromoPadding'])assert(ui.includes(`sliderNumber('${id}'`),`${id} debe generarse como slider + número`);
+assert(ui.includes('type="range"')&&ui.includes('type="number"'),'El helper debe generar slider y número sincronizados');
 assert(!ui.includes('Máximo de líneas')&&!ui.includes('titleMaxLines'),'UI no debe exponer máximo de líneas');
 assert(ui.includes('profileStatus'),'Autosave debe validar el perfil activo antes de persistir');
 assert(ui.includes('transitionType')&&ui.includes('ec0331StandbyCard')&&ui.includes('ecDesignRight'),'Transiciones y standby deben permanecer en la derecha');
