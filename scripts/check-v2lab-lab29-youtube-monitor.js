@@ -26,4 +26,5 @@ assert(/productionGpuBusy\(\)/.test(ui),'La cadencia reducida debe depender de l
 assert(!/if\(productionGpuBusy\(\)\)\{[\s\S]{0,350}return;\}/.test(ui),'La carga de IA/TTS no debe congelar el monitor Lab.29');
 assert(/MONITOR_FPS\s*=\s*15/.test(baseMonitor),'Se preserva la base de monitor 15 FPS de Lab.28');
 
+require('./check-v2lab-auto-ux-lab29');
 console.log('Lab.29 YouTube persistence + monitor adaptive cadence checks: OK');
