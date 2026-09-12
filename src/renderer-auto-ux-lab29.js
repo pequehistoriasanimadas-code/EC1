@@ -2,7 +2,7 @@
 (function installAutomaticOperatorUxLab29(){
   if(window.__ecAutoUxLab29Installed)return;
   const q=s=>document.querySelector(s);
-  let lastAutomation=null,lastOutput=null,retryTimer=null,retryCount=0;
+  let lastAutomation=null,lastOutput=null,retryTimer=null,retryCount=0,settleTimer=null,settlePass=0;
 
   function loadCss(){
     if(q('#ecAutoUxLab29Css'))return;
@@ -11,13 +11,10 @@
     document.head.appendChild(link);
   }
   function move(node,host){if(node&&host&&node.parentElement!==host)host.appendChild(node);return node;}
-  function el(tag,id,className=''){let node=q('#'+id);if(node)return node;node=document.createElement(tag);node.id=id;if(className)node.className=className;return node;}
   function fmtClockFromMin(value){const sec=Math.max(0,Math.round((Number(value)||0)*60)),m=Math.floor(sec/60),s=sec%60;return`${m}:${String(s).padStart(2,'0')}`;}
-  function stateLabel(obj,type){if(!obj?.running)return'DETENIDA';if(obj.paused)return'PAUSADA';return type==='processing'?'ACTIVA':'AL AIRE';}
-  function kindLabel(kind){return({news:'NOTICIA',rss:'NOTICIA',generated:'NOTICIA',canned:'CONTENIDO',content:'CONTENIDO',ad:'ANUNCIO',none:'SIN EMISIÓN'}[String(kind||'').toLowerCase()]||String(kind||'').toUpperCase()||'SIN EMISIÓN');}
 
   function prerequisites(){
-    return !!(window.ECAPI&&q('#tab-auto')&&q('#tab-auto .auto-cols')&&q('.queue-card')&&q('#ecLanMonitorCard')&&q('#cannedEnabled')&&q('#ecYoutubePromoEnabled')&&q('#processStart')&&q('#emissionStart')&&q('#sessionCounters'));
+    return !!(window.ECAPI&&q('#tab-auto')&&q('#tab-auto .auto-cols')&&q('.queue-card')&&q('#ecLanMonitorCard')&&q('#cannedEnabled')&&q('#ecYoutubePromoEnabled')&&q('#processStart')&&q('#emissionStart')&&q('#ec28EmissionPanel')&&q('#sessionCounters'));
   }
 
   function ensureOperatorStrip(tab){
@@ -35,8 +32,8 @@
       </div>`;
       const h1=tab.querySelector('h1');(h1||tab.firstElementChild)?.insertAdjacentElement('afterend',strip);
     }
-    const processing=q('#processingState'),emission=q('#emissionState');
-    move(processing,q('#ecAutoPreparationStateHost'));move(emission,q('#ecAutoEmissionStateHost'));
+    move(q('#processingState'),q('#ecAutoPreparationStateHost'));
+    move(q('#emissionState'),q('#ecAutoEmissionStateHost'));
     const cannedRow=q('#cannedEnabled')?.closest('.switch-row');
     const promoRow=q('#ecYoutubePromoEnabled')?.closest('.switch-row');
     if(cannedRow){const b=cannedRow.querySelector('b');if(b)b.textContent='Contenidos';move(cannedRow,q('#ecAutoContentToggleHost'));}
@@ -44,7 +41,7 @@
     return strip;
   }
 
-  function ensureMainColumns(tab){
+  function ensureMainColumns(){
     const grid=q('#tab-auto .auto-cols');if(!grid)return null;
     grid.classList.add('ec-auto-operator-grid');
     let left=q('#ecAutoLeft'),right=q('#ecAutoRight');
@@ -69,7 +66,7 @@
     const prepButtons=q('#processStart')?.closest('.buttons');
     if(prepButtons){prepButtons.classList.add('ec-auto-prep-actions');move(prepButtons,actions);}
     const clear=q('#clearQueue');if(clear)move(clear,actions);
-    const summary=q('#queueSummary');if(summary)summary.classList.add('ec-auto-legacy-summary');
+    q('#queueSummary')?.classList.add('ec-auto-legacy-summary');
   }
 
   function ensureBottomSettings(left){
@@ -83,14 +80,14 @@
   }
 
   function ensureNowCard(right){
-    let host=q('#ecAutoNowHost');
-    if(!host){host=document.createElement('div');host.id='ecAutoNowHost';right.appendChild(host);}
+    let host=q('#ecAutoNowHost');if(!host){host=document.createElement('div');host.id='ecAutoNowHost';right.appendChild(host);}
     let card=q('#ecAutoNowCard');
     if(!card){
       card=document.createElement('div');card.id='ecAutoNowCard';card.className='card ec-auto-now-card ec-auto-section-live';
-      card.innerHTML=`<div class="section-head"><h3>Ahora al aire</h3><span id="ecAutoNowBadge" class="status-pill neutral">SIN EMISIÓN</span></div><div class="ec-auto-now-body"><div><b id="ecAutoNowTitle">Nada al aire</b><span id="ecAutoNowMeta">La emisión está detenida.</span></div></div>`;
+      card.innerHTML='<div class="section-head"><h3>Ahora al aire</h3></div><div id="ecAutoNowBody"></div>';
       host.appendChild(card);
     }
+    move(q('#ec28EmissionPanel'),q('#ecAutoNowBody'));
     return card;
   }
 
@@ -109,32 +106,21 @@
       card.innerHTML='<div class="section-head"><h3>Resumen de sesión</h3></div><div id="ecAutoSessionHost"></div>';
       right.appendChild(card);sessionHost=q('#ecAutoSessionHost');
     }
-    const counters=q('#sessionCounters');if(counters)move(counters,sessionHost);
+    move(q('#sessionCounters'),sessionHost);
   }
 
   function renderAutomation(s=lastAutomation){
     if(!s)return;lastAutomation=s;
-    const c=s.counts||{},b=s.buffer||{},p=s.processing||{},e=s.emission||{};
+    const c=s.counts||{},b=s.buffer||{};
     const ready=q('#ecAutoReadyValue'),autonomy=q('#ecAutoAutonomyValue'),queueLive=q('#ecAutoQueueLiveSummary');
     if(ready)ready.textContent=`${Number(c.ready)||0} / ${Number(b.target)||15}`;
     if(autonomy)autonomy.textContent=fmtClockFromMin(b.autonomyMin);
     if(queueLive)queueLive.textContent=`${Number(c.ready)||0} listas · ${(Number(c.processing)||0)+(Number(c.pending)||0)} preparando · ${Number(c.error)||0} errores`;
-    const prep=q('#processingState'),emission=q('#emissionState');
-    if(prep&&!prep.textContent.trim())prep.textContent=stateLabel(p,'processing');
-    if(emission&&!emission.textContent.trim())emission.textContent=stateLabel(e,'emission');
-    renderNow();
   }
 
   function renderOutput(s=lastOutput){
-    if(!s)return;lastOutput=s;const out=q('#ecAutoOutputValue');if(out)out.textContent=s.resolution||(s.format==='9:16'?'1080×1920':'1920×1080');renderNow();
-  }
-
-  function renderNow(){
-    const e=lastAutomation?.emission||{},o=lastOutput||{},badge=q('#ecAutoNowBadge'),title=q('#ecAutoNowTitle'),meta=q('#ecAutoNowMeta');if(!badge||!title||!meta)return;
-    const active=!!e.running||o.source==='automatic'||o.source==='manual',paused=!!e.paused;
-    const currentTitle=String(e.currentTitle||o.title||'').trim(),kind=e.currentKind||o.kind||'none';
-    if(!active){badge.textContent='SIN EMISIÓN';badge.className='status-pill neutral';title.textContent='Nada al aire';meta.textContent='La emisión está detenida.';return;}
-    badge.textContent=paused?'PAUSADA':'AL AIRE';badge.className=`status-pill ${paused?'pause':'live'}`;title.textContent=currentTitle||'Emisión activa';meta.textContent=`${kindLabel(kind)}${o.resolution?` · ${o.resolution}`:''}`;
+    if(!s)return;lastOutput=s;const out=q('#ecAutoOutputValue');
+    if(out)out.textContent=s.resolution||(Number(s.width)>0&&Number(s.height)>0?`${Number(s.width)}×${Number(s.height)}`:(s.format==='9:16'?'1080×1920':'1920×1080'));
   }
 
   async function hydrate(){
@@ -144,21 +130,27 @@
 
   function installLayout(){
     if(!prerequisites())return false;
-    loadCss();const tab=q('#tab-auto'),cols=ensureMainColumns(tab);if(!cols)return false;
+    loadCss();const tab=q('#tab-auto'),cols=ensureMainColumns();if(!cols)return false;
     ensureOperatorStrip(tab);ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);
-    window.__ecAutoUxLab29Audit={installed:true,contentSwitches:document.querySelectorAll('#cannedEnabled').length,promoSwitches:document.querySelectorAll('#ecYoutubePromoEnabled').length,queueCards:document.querySelectorAll('#queue').length,monitorCards:document.querySelectorAll('#ecLanMonitorCard').length};
+    window.__ecAutoUxLab29Audit={installed:true,contentSwitches:document.querySelectorAll('#cannedEnabled').length,promoSwitches:document.querySelectorAll('#ecYoutubePromoEnabled').length,queueCards:document.querySelectorAll('#queue').length,monitorCards:document.querySelectorAll('#ecLanMonitorCard').length,onAirPanels:document.querySelectorAll('#ec28EmissionPanel').length};
     return true;
+  }
+
+  function settleLateNodes(){
+    if(!window.__ecAutoUxLab29Installed)return;
+    const cols=ensureMainColumns();if(cols){ensureOperatorStrip(q('#tab-auto'));ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);}
+    if(settlePass++<20)settleTimer=setTimeout(settleLateNodes,250);
   }
 
   function attempt(){
     if(installLayout()){
-      window.__ecAutoUxLab29Installed=true;clearTimeout(retryTimer);hydrate();return;
+      window.__ecAutoUxLab29Installed=true;clearTimeout(retryTimer);settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,250);hydrate();return;
     }
-    if(retryCount++<80)retryTimer=setTimeout(attempt,150);
+    if(retryCount++<160)retryTimer=setTimeout(attempt,150);
   }
 
   window.ECAPI?.on?.('automation:state',s=>{lastAutomation=s;if(!window.__ecAutoUxLab29Installed)attempt();renderAutomation(s);});
   window.ECAPI?.on?.('output:state',s=>{lastOutput=s;if(!window.__ecAutoUxLab29Installed)attempt();renderOutput(s);});
-  window.ECAPI?.on?.('profile:changed',()=>setTimeout(()=>{installLayout();hydrate();},260));
+  window.ECAPI?.on?.('profile:changed',()=>setTimeout(()=>{installLayout();settlePass=0;settleLateNodes();hydrate();},260));
   attempt();
 })();
