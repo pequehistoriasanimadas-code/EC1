@@ -47,7 +47,10 @@ function injectWindow(win){
   const run=()=>{
     if(!win||win.isDestroyed())return;
     const url=String(win.webContents.getURL()||'');
-    if(/control\.html(?:[?#]|$)/i.test(url))injectFile(win,'renderer-lab29.js');
+    if(/control\.html(?:[?#]|$)/i.test(url)){
+      injectFile(win,'renderer-lab29.js');
+      injectFile(win,'renderer-auto-ux-lab29.js');
+    }
   };
   win.webContents.on('did-finish-load',run);
   setTimeout(run,0);
