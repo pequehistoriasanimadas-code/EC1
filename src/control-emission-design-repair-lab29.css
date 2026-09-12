@@ -1,0 +1,39 @@
+/* Lab.29 · reparación visual de Diseño de emisión */
+#ecEmissionV2PreviewCard .ec-v2-preview-host{position:relative!important;display:block!important;min-height:0!important;overflow:hidden!important;padding:12px!important;box-sizing:border-box}
+#ecEmissionV2PreviewCard .ec-v2-preview-stage{position:absolute!important;overflow:hidden!important;transform-origin:0 0!important;background:#000!important;isolation:isolate}
+#ecEmissionV2PreviewCard .ec-v2-preview-media{position:absolute;inset:0;z-index:1;background:linear-gradient(135deg,#3b3b3b,#111 62%)}
+#ecEmissionV2PreviewCard .ec-v2-preview-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.04);display:block}
+#ecEmissionV2PreviewCard .ec-v2-preview-image.hidden{display:none!important}
+#ecEmissionV2PreviewCard .ec-v2-note-shade{position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(transparent 42%,rgba(0,0,0,.88) 100%)}
+#ecEmissionV2PreviewCard .ec-v2-note-preview{position:absolute!important;z-index:4!important;background:transparent!important;border-radius:0!important;padding:0!important;color:#fff!important;box-sizing:border-box!important;overflow:hidden}
+#ecEmissionV2PreviewCard .ec-v2-note-meta{display:flex;align-items:center;flex-wrap:wrap}
+#ecEmissionV2PreviewCard .ec-v2-note-meta span{box-sizing:border-box}
+#ecEmissionV2PreviewCard #ecV2PreviewTitle{font-weight:900;line-height:1.02}
+#ecEmissionV2PreviewCard #ecV2PreviewSummary{line-height:1.24}
+#ecEmissionV2PreviewCard .ec-v2-safe-guide{z-index:7}
+#ecEmissionV2PreviewCard .ec-v2-promo-preview{z-index:6}
+
+/* Fondos y casillas: recuperar lectura por símbolos y evitar overflow de 100%. */
+#ecEmissionV2NoteCard .ec-v2-bg-grid{display:grid;gap:8px}
+#ecEmissionV2NoteCard .ec-v2-bg-item{display:grid!important;grid-template-columns:minmax(105px,.9fr) 82px 82px minmax(0,1.65fr)!important;gap:8px!important;align-items:center!important;padding:8px 10px!important;min-width:0;overflow:hidden}
+#ecEmissionV2NoteCard .ec-v2-bg-item> b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#ecEmissionV2NoteCard .ec-v2-bg-icon-control{display:flex!important;align-items:center;justify-content:flex-start;gap:6px;margin:0!important;min-width:0;cursor:pointer}
+#ecEmissionV2NoteCard .ec-v2-bg-control-icon{width:18px;flex:0 0 18px;text-align:center;font-size:16px;line-height:1;color:#b9bdc3}
+#ecEmissionV2NoteCard .ec-v2-bg-icon-control input[type="color"]{width:58px!important;height:34px!important;padding:4px!important;margin:0!important;min-width:0}
+#ecEmissionV2NoteCard .ec-v2-bg-icon-control input[type="number"]{width:58px!important;margin:0!important;min-width:0;text-align:center}
+#ecEmissionV2NoteCard .ec-v2-opacity-control{display:grid!important;grid-template-columns:22px minmax(72px,1fr) 76px!important;gap:7px!important;align-items:center!important;margin:0!important;min-width:0!important;grid-column:auto!important}
+#ecEmissionV2NoteCard .ec-v2-opacity-control>label{margin:0!important;width:22px;font-size:17px;line-height:1;color:#b9bdc3;text-align:center}
+#ecEmissionV2NoteCard .ec-v2-opacity-control input[type="range"]{width:100%!important;min-width:0!important;margin:0!important}
+#ecEmissionV2NoteCard .ec-v2-opacity-value{display:grid!important;grid-template-columns:minmax(0,1fr) 13px!important;gap:2px!important;align-items:center!important;min-width:0!important;width:76px!important;white-space:nowrap!important}
+#ecEmissionV2NoteCard .ec-v2-opacity-value input{width:100%!important;min-width:0!important;margin:0!important;text-align:right!important;font-variant-numeric:tabular-nums}
+#ecEmissionV2NoteCard .ec-v2-opacity-value span{display:block!important;min-width:11px!important;white-space:nowrap!important;font-size:11px!important;color:#8e8e8e!important}
+
+@media(max-width:1180px){
+  #ecEmissionV2NoteCard .ec-v2-bg-item{grid-template-columns:minmax(110px,1fr) 82px 82px!important}
+  #ecEmissionV2NoteCard .ec-v2-opacity-control{grid-column:1/-1!important;grid-template-columns:22px minmax(100px,1fr) 76px!important}
+}
+@media(max-width:760px){
+  #ecEmissionV2NoteCard .ec-v2-bg-item{grid-template-columns:minmax(0,1fr) 82px!important}
+  #ecEmissionV2NoteCard .ec-v2-bg-item>b{grid-column:1/-1}
+  #ecEmissionV2NoteCard .ec-v2-opacity-control{grid-column:1/-1!important}
+}
