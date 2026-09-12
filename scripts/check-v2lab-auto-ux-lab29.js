@@ -9,8 +9,9 @@ for(const file of ['src/renderer-auto-ux-lab29.js','src/control-auto-ux-lab29.cs
 
 const ui=read('src/renderer-auto-ux-lab29.js');
 const css=read('src/control-auto-ux-lab29.css');
-const lab29=read('src/renderer-lab29.js');
+const release=read('src/services/releaseV2Lab29.js');
 const queue=read('src/renderer-0332.js');
+new Function(ui);
 
 for(const id of [
   'ecAutoOperatorStrip','ecAutoLeft','ecAutoRight','ecAutoQueueActions',
@@ -18,11 +19,11 @@ for(const id of [
   'ecAutoEmissionHost','ecAutoSessionHost'
 ]) assert(ui.includes(id),`Falta host estable ${id}`);
 
-assert(lab29.includes('renderer-auto-ux-lab29.js'),'Lab.29 debe cargar el nuevo UX Automático');
+assert(release.includes("injectFile(win,'renderer-auto-ux-lab29.js')"),'Lab.29 debe inyectar el nuevo UX Automático en control.html');
 assert(ui.includes("q('#cannedEnabled')?.closest('.switch-row')"),'Debe mover el switch original de Contenidos');
 assert(ui.includes("q('#ecYoutubePromoEnabled')?.closest('.switch-row')"),'Debe mover el switch original de Promo YouTube');
-assert(ui.includes("q('#processStart')")&&ui.includes("q('#processPause')")&&ui.includes("q('#processResume')")&&ui.includes("q('#processStop')"),'Debe reutilizar los controles originales de preparación');
-assert(ui.includes("q('#emissionStart')")&&ui.includes("q('#emissionPause')")&&ui.includes("q('#emissionResume')")&&ui.includes("q('#emissionStop')"),'Debe reutilizar los controles originales de emisión');
+assert(ui.includes("q('#processStart')?.closest('.buttons')"),'Debe mover el grupo original de controles de preparación, no clonarlo');
+assert(ui.includes("q('#emissionStart')?.closest('.card')"),'Debe mover la tarjeta/control original de emisión, no clonarlo');
 assert(ui.includes("q('#sessionCounters')"),'Debe reutilizar los contadores de sesión existentes');
 assert(ui.includes("q('#ecLanMonitorCard')"),'Debe mover el monitor existente, no crear otro');
 assert(ui.includes("q('#exclusiveSchedule0324')"),'Debe conservar la tarjeta exclusiva existente');
@@ -36,8 +37,8 @@ assert(!/PRÓXIMO|Próximo contenido/.test(ui),'No debe crear tarjeta o badge re
 assert(!/ec-auto-row-icon|queue-item[^\n]{0,180}(?:svg|icon)/i.test(ui),'No debe añadir iconos decorativos a las tarjetas de cola');
 assert(queue.includes('technicalHtml(row)')&&queue.includes('queue-meta')&&queue.includes('queue-exclusive'),'La cola estable debe conservar metadata, detalles técnicos y EXCLUSIVO');
 
-assert(ui.includes("window.ECAPI.on?.('automation:state'")||ui.includes("window.ECAPI.on('automation:state'"),'Debe sincronizar resúmenes desde automation:state');
-assert(ui.includes("window.ECAPI.on?.('output:state'")||ui.includes("window.ECAPI.on('output:state'"),'Debe sincronizar Ahora al aire/Output desde output:state');
+assert(ui.includes("window.ECAPI?.on?.('automation:state'")||ui.includes("window.ECAPI.on?.('automation:state'"),'Debe sincronizar resúmenes desde automation:state');
+assert(ui.includes("window.ECAPI?.on?.('output:state'")||ui.includes("window.ECAPI.on?.('output:state'"),'Debe sincronizar Ahora al aire/Output desde output:state');
 assert(ui.includes("profile:changed"),'Debe rehidratar idempotentemente al cambiar de perfil');
 
 assert(css.includes('.ec-auto-operator-grid'),'Debe existir el grid principal del operador');
