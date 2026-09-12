@@ -3,58 +3,75 @@ const fs=require('fs');
 const assert=require('assert');
 const read=file=>fs.readFileSync(file,'utf8');
 
-const designUi=read('src/renderer-emission-design-v2.js');
-const designCss=read('src/control-emission-design-v2.css');
+for(const file of [
+  'src/renderer-emission-design-repair-lab29.js',
+  'src/control-emission-design-repair-lab29.css',
+  'src/control-audio-repair-lab29.css',
+  'src/control-ux-cleanup-lab29.css',
+  'src/renderer-ux-cleanup-lab29.js',
+  'src/services/releaseV2UxRepairLab29.js'
+])assert(fs.existsSync(file),`Falta ${file}`);
+
+const designRepair=read('src/renderer-emission-design-repair-lab29.js');
+const designRepairCss=read('src/control-emission-design-repair-lab29.css');
 const outputCss=read('src/output.css');
-const r26=read('src/renderer-0326.js');
-const r28=read('src/renderer-0328.js');
 const audio=read('src/renderer-audio-ux-lab29.js');
-const audioCss=read('src/control-audio-ux-lab29.css');
-const preload=read('src/preload.js');
+const audioRepairCss=read('src/control-audio-repair-lab29.css');
+const cleanCss=read('src/control-ux-cleanup-lab29.css');
+const cleanUi=read('src/renderer-ux-cleanup-lab29.js');
+const release=read('src/services/releaseV2UxRepairLab29.js');
+const boot=read('src/bootstrap-v2lab.js');
+
+for(const js of [designRepair,audio,cleanUi,release])assert.doesNotThrow(()=>new Function(js), 'Los suplementos UX deben parsear como JavaScript válido');
 
 // Diseño de Nota: imagen -> degradado fullscreen -> texto. Nunca tarjeta detrás del titular/bajada.
-assert(designUi.includes('id="ecV2PreviewImage"'),'Preview V2 debe usar una imagen real/fallback');
-assert(designUi.includes('id="ecV2NoteShade"'),'Preview V2 debe tener una capa de degradado independiente');
-assert(designUi.includes("q('#ecV2NoteShade')"),'Renderer debe controlar la capa de degradado');
-assert(designUi.includes('transparent ${format===\'9:16\'?38:42}%'),'El degradado debe comenzar en 42% horizontal y 38% vertical');
-assert(!designUi.includes('np.style.background=rgba(n.lowerBgColor'),'El fondo inferior no puede aplicarse al contenedor de texto');
-assert(/\.ec-v2-note-shade\s*\{[^}]*position:absolute[^}]*inset:0/s.test(designCss),'Shade V2 debe ocupar todo el frame');
-assert(/\.ec-v2-note-preview\s*\{[^}]*background:transparent/s.test(designCss),'Contenedor de texto Nota debe ser transparente');
+assert(designRepair.includes("img.id='ecV2PreviewImage'")&&designRepair.includes("shade.id='ecV2NoteShade'"),'Repair debe crear imagen real y shade independiente');
+assert(designRepair.includes("shade.style.background=`linear-gradient(transparent ${vertical?38:42}%"),'El degradado debe comenzar en 42% horizontal y 38% vertical');
+assert(designRepair.includes("np.style.background='transparent'"),'El contenedor de texto Nota debe quedar transparente');
+assert(/\.ec-v2-note-shade\{position:absolute;inset:0/.test(designRepairCss),'Shade debe ocupar todo el frame');
+assert(/\.ec-v2-note-preview\{[^}]*background:transparent!important/s.test(designRepairCss),'CSS debe impedir que la Nota vuelva a convertirse en tarjeta');
+assert(designRepair.includes("w=vertical?1080:1920,h=vertical?1920:1080"),'Preview debe trabajar en geometría real 1920x1080 / 1080x1920 antes de escalar');
+assert(designRepair.includes("typeof effectiveImage==='function'")&&designRepair.includes("q('#designPreviewImg')"),'Preview debe reutilizar imagen efectiva/fallback cuando exista');
 assert(outputCss.includes('#shade{position:absolute;inset:0;background:linear-gradient(transparent 42%,var(--lower-bg) 100%)'),'Output real debe conservar su degradado fullscreen');
 assert(outputCss.includes('transparent 38%,var(--lower-bg) 100%'),'Output vertical debe conservar inicio de degradado 38%');
 
 // Fondos/casillas: símbolos compactos y valor de opacidad contenido.
-for(const symbol of ['■','▢','◐'])assert(designUi.includes(symbol),`Fondos y casillas debe restaurar símbolo ${symbol}`);
-assert(designUi.includes('ec-v2-opacity-control')&&designUi.includes('ec-v2-opacity-value'),'Opacidad debe tener control compacto propio');
-assert(/\.ec-v2-opacity-value\s*\{[^}]*white-space:nowrap/s.test(designCss),'100% no debe poder partirse/desbordarse');
-assert(!/\.ec-v2-bg-item\{[^}]*minmax\(180px,1\.6fr\)/s.test(designCss),'Fondos/casillas no debe forzar un grid anidado demasiado ancho');
+for(const symbol of ['■','▢','◐'])assert(designRepair.includes(`'${symbol}'`)||designRepair.includes(`>${symbol}<`),`Fondos y casillas debe restaurar símbolo ${symbol}`);
+assert(designRepair.includes('ec-v2-opacity-control')&&designRepair.includes('ec-v2-opacity-value'),'Repair debe marcar el control de opacidad compacto');
+assert(/\.ec-v2-opacity-value\{[^}]*white-space:nowrap!important/s.test(designRepairCss),'100% no debe poder partirse/desbordarse');
+assert(designRepairCss.includes('grid-template-columns:22px minmax(72px,1fr) 76px'),'Opacidad debe reservar ancho estable para número + %');
+assert(designRepair.includes("name.textContent='Degradado inferior'"),'La UI debe llamar Degradado inferior al fondo de Nota');
 
-// Aprendizaje visible (ec28): iconos directos, no transformación tardía de botones de texto.
-assert(r28.includes('aria-label="Guardar corrección"')&&r28.includes('title="Guardar corrección"'),'Fila visible ec28 debe crear Guardar como icono accesible');
-assert(r28.includes('aria-label="Eliminar pronunciación"')&&r28.includes('title="Eliminar pronunciación"'),'Fila visible ec28 debe crear Eliminar como icono accesible');
-assert(r28.includes('ec28-icon-action'),'Renderer visible debe usar clase de acción por icono');
-assert(!r28.includes('class="ec28-save" ${draft.dirty?\'\':\'disabled\'}>Guardar corrección</button>'),'Guardar visible no puede nacer como botón de texto');
-assert(!r28.includes('class="ec28-delete dark">Eliminar</button>'),'Eliminar visible no puede nacer como botón de texto');
-assert(audioCss.includes('.ec28-icon-action'),'CSS Audio debe estilizar los iconos ec28 directamente');
+// Aprendizaje visible ec28: la capa final debe actuar sobre la lista realmente visible, no solo sobre la lista ec27 oculta.
+assert(audio.includes("qa('#ec28LearningList .ec28-save')")&&audio.includes("qa('#ec28LearningList .ec28-delete')"),'Audio debe reparar las acciones del gestor ec28 visible');
+assert(audio.includes("'Guardar corrección','ec28-icon-action'")&&audio.includes("'Eliminar pronunciación','ec28-icon-action'"),'Guardar/Eliminar visibles deben convertirse en iconos accesibles');
+assert(audio.includes("new MutationObserver(compactLearningActions)")&&audio.includes("observe(l28,{childList:true,subtree:true})"),'Iconos deben reaplicarse después de refrescos del aprendizaje');
+assert(audioRepairCss.includes('.ec28-icon-action')&&audioRepairCss.includes('font-size:0!important'),'CSS debe mostrar solo el símbolo en las acciones ec28');
+assert(audio.includes("iconify(clear,'trash','Borrar aprendizaje'"),'Borrar aprendizaje debe ser una acción secundaria por papelera');
 
 // Normalización común y controles específicos de motor.
-assert(!r26.includes('solo para Kokoro'),'La ayuda del normalizador debe ser neutral al motor TTS');
+assert(audio.includes('Prepara cifras, monedas, porcentajes, horas y puntuación antes de enviarlas al motor TTS activo.'),'La ayuda visible del normalizador debe ser neutral al motor');
 assert(audio.includes('syncEngineSpecificControls'),'Audio UX debe controlar la visibilidad de opciones específicas del motor');
-assert(audio.includes("engine==='kokoro'")&&audio.includes('initialAttackProtection'),'Protección de ataque debe mostrarse solo con Kokoro');
+assert(audio.includes("showKokoro=engine==='kokoro'")&&audio.includes('initialAttackProtection'),'Protección de ataque debe mostrarse solo con Kokoro');
+assert(audioRepairCss.includes('.ec29-engine-specific-hidden')&&audioRepairCss.includes('display:none!important'),'Controles específicos deben ocultarse realmente');
 assert(audio.includes('Probar locución procesada'),'La prueba plegable debe describir el pipeline completo');
 assert(audio.includes('TEXTO ENVIADO AL MOTOR TTS'),'Diagnóstico final debe ser genérico');
+assert(audio.includes('speechDiagnostic0326')&&audio.includes('ec29-legacy-speech-diag-hidden'),'Diagnóstico Kokoro heredado debe quedar fuera de la UI final');
+assert(audioRepairCss.includes('#speech0326.ec29-speech-flat'),'Locución ES-PE heredada debe integrarse sin tarjeta anidada');
 
 // Jerarquía global y Contenidos/Anuncios en columnas independientes.
-for(const file of ['src/control-ux-cleanup-lab29.css','src/renderer-ux-cleanup-lab29.js'])assert(fs.existsSync(file),`Falta ${file}`);
-const cleanCss=fs.existsSync('src/control-ux-cleanup-lab29.css')?read('src/control-ux-cleanup-lab29.css'):'';
-const cleanUi=fs.existsSync('src/renderer-ux-cleanup-lab29.js')?read('src/renderer-ux-cleanup-lab29.js'):'';
-assert(cleanCss.includes('.tab>h1')&&cleanCss.includes('display:none'),'Los H1 redundantes deben ocultarse visualmente de forma global');
+assert(cleanCss.includes('.tab>h1')&&cleanCss.includes('display:none!important'),'Los H1 redundantes deben ocultarse visualmente de forma global');
+assert(cleanCss.includes('.ec29-audio-subtitle')&&cleanCss.includes('display:none!important'),'Bajada genérica de Audio no debe consumir altura');
 assert(cleanUi.includes('ec29CannedLeft')&&cleanUi.includes('ec29CannedRight'),'Contenidos debe crear dos pilas independientes');
-assert(cleanUi.includes("q('#adsLibraryCard')")&&cleanUi.includes('right.appendChild'),'Anuncios debe colocarse debajo de Contenidos disponibles en la derecha');
+assert(cleanUi.includes("const ads=q('#adsLibraryCard')")&&cleanUi.includes('move(ads,right)'),'Anuncios debe colocarse debajo de Contenidos disponibles en la derecha');
 assert(cleanCss.includes('.ec29-canned-workspace')&&cleanCss.includes('grid-template-columns:minmax(0,1fr) minmax(0,1fr)'),'Contenidos debe usar dos columnas independientes en escritorio');
 assert(cleanCss.includes('#cannedList')&&cleanCss.includes('#adsList')&&cleanCss.includes('overflow:auto'),'Bibliotecas deben usar scroll interno');
 assert(cleanCss.includes('@media(max-width:1180px)'),'Layout Contenidos debe colapsar por CSS');
-assert(preload.includes('control-ux-cleanup-lab29.css')&&preload.includes('renderer-ux-cleanup-lab29.js'),'Preload debe cargar la limpieza UX global');
 assert(!/addEventListener\(['"]resize['"][\s\S]{0,600}(appendChild|insertAdjacentElement|replaceChildren)/.test(cleanUi),'Limpieza UX no debe reparentar nodos al redimensionar');
+
+// Orden de carga: base de Diseño primero, reparaciones después; assets incluidos por src/**/*.
+assert(boot.includes('releaseV2UxRepairLab29')&&boot.includes('installReleaseV2UxRepairLab29'),'Bootstrap debe instalar la capa de reparación');
+assert(boot.indexOf('installReleaseV2EmissionDesign')<boot.indexOf('installReleaseV2UxRepairLab29'),'Repair debe instalarse después del renderer de Diseño V2');
+for(const file of ['control-emission-design-repair-lab29.css','control-audio-repair-lab29.css','control-ux-cleanup-lab29.css','renderer-emission-design-repair-lab29.js','renderer-ux-cleanup-lab29.js'])assert(release.includes(file),`Release debe inyectar ${file}`);
 
 console.log('check-v2lab-ux-regression-lab29: OK · degradado/WYSIWYG + controles compactos + Audio final + Contenidos columnas + títulos globales');
