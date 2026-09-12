@@ -20,7 +20,7 @@ assert.doesNotThrow(()=>new Function(audioService),'releaseV2AudioUxLab29.js deb
 // Un solo selector de motor y el reproductor de prueba existente siguen siendo la autoridad.
 assert.strictEqual((v2.match(/id="v2TtsEngine"/g)||[]).length,1,'Audio debe tener un solo selector de motor TTS');
 assert(v2.includes('id="v2VoicePreview"')&&v2.includes("const audio=q('#v2VoicePreview')"),'Probar voz debe conservar su reproductor de audio');
-assert(!audio.includes('v2TtsEngine"></select>')&&!audio.includes('id="v2TtsEngine"'),'La capa compacta no debe crear otro selector de motor');
+assert(!audio.includes('v2TtsEngine"></select>')&&!audio.includes('id="v2TtsEngine"'),'La capa UX no debe crear otro selector de motor');
 
 // La biblioteca soporta varias referencias; solo una es ACTIVA para el perfil y no existe rotación implícita.
 assert(v2.includes('labStatus?.voices||[]'),'La biblioteca base debe renderizar múltiples voces');
@@ -34,6 +34,15 @@ assert(audio.includes('Voz de referencia no disponible')&&audio.includes('select
 assert(audio.includes('sel.value=selected'),'La UI debe conservar el id faltante en el selector para evitar guardados accidentales a vacío');
 assert(release.includes("PROFILE_TTS_KEYS=['engine','style','referenceVoiceId'"),'referenceVoiceId debe persistirse en el sidecar TTS del perfil');
 assert(release.includes('profileSidecar')&&release.includes('tts-v2.json'),'La selección TTS debe persistirse por perfil');
+
+// Wireframe aprobado: izquierda voz/voces/música, derecha pronunciación/aprendizaje/reglas, diagnóstico abajo a ancho completo.
+assert(audio.includes('ec29AudioSubtitle')&&audio.includes('Configuración, normalización y diagnóstico del sistema de voz'),'La pestaña debe tener una bajada compacta de propósito');
+assert(audio.includes("q('#ec27AudioLeft')")&&audio.includes("q('#ec27AudioRight')")&&audio.includes('ec29AudioBottom'),'La capa UX debe usar las dos columnas existentes y crear una zona inferior estable');
+assert(audio.includes("voiceCard.classList.add('ec29-voice-card')")&&audio.includes("customCard.classList.add('ec29-custom-voices-card')")&&audio.includes("musicCard.classList.add('ec29-music-card')"),'La columna izquierda debe identificar Voz, Voces personalizadas y Música');
+assert(audio.includes("pronCard.classList.add('ec29-pron-card')")&&audio.includes("learningCard.classList.add('ec29-learning-card')")&&audio.includes("normCard.classList.add('ec29-rules-card')"),'La columna derecha debe identificar Pronunciación, Aprendizaje y Reglas');
+assert(audio.includes("bottom.appendChild(detail)"),'Diagnóstico de locución debe salir de la columna derecha y ocupar la zona inferior');
+assert(audioCss.includes('.ec29-audio-workspace')&&audioCss.includes('grid-template-columns:minmax(0,1fr) minmax(0,1fr)'),'La vista de escritorio debe mantener dos columnas equilibradas');
+assert(audioCss.includes('#ec29AudioBottom')&&audioCss.includes('grid-column:1/-1'),'La zona de diagnóstico debe poder ocupar todo el ancho');
 
 // Pronunciación + normalización son comunes a todos los motores; diagnóstico ya no es Kokoro-céntrico.
 assert(audio.includes('Pronunciación y normalización'),'La preparación de locución debe agrupar pronunciación y normalizador ES-PE');
@@ -52,10 +61,11 @@ assert(audioCss.includes('.ec27-icon-action'),'CSS debe soportar acciones compac
 // Última generación queda como texto compacto y el reproductor permanece visible.
 assert(audio.includes('v2LastGeneration')&&audioCss.includes('.v2-last-generation'),'La última generación debe mostrarse como una línea compacta');
 assert(audioCss.includes('#v2VoicePreview')&&audioCss.includes('display:block!important'),'El reproductor de la prueba de voz no puede desaparecer');
+assert(audioCss.includes('#v2EngineBox')&&audioCss.includes('#v2ReferenceRow'),'Motor/Voz/Estilo deben compactarse visualmente sin duplicar controles');
 
 // La capa debe estar realmente cableada y empaquetada.
 assert(preload.includes("control-audio-ux-lab29.css")&&preload.includes("renderer-audio-ux-lab29.js"),'Preload debe cargar los suplementos de Audio');
-assert(preload.indexOf("renderer-v2lab.js")<preload.indexOf("renderer-audio-ux-lab29.js"),'La capa compacta debe cargarse después del renderer V2 existente');
+assert(preload.indexOf("renderer-v2lab.js")<preload.indexOf("renderer-audio-ux-lab29.js"),'La capa UX debe cargarse después del renderer V2 existente');
 assert(boot.includes("releaseV2AudioUxLab29")&&boot.includes('installReleaseV2AudioUxLab29'),'Bootstrap debe instalar la URL segura de referencias');
 assert((pkg.build.files||[]).includes('src/**/*'),'Los nuevos assets src deben entrar en el Portable');
 
@@ -63,4 +73,4 @@ assert((pkg.build.files||[]).includes('src/**/*'),'Los nuevos assets src deben e
 assert(audioCss.includes('@media(max-width:1200px)'),'Audio debe conservar breakpoint CSS');
 assert(!/addEventListener\(['"]resize['"][\s\S]{0,500}(appendChild|insertAdjacentElement|replaceChildren)/.test(audio),'Audio no debe mover nodos por resize');
 
-console.log('check-v2lab-audio-ux-lab29: OK · UX compacta + referencias múltiples + voz por perfil + normalizador común');
+console.log('check-v2lab-audio-ux-lab29: OK · wireframe completo + referencias múltiples + voz por perfil + normalizador común');
