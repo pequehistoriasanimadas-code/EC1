@@ -82,6 +82,7 @@
       "scripts/check-v2lab-monitor-production.js",
       "scripts/check-v2lab-youtube-promo.js",
       "scripts/check-v2lab-stabilization-lab28.js",
+      "scripts/check-v2lab-audio-ux-lab29.js",
       "scripts/check-v2lab-lab29-youtube-monitor.js",
       "scripts/packaged-v2lab-network-permissions-smoke.js"
     ],
