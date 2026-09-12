@@ -7,6 +7,7 @@ const r27=read('src/renderer-0327.js');
 const v2=read('src/renderer-v2lab.js');
 const audio=read('src/renderer-audio-ux-lab29.js');
 const audioCss=read('src/control-audio-ux-lab29.css');
+const audioRepairCss=read('src/control-audio-repair-lab29.css');
 const audioService=read('src/services/releaseV2AudioUxLab29.js');
 const release=read('src/services/releaseV2Lab.js');
 const preload=read('src/preload.js');
@@ -36,7 +37,7 @@ assert(release.includes("PROFILE_TTS_KEYS=['engine','style','referenceVoiceId'")
 assert(release.includes('profileSidecar')&&release.includes('tts-v2.json'),'La selección TTS debe persistirse por perfil');
 
 // Wireframe aprobado: izquierda voz/voces/música, derecha pronunciación/aprendizaje/reglas, diagnóstico abajo a ancho completo.
-assert(audio.includes('ec29AudioSubtitle')&&audio.includes('Configuración, normalización y diagnóstico del sistema de voz'),'La pestaña debe tener una bajada compacta de propósito');
+assert(audio.includes('ec29AudioSubtitle')&&audio.includes('Configuración, normalización y diagnóstico del sistema de voz'),'La pestaña conserva su descripción semántica aunque la limpieza global pueda ocultarla visualmente');
 assert(audio.includes("q('#ec27AudioLeft')")&&audio.includes("q('#ec27AudioRight')")&&audio.includes('ec29AudioBottom'),'La capa UX debe usar las dos columnas existentes y crear una zona inferior estable');
 assert(audio.includes("voiceCard.classList.add('ec29-voice-card')")&&audio.includes("customCard.classList.add('ec29-custom-voices-card')")&&audio.includes("musicCard.classList.add('ec29-music-card')"),'La columna izquierda debe identificar Voz, Voces personalizadas y Música');
 assert(audio.includes("pronCard.classList.add('ec29-pron-card')")&&audio.includes("learningCard.classList.add('ec29-learning-card')")&&audio.includes("normCard.classList.add('ec29-rules-card')"),'La columna derecha debe identificar Pronunciación, Aprendizaje y Reglas');
@@ -50,13 +51,14 @@ assert(audio.includes("q('#ec27SpeechSlot')")&&audio.includes('pronCard.appendCh
 assert(audio.includes('TEXTO ENVIADO AL MOTOR TTS'),'El diagnóstico debe nombrar el destino genérico TTS');
 assert(!audio.includes('ENVIADO REALMENTE A KOKORO'),'La nueva UI no debe afirmar que todo se envía a Kokoro');
 assert(audio.includes('ec27DiagnosticDetails'),'Diagnóstico completo debe quedar plegable por defecto');
-assert(audio.includes('ec27PronTestDetails')&&r27.includes("q('#testPronunciation')"),'Probar pronunciación debe conservarse dentro de un bloque avanzado');
+assert(audio.includes('ec27PronTestDetails')&&audio.includes('Probar locución procesada')&&r27.includes("q('#testPronunciation')"),'La prueba de pronunciación debe conservarse como prueba del pipeline procesado');
+assert(audio.includes('syncEngineSpecificControls')&&audio.includes("showKokoro=engine==='kokoro'"),'Ataque inicial debe ser una opción visible solo para Kokoro');
 
-// Filas compactas: iconos accesibles, sin romper las clases/listeners originales.
-assert(audio.includes(".ec27-save")&&audio.includes('aria-label','Guardar corrección'),'Debe conservarse la acción Guardar original');
-assert(audio.includes("b.title='Guardar corrección'")&&audio.includes("b.setAttribute('aria-label','Guardar corrección')"),'Guardar corrección debe ser un icono accesible');
-assert(audio.includes("b.title='Eliminar pronunciación'")&&audio.includes("b.setAttribute('aria-label','Eliminar pronunciación')"),'Eliminar pronunciación debe ser un icono accesible');
-assert(audioCss.includes('.ec27-icon-action'),'CSS debe soportar acciones compactas por icono');
+// Filas compactas: la lista ec28 visible debe convertirse y mantenerse como iconos accesibles.
+assert(audio.includes("qa('#ec28LearningList .ec28-save')")&&audio.includes("qa('#ec28LearningList .ec28-delete')"),'La capa UX debe actuar sobre el gestor ec28 visible');
+assert(audio.includes("'Guardar corrección','ec28-icon-action'")&&audio.includes("'Eliminar pronunciación','ec28-icon-action'"),'Guardar/Eliminar visibles deben usar iconos con etiquetas accesibles');
+assert(audio.includes('learningObserver28')&&audio.includes("observe(l28,{childList:true,subtree:true})"),'Los iconos deben sobrevivir a los refrescos de aprendizaje');
+assert(audioRepairCss.includes('.ec28-icon-action'),'CSS debe soportar acciones compactas del gestor visible');
 
 // Última generación queda como texto compacto y el reproductor permanece visible.
 assert(audio.includes('v2LastGeneration')&&audioCss.includes('.v2-last-generation'),'La última generación debe mostrarse como una línea compacta');
@@ -64,7 +66,7 @@ assert(audioCss.includes('#v2VoicePreview')&&audioCss.includes('display:block!im
 assert(audioCss.includes('#v2EngineBox')&&audioCss.includes('#v2ReferenceRow'),'Motor/Voz/Estilo deben compactarse visualmente sin duplicar controles');
 
 // La capa debe estar realmente cableada y empaquetada.
-assert(preload.includes("control-audio-ux-lab29.css")&&preload.includes("renderer-audio-ux-lab29.js"),'Preload debe cargar los suplementos de Audio');
+assert(preload.includes("control-audio-ux-lab29.css")&&preload.includes("renderer-audio-ux-lab29.js"),'Preload debe cargar los suplementos base de Audio');
 assert(preload.indexOf("renderer-v2lab.js")<preload.indexOf("renderer-audio-ux-lab29.js"),'La capa UX debe cargarse después del renderer V2 existente');
 assert(boot.includes("releaseV2AudioUxLab29")&&boot.includes('installReleaseV2AudioUxLab29'),'Bootstrap debe instalar la URL segura de referencias');
 assert((pkg.build.files||[]).includes('src/**/*'),'Los nuevos assets src deben entrar en el Portable');
@@ -73,4 +75,4 @@ assert((pkg.build.files||[]).includes('src/**/*'),'Los nuevos assets src deben e
 assert(audioCss.includes('@media(max-width:1200px)'),'Audio debe conservar breakpoint CSS');
 assert(!/addEventListener\(['"]resize['"][\s\S]{0,500}(appendChild|insertAdjacentElement|replaceChildren)/.test(audio),'Audio no debe mover nodos por resize');
 
-console.log('check-v2lab-audio-ux-lab29: OK · wireframe completo + referencias múltiples + voz por perfil + normalizador común');
+console.log('check-v2lab-audio-ux-lab29: OK · wireframe + iconos visibles + referencias múltiples + voz por perfil + normalizador común');
