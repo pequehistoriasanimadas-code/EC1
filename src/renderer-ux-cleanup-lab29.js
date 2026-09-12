@@ -15,9 +15,10 @@
     let left=q('#ec29CannedLeft'),right=q('#ec29CannedRight');
     if(!left){left=document.createElement('div');left.id='ec29CannedLeft';left.className='ec29-canned-stack';}
     if(!right){right=document.createElement('div');right.id='ec29CannedRight';right.className='ec29-canned-stack';}
-    if(left.parentElement!==cols||right.parentElement!==cols){cols.replaceChildren(left,right);}
-    move(program,left);move(available,right);move(ads,right);
-    window.__ec29CannedLayout={left:!!q('#ec29CannedLeft'),right:!!q('#ec29CannedRight'),adsOnRight:ads.parentElement===right};
+    const preserved=[...cols.children].filter(x=>x!==left&&x!==right&&x!==program&&x!==available&&x!==ads);
+    if(left.parentElement!==cols||right.parentElement!==cols)cols.replaceChildren(left,right);
+    move(program,left);for(const extra of preserved)move(extra,left);move(available,right);move(ads,right);
+    window.__ec29CannedLayout={left:!!q('#ec29CannedLeft'),right:!!q('#ec29CannedRight'),adsOnRight:ads.parentElement===right,preserved:preserved.length};
     return true;
   }
 
