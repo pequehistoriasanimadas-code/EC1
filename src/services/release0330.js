@@ -96,7 +96,7 @@ function installCannedLifecycle(){
   p.cannedReason=function(s,hasReady){if(!this.emissionRunning)return'';return baseReason.call(this,s,hasReady);};
   p.playCanned=async function(s,reason){const result=await basePlay.call(this,s,reason);if(result){this.__ec0330ContentAnchorNews=Math.max(0,Number(this.scheduledNewsTotal)||0);this.lastScheduledCannedAt=this.__ec0330ContentAnchorNews;}return result;};
   p.skipCurrent=function(){if(this.emissionRunning&&this.currentKind==='canned'){this.__ec0330ContentAnchorNews=Math.max(0,Number(this.scheduledNewsTotal)||0);this.lastScheduledCannedAt=this.__ec0330ContentAnchorNews;this.__ec0328AdReservation=null;this.__ec0328Reservation=null;}return baseSkip.call(this);};
-  p.resetSessionCounters=function(){this.__ec0330ContentAnchorNews=0;return baseReset.call(this);};
+  p.resetSessionCounters=function(){return baseReset.call(this);};
 }
 
 function isNewsItem(x){return!!x&&['rss','generated'].includes(x.sourceType||'rss');}

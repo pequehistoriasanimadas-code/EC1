@@ -79,7 +79,7 @@ function installEngine0331(){
   p.scheduleSpecificContent=function(wanted){const s=this.getSettings?.()||{},folder=String(s.canned?.folder||''),media=mediaByPath(this.canned,folder,wanted);if(!media)throw new Error('El contenido seleccionado ya no está disponible en la carpeta');this.__ec0331ManualContent={path:media.path,name:media.name,requestedAt:Date.now()};this.__ec0331MediaPlan=null;this.cannedRequested=true;ensurePlan(this,s,'manual-specific',{path:media.path,title:media.name});this.state({notice:`Contenido programado como próximo: ${media.name}`});return this.snapshot();};
   p.cancelSpecificContent=function(){const name=this.__ec0331ManualContent?.name||'';this.__ec0331ManualContent=null;this.__ec0331MediaPlan=null;if(this.cannedRequested)this.cannedRequested=false;this.state({notice:name?`Programación manual cancelada: ${name}`:'No había un contenido manual programado.'});return this.snapshot();};
   p.snapshot=function(extra={}){const snap=baseSnapshot.call(this,extra),m=this.__ec0331ManualContent,plan=this.__ec0331MediaPlan;return{...snap,manualContent:m?{...m}:null,mediaPlan:plan?{reason:plan.reason,content:plan.content?{name:plan.content.name,path:plan.content.path}:null,ad:plan.ad?{name:plan.ad.name,path:plan.ad.path}:null,locked:true}:null};};
-  p.resetSessionCounters=function(){this.__ec0331MediaPlan=null;this.__ec0331SkippedContent=false;return baseReset.call(this);};
+  p.resetSessionCounters=function(){return baseReset.call(this);};
 }
 
 function installIpc0331(){
