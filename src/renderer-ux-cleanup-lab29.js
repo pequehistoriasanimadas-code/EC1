@@ -5,6 +5,10 @@
   let tries=0;
 
   function move(el,to){if(el&&to&&el.parentElement!==to)to.appendChild(el);}
+  function hidePageTitles(){
+    document.querySelectorAll('.tab>h1').forEach(title=>title.style.setProperty('display','none','important'));
+    const subtitle=q('#tab-audio .ec29-audio-subtitle');if(subtitle)subtitle.style.setProperty('display','none','important');
+  }
   function installCannedLayout(){
     const tab=q('#tab-canned'),cols=tab?.querySelector(':scope > .cols');
     const program=q('#pickCannedFolder')?.closest('.card');
@@ -24,8 +28,10 @@
 
   function install(){
     if(window.__ecUxCleanupLab29)return;
+    hidePageTitles();
     const ok=installCannedLayout();
     if(!ok&&tries++<100){setTimeout(install,120);return;}
+    hidePageTitles();
     window.__ecUxCleanupLab29=true;
   }
   install();
