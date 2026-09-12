@@ -1,0 +1,53 @@
+/* Lab.29 · Audio y locución compact UX */
+#tab-audio .ec27-card{min-width:0}
+#tab-audio .ec29-pron-card{gap:10px}
+#tab-audio .ec29-speech-common{margin-top:4px;padding-top:10px;border-top:1px solid #2b2b2b}
+#tab-audio .ec29-rules-card>.ec29-hidden-head{display:none!important}
+#tab-audio .ec29-rules-inner{margin:0;padding:0;border:0;background:transparent}
+#tab-audio .ec29-rules-inner .section-head{margin-bottom:6px}
+#tab-audio .ec29-rules-inner .note{margin:4px 0 8px}
+#tab-audio .ec29-audio-details{border:1px solid #2b2b2b;border-radius:9px;background:#141414;overflow:hidden}
+#tab-audio .ec29-audio-details>summary{cursor:pointer;padding:9px 11px;font-weight:700;color:#ddd;list-style:none}
+#tab-audio .ec29-audio-details>summary::-webkit-details-marker{display:none}
+#tab-audio .ec29-audio-details>summary:after{content:'⌄';float:right;color:#aaa}
+#tab-audio .ec29-audio-details[open]>summary:after{content:'⌃'}
+#tab-audio .ec29-audio-details[open]>summary{border-bottom:1px solid #292929}
+#tab-audio #ec27PronTestDetails>*:not(summary){margin:9px 10px}
+#tab-audio .ec29-diagnostic-details{margin-top:10px}
+#tab-audio .ec29-diagnostic-details .section-head{padding:8px 10px 0;margin:0}
+#tab-audio .ec29-diagnostic-details .section-head h3{font-size:12px;color:#aaa}
+#tab-audio .ec29-diagnostic-details .ec27-diagnostic{margin:8px 10px 10px;max-height:270px}
+
+#tab-audio .ec27-learning-list .ec27-row{padding:7px 9px;gap:8px;align-items:center;min-height:42px}
+#tab-audio .ec27-learning-list .ec27-term{line-height:1.1}
+#tab-audio .ec27-learning-list .ec27-meta{font-size:11px;line-height:1.2}
+#tab-audio .ec27-learning-list .ec27-actions{display:flex;gap:5px;justify-content:flex-end;align-items:center}
+#tab-audio .ec27-icon-action{width:31px!important;height:31px!important;min-width:31px!important;padding:6px!important;display:inline-grid!important;place-items:center;border-radius:7px}
+#tab-audio .ec27-icon-action svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#tab-audio .ec27-icon-action:disabled{opacity:.38}
+
+#tab-audio .v2-last-generation{margin-top:6px;padding:7px 9px;border:1px solid #2b2b2b;border-radius:8px;background:#121212;color:#aaa;font-size:11px;line-height:1.35;white-space:normal}
+#tab-audio .v2-reference-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px!important;align-items:center;padding:8px 9px!important;min-height:48px}
+#tab-audio .v2-reference-row>div:first-child{min-width:0}
+#tab-audio .v2-reference-row>div:first-child>b{display:inline-block;margin-right:7px}
+#tab-audio .v2-reference-row>div:first-child>span:not(.v2-reference-active){display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tab-audio .v2-reference-actions{display:flex;align-items:center;gap:5px;flex-wrap:nowrap!important}
+#tab-audio .v2-reference-active{display:inline-flex!important;vertical-align:middle;padding:2px 6px;border-radius:999px;border:1px solid rgba(61,190,104,.38);background:rgba(61,190,104,.13);color:#7fe39c;font-size:9px;font-weight:800;letter-spacing:.04em}
+#tab-audio .v2-reference-play,#tab-audio .v2-reference-delete{width:31px!important;height:31px!important;min-width:31px!important;padding:6px!important;display:inline-grid!important;place-items:center}
+#tab-audio .v2-reference-play svg,#tab-audio .v2-reference-delete svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#tab-audio #v2ReferenceVoice[data-selected-missing="true"]{border-color:#8a6720;color:#e7c46a}
+
+#tab-audio #v2VoicePreview{display:block!important;width:100%;height:38px;margin-top:7px}
+#tab-audio #ec27SpeechSlot .subcard,#tab-audio #ec27PronSlot .subcard{margin-top:8px}
+#tab-audio .ec27-normalizer-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+@media(max-width:1200px){
+  #tab-audio .v2-reference-row{grid-template-columns:minmax(0,1fr) auto}
+  #tab-audio .ec27-learning-list .ec27-row{grid-template-columns:minmax(130px,1fr) minmax(150px,1.3fr) auto auto auto}
+}
+@media(max-width:820px){
+  #tab-audio .v2-reference-row{grid-template-columns:1fr}
+  #tab-audio .v2-reference-actions{justify-content:flex-start}
+  #tab-audio .ec27-learning-list .ec27-row{grid-template-columns:1fr}
+  #tab-audio .ec27-learning-list .ec27-actions{justify-content:flex-start}
+}
