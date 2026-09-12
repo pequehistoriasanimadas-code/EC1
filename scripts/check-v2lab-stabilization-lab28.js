@@ -77,4 +77,5 @@ assert(worker.includes('production_temperature')||worker.includes('productionTem
 assert(worker.includes('variant = "latam"'),'Chatterbox debe seguir restringido a Latinoamérica');
 
 require('./check-v2lab-emission-layout');
+require('./check-v2lab-emission-design-v2');
 console.log('Lab.29 stabilization gates: YouTube persistente + monitor adaptativo + perfiles/exclusivas/UX/TTS preservados: OK');
