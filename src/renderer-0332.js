@@ -14,6 +14,7 @@
   function statusClass(row){const s=String(row?.exclusiveBlocked?'ESPERA':row?.status||'').toUpperCase();if(s==='AL AIRE')return'air';if(s==='LISTA')return'ready';if(s==='PROCESANDO'||s==='PENDIENTE'||s==='ESPERA')return'processing';if(s==='ERROR')return'error';if(s==='PROGRAMADO')return'planned';if(s==='EMITIDA'||s==='OMITIDA')return'emitted';return'planned';}
   function statusText(row){return row?.exclusiveBlocked?'ESPERA':String(row?.status||'').toUpperCase()||'LISTA';}
   function seconds(v){const n=Number(v);return Number.isFinite(n)&&n>=0?`${n.toFixed(n<10?1:0)} s`:'';}
+  function fmtSec(v){const n=Math.max(0,Math.round(Number(v)||0)),m=Math.floor(n/60),s=n%60;return`${m}:${String(s).padStart(2,'0')}`;}
   function stageLabel(stage=''){return({article:'artículo','ai-wait':'esperando Qwen / IA',ai:'generando con Qwen / IA','ai-queue-timeout':'watchdog de cola IA',pronunciation:'pronunciación','tts-wait':'esperando voz / GPU',tts:'generando voz','tts-queue-timeout':'watchdog de cola de voz','tts-retry-wait':'reintentando voz · GPU liberada',ready:'lista'}[String(stage)]||String(stage||''));}
   function pipelineLabel(mode=''){return String(mode||'').includes('gpu-coordinated')?'Escalonado · GPU coordinada':String(mode||'').includes('staggered')?'Escalonado simultáneo':String(mode||'')==='gpu-coordinated'?'Escalonado · GPU coordinada':String(mode||'')||'';}
   function metaText(row){
@@ -77,9 +78,25 @@
     if(ads)ads.textContent=String(Number(x.adsEmitted)||0);
     window.__ec0332SessionAudit={newsEmitted:Number(x.newsEmitted)||0,cannedEmitted:Number(x.cannedEmitted)||0,adsEmitted:Number(x.adsEmitted)||0,at:Date.now()};
   }
+  function renderNextContentSelection(snapshot){
+    const box=q('#ec27Selection'),badge=q('#ec27RecoveryBadge');if(!box||!snapshot)return;
+    const manualContent=snapshot?.manualContent;
+    if(manualContent){
+      if(badge)badge.textContent='MANUAL';
+      const enabled=snapshot?.canned?.enabled!==false;
+      box.innerHTML=`<strong>${esc(manualContent?.name||'Contenido seleccionado')}</strong><span>Programado como próximo.</span>${enabled?'':`<span class="ec0332-manual-warning">Contenidos desactivados · se emitirá cuando actives Contenidos.</span>`}<button id="ec0332CancelNextContent" class="dark compact">Cancelar próximo</button>`;
+      const cancel=q('#ec0332CancelNextContent');if(cancel)cancel.onclick=async()=>{cancel.disabled=true;try{const st=await window.ECAPI.cannedCancelSpecific();acceptAutomationState(st);if(typeof status==='function')status('Selección manual cancelada.');}catch(e){cancel.disabled=false;if(typeof status==='function')status(`No se pudo cancelar: ${e.message||e}`);}};
+      return;
+    }
+    const sel=snapshot?.canned?.adaptiveSelection,b=snapshot?.buffer||{},targetMin=Number(sel?.targetMin||settings?.automation?.targetAutonomyMin||15),current=Number(sel?.currentSec??b.autonomySec??(Number(b.autonomyMin)||0)*60),def=Math.max(0,Number(sel?.deficitSec??targetMin*60-current));
+    if(!sel?.selected){if(badge)badge.textContent=def>0?'BAJA RESERVA':'ESTABLE';box.innerHTML='<strong>Selección normal</strong><span>Aleatoria sin repetición hasta completar el ciclo.</span>';return;}
+    const labels={recovery:'Recuperación de autonomía',emergency:'Respaldo por falta de noticias',scheduled:'Programación periódica',manual:'Programación manual'},label=labels[sel.reason]||sel.reason;
+    if(badge)badge.textContent=sel.adaptive?'ADAPTATIVA':'ALEATORIA';
+    box.innerHTML=`<strong>${esc(sel.selected.name)}</strong><span>${fmtSec(sel.selected.durationSec)} · ${esc(label)}${sel.adaptive?` · solicitado aprox. ${fmtSec(sel.requestedContentSec)}`:' · aleatorio sin repetición'}</span>`;
+  }
   function acceptAutomationState(snapshot){
     if(!snapshot)return;
-    latest=snapshot;lastAutomationStateAt=Date.now();syncSessionCounters(snapshot);schedule(snapshot);
+    latest=snapshot;lastAutomationStateAt=Date.now();syncSessionCounters(snapshot);renderNextContentSelection(snapshot);schedule(snapshot);
   }
   function schedule(snapshot){latest=snapshot||latest;if(!latest||raf)return;raf=requestAnimationFrame(()=>{raf=0;renderStable(latest);});}
 
