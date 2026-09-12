@@ -12,6 +12,17 @@
   }
   function move(node,host){if(node&&host&&node.parentElement!==host)host.appendChild(node);return node;}
   function fmtClockFromMin(value){const sec=Math.max(0,Math.round((Number(value)||0)*60)),m=Math.floor(sec/60),s=sec%60;return`${m}:${String(s).padStart(2,'0')}`;}
+  function emissionIcon(name){return({
+    pause:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>',
+    resume:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>',
+    next:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 9 7-9 7Z"/><path d="M18 5v14"/></svg>',
+    stop:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>'
+  }[name]||'');}
+  function iconifyEmissionButton(button,name,label){
+    if(!button)return;
+    button.classList.add('ec-auto-icon-action');button.title=label;button.setAttribute('aria-label',label);
+    if(button.dataset.ecAutoIcon!==name){button.dataset.ecAutoIcon=name;button.innerHTML=emissionIcon(name);}
+  }
 
   function prerequisites(){
     return !!(window.ECAPI&&q('#tab-auto')&&q('#tab-auto .auto-cols')&&q('.queue-card')&&q('#ecLanMonitorCard')&&q('#cannedEnabled')&&q('#ecYoutubePromoEnabled')&&q('#processStart')&&q('#emissionStart')&&q('#ec28EmissionPanel')&&q('#sessionCounters'));
@@ -91,16 +102,41 @@
     return card;
   }
 
+  function syncEmissionControlState(s=lastAutomation){
+    const e=s?.emission||{},running=!!e.running,paused=!!e.paused;
+    const start=q('#emissionStart'),pause=q('#emissionPause'),resume=q('#emissionResume');
+    if(start)start.classList.toggle('hidden',running);
+    if(pause)pause.classList.toggle('hidden',!running||paused);
+    if(resume)resume.classList.toggle('hidden',!running||!paused);
+  }
+
+  function ensureMonitorControls(monitor,legacyEmissionCard){
+    const head=monitor?.querySelector(':scope>.section-head');if(!head)return;
+    const legacyCopy=head.querySelector(':scope>div:not(#ecAutoMonitorControls)');if(legacyCopy)legacyCopy.classList.add('ec-auto-monitor-legacy-copy');
+    let controls=q('#ecAutoMonitorControls');
+    if(!controls){controls=document.createElement('div');controls.id='ecAutoMonitorControls';controls.className='ec-auto-monitor-controls';head.insertBefore(controls,q('#ecMonitorState')||head.firstChild);}
+    const start=q('#emissionStart'),pause=q('#emissionPause'),resume=q('#emissionResume'),next=q('#ec28EmissionNext'),stop=q('#emissionStop');
+    if(start){start.classList.add('ec-auto-start-action');move(start,controls);}
+    if(pause){iconifyEmissionButton(pause,'pause','Pausar emisión');move(pause,controls);}
+    if(resume){iconifyEmissionButton(resume,'resume','Reanudar emisión');move(resume,controls);}
+    if(next){iconifyEmissionButton(next,'next','Siguiente');move(next,controls);}
+    if(stop){iconifyEmissionButton(stop,'stop','Detener emisión');move(stop,controls);}
+    if(legacyEmissionCard&&legacyEmissionCard!==monitor)legacyEmissionCard.classList.add('ec-auto-emission-card-absorbed');
+    syncEmissionControlState();
+  }
+
   function ensureRight(right){
     const monitor=q('#ecLanMonitorCard');if(monitor){monitor.classList.add('ec-auto-monitor-card','ec-auto-section-monitor');move(monitor,right);}
     ensureNowCard(right);
     let emissionHost=q('#ecAutoEmissionHost');if(!emissionHost){emissionHost=document.createElement('div');emissionHost.id='ecAutoEmissionHost';right.appendChild(emissionHost);}
-    const emissionCard=q('#emissionStart')?.closest('.card');
+    let emissionCard=q('#ecAutoLegacyEmissionCard');
+    if(!emissionCard){const candidate=q('#emissionStart')?.closest('.card');if(candidate&&candidate!==monitor){emissionCard=candidate;emissionCard.id='ecAutoLegacyEmissionCard';}}
     if(emissionCard){
       emissionCard.classList.add('ec-auto-emission-card','ec-auto-section-control');
       const h3=emissionCard.querySelector('h3');if(h3)h3.textContent='Control de emisión';
       move(emissionCard,emissionHost);
     }
+    ensureMonitorControls(monitor,emissionCard);
     let sessionHost=q('#ecAutoSessionHost');if(!sessionHost){
       const card=document.createElement('div');card.id='ecAutoSessionCard';card.className='card ec-auto-session-card ec-auto-section-session';
       card.innerHTML='<div class="section-head"><h3>Resumen de sesión</h3></div><div id="ecAutoSessionHost"></div>';
@@ -116,6 +152,7 @@
     if(ready)ready.textContent=`${Number(c.ready)||0} / ${Number(b.target)||15}`;
     if(autonomy)autonomy.textContent=fmtClockFromMin(b.autonomyMin);
     if(queueLive)queueLive.textContent=`${Number(c.ready)||0} listas · ${(Number(c.processing)||0)+(Number(c.pending)||0)} preparando · ${Number(c.error)||0} errores`;
+    syncEmissionControlState(s);
   }
 
   function renderOutput(s=lastOutput){
@@ -132,7 +169,7 @@
     if(!prerequisites())return false;
     loadCss();const tab=q('#tab-auto'),cols=ensureMainColumns();if(!cols)return false;
     ensureOperatorStrip(tab);ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);
-    window.__ecAutoUxLab29Audit={installed:true,contentSwitches:document.querySelectorAll('#cannedEnabled').length,promoSwitches:document.querySelectorAll('#ecYoutubePromoEnabled').length,queueCards:document.querySelectorAll('#queue').length,monitorCards:document.querySelectorAll('#ecLanMonitorCard').length,onAirPanels:document.querySelectorAll('#ec28EmissionPanel').length};
+    window.__ecAutoUxLab29Audit={installed:true,contentSwitches:document.querySelectorAll('#cannedEnabled').length,promoSwitches:document.querySelectorAll('#ecYoutubePromoEnabled').length,queueCards:document.querySelectorAll('#queue').length,monitorCards:document.querySelectorAll('#ecLanMonitorCard').length,onAirPanels:document.querySelectorAll('#ec28EmissionPanel').length,monitorControls:document.querySelectorAll('#ecAutoMonitorControls').length};
     return true;
   }
 
