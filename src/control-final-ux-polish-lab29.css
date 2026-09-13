@@ -1,0 +1,47 @@
+/* Lab.29 · pulido final aprobado */
+.ec-final-exclusive-copy-hidden,.ec-final-closure-help-hidden,.ec-final-pron-help-hidden{display:none!important}
+
+/* Automático · Contenido exclusivo más limpio */
+#tab-auto #exclusiveSchedule0324.ec-final-exclusive-compact{min-width:0}
+#tab-auto #exclusiveSchedule0324.ec-final-exclusive-compact .note:empty{display:none!important}
+
+/* Contenidos / Anuncios · ambas bibliotecas ocupan todo el ancho de la columna derecha */
+#tab-canned #ecCannedAvailableCard.ec-final-library-card,
+#tab-canned #adsLibraryCard.ec-final-library-card{width:100%!important;max-width:none!important;align-self:stretch!important;justify-self:stretch!important}
+#tab-canned #adsLibraryCard{align-self:stretch!important}
+
+/* Recuperación · ocultar checkbox nativo y mostrar solo el slider */
+#tab-canned #ecCannedRecoveryEnabled{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;pointer-events:none!important}
+#tab-canned .ec-canned-recovery-toggle{position:relative}
+#tab-canned #ecCannedCycleBlock{margin-top:8px;padding-top:8px;border-top:1px solid #2d2d2d}
+#tab-canned #ecCannedCycleBlock>*{margin-top:0;margin-bottom:3px}
+
+/* Audio y locución · wireframe definitivo */
+#tab-audio .ec-audio-pron-options-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0}
+#tab-audio .ec-audio-pron-options-row>.switch-row{margin:0!important;min-width:0;padding:9px 10px!important;min-height:50px}
+#tab-audio .ec-audio-pron-options-row>.switch-row>span:first-child{min-width:0}
+#tab-audio .ec-audio-pron-options-row>.switch-row b{font-size:11px;line-height:1.2}
+#tab-audio #ec29AudioBottom>.ec29-rules-card{width:100%;margin:0 0 12px!important}
+#tab-audio .ec29-audio-primary>.ec29-pron-card{order:3}
+#tab-audio .ec29-audio-secondary>.ec29-learning-card{order:1}
+#tab-audio .ec29-audio-secondary>.ec29-music-card{order:2}
+
+/* Ajustes · Cierres automáticos 50/50 */
+#tab-settings .ec29-closures-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+#tab-settings .ec29-closures-section>h3{margin:0 0 9px;font-size:14px}
+#tab-settings .ec29-closures-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:stretch}
+#tab-settings .ec29-closure-card{margin:0!important;padding:10px!important;border:1px solid var(--line)!important;border-radius:10px!important;background:#141414!important;min-width:0}
+#tab-settings .ec29-closure-card>.section-head,#tab-settings .ec29-closure-card>h3{margin-bottom:7px!important}
+#tab-settings .ec29-closure-card label{margin:6px 0 0}
+#tab-settings .ec29-closure-card input,#tab-settings .ec29-closure-card textarea{width:100%}
+
+/* Ajustes · muestras de color siempre visibles */
+#tab-settings #ec29SettingsQueueCard .queue-colors label{display:flex!important;flex-direction:column!important;gap:5px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-width:0}
+#tab-settings #ec29SettingsQueueCard .queue-colors input[type="color"]{display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;min-width:0!important;height:34px!important;margin:0!important;padding:3px!important;position:static!important}
+
+@media(max-width:1180px){
+  #tab-audio .ec-audio-pron-options-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:820px){
+  #tab-audio .ec-audio-pron-options-row,#tab-settings .ec29-closures-grid{grid-template-columns:1fr}
+}
