@@ -6,7 +6,7 @@ const read=file=>fs.readFileSync(file,'utf8');
 const renderer=read('src/renderer-settings-ux-lab29.js');
 const css=read('src/control-settings-ux-lab29.css');
 const release=read('src/services/releaseV2UxRepairLab29.js');
-const pkg=JSON.parse(read('package.json'));
+const finalGate=read('scripts/check-v2lab-final-ui-stability-lab29.js');
 
 assert.doesNotThrow(()=>new Function(renderer),'renderer-settings-ux-lab29.js debe parsear');
 assert(renderer.includes('ec29SettingsWorkspace'),'Ajustes debe crear un workspace dedicado');
@@ -29,6 +29,6 @@ assert(css.includes('@media(max-width:980px)'),'El colapso responsive debe queda
 assert(!/addEventListener\(['"]resize['"][\s\S]{0,500}(appendChild|insertAdjacentElement|replaceChildren)/.test(renderer),'Ajustes no debe reparentar por resize');
 assert(!css.includes('.feedrow{')&&!css.includes('.feed-head{')&&!css.includes('.feed-edit{')&&!css.includes('.feed-list-scroll{'),'El CSS nuevo no debe alterar el diseño original de Fuentes');
 assert(release.includes("control-settings-ux-lab29.css")&&release.includes("renderer-settings-ux-lab29.js"),'La capa UX debe inyectarse desde releaseV2UxRepairLab29');
-assert(pkg.scripts.check.includes('check-v2lab-settings-ux-lab29.js'),'npm run check debe ejecutar el check de Ajustes');
+assert(finalGate.includes("require('./check-v2lab-settings-ux-lab29.js')"),'El diagnóstico Lab29 debe ejecutar el contrato de Ajustes');
 
 console.log('check-v2lab-settings-ux-lab29: OK · layout, fuentes, IA local, proveedores y colores protegidos');
