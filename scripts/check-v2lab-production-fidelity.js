@@ -31,8 +31,8 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   const preload=read('src/preload.js');
   const bootstrap=read('src/bootstrap-v2lab.js');
 
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.24');
+  assert.strictEqual(pkg.version,'2.0.0-lab.28');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.25');
   assert(service.includes('active-production-profile.json'),'Falta fuente única de verdad persistente');
   const localPolicy=read('src/services/version0320LocalPolicy.js');
   assert(localPolicy.includes('prio:p.prio,poll:p.poll,warmup:p.warmup===true'),'LocalRuntime status debe exponer el perfil tuned completo para evitar falsos mismatch');
@@ -50,8 +50,6 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
   assert(preload.includes('optimizationV2Status')&&preload.includes('optimizationV2Commit'),'Bridge lab.23 incompleto');
   assert(bootstrap.includes('releaseV2ProductionFidelity'),'Capa lab.23 no instalada');
 
-  // Tuned mode must really expose the optimized 48 GPU layers rather than
-  // falling through to safe_streaming.
   installVersion0320LocalPolicy();
   const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab17-'));
   try{
@@ -69,7 +67,6 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     ]);
     assert.strictEqual(ranked[0].id,'gpu-48','Con rendimiento equivalente debe preferirse menor VRAM, no 99 capas');
 
-    // Active production profile must override stale legacy gpu-swap.
     const settings={
       ai:{primary:'local',backup1:'none',backup2:'none',lastLocalBenchmark:{coexistenceMode:'gpu-swap',swapValidated:false}},
       tts:{engine:'chatterbox',engineParams:{chatterbox:{variant:'latam'}}},
@@ -81,13 +78,12 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     settings.activeOptimizationV2.pipeline.swapValidated=true;
     assert.strictEqual(resolvePipelineMode(settings),'gpu-swap');
 
-    // Profile hydration persists the exact tuned configuration across reloads.
     const profileSettings={
       ai:{primary:'local',backup1:'none',backup2:'none'},
       tts:{engine:'chatterbox',engineParams:{chatterbox:{variant:'latam'}}}
     };
     const profile={
-      schemaVersion:1,version:'2.0-lab.24',id:'test-profile',at:new Date().toISOString(),
+      schemaVersion:1,version:'2.0-lab.25',id:'test-profile',at:new Date().toISOString(),
       fingerprint:'hw-test',hardwareLabel:'test',
       runtimeSignature:ttsRuntimeSignature(profileSettings.tts),
       tts:{engine:'chatterbox',runtimeParams:{},expectedRtf:1.5},
@@ -109,9 +105,6 @@ const {ttsRuntimeSignature}=require(path.join(root,'src','services','releaseV2La
     const mismatch=expectedVsRuntime(profile,{resourceMode:'tuned',profile:{...profile.localAi.config,gpuLayers:20}});
     assert(!mismatch.ok,'20 capas no pueden aprobar un perfil que exige 48');
 
-    // Exact real-world regression: Chatterbox LatAm can select GPU completa
-    // (99 layers) with non-default prio/poll/warmup. Those fields must survive
-    // LocalRuntime.status() and must not create a false production mismatch.
     const chatterFullProfile={localAi:{required:true,config:normalizeLocalConfig({label:'GPU completa rápida',ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,prio:0,poll:25,warmup:true})}};
     const chatterFullStatus={resourceMode:'tuned',profile:{label:'GPU completa rápida',ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,parallel:1,prio:0,poll:25,warmup:true}};
     const chatterFullMatch=expectedVsRuntime(chatterFullProfile,chatterFullStatus);
