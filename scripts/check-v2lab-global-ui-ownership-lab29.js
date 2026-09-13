@@ -46,6 +46,9 @@ assert(audioSync.includes('getSettings'),'Audio debe releer ajustes efectivos de
 assert(audioSync.includes('referenceVoiceId')&&audioSync.includes('v2ReferenceVoice'),'Audio debe recuperar la voz de referencia seleccionada por perfil');
 assert(audioSync.includes('v2TtsEngine')&&audioSync.includes('v2VoiceStyle'),'Audio debe recuperar motor y estilo por perfil');
 assert(uxRelease.includes("renderer-audio-profile-sync-lab29.js"),'La sincronización de Audio por perfil debe inyectarse en Control');
+assert(uxRelease.includes('injectAutoNowGuard'),'Automático debe tener recuperación acotada de Ahora al aire');
+assert(!uxRelease.includes('new MutationObserver'),'La recuperación de Ahora al aire no debe observar todo el DOM ni crear bucles de mutación');
+assert(/tries\+\+<120/.test(uxRelease),'La recuperación de Ahora al aire debe tener reintentos acotados');
 
 assert(design.includes('repairNotePreview')&&design.includes('repairPromoPreview'),'Diseño debe mantener reparación dedicada de Nota y Promo');
 assert(!/function repairPreview\(\)[\s\S]{0,1500}compactDesignLayout\(\)/.test(design),'Diseño no debe reparentar estructura durante cada repaint');
