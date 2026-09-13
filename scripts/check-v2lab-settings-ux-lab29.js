@@ -13,6 +13,7 @@ assert(renderer.includes('ec29SettingsWorkspace'),'Ajustes debe crear un workspa
 assert(renderer.includes('ec29SettingsLeft')&&renderer.includes('ec29SettingsRight'),'Ajustes debe mantener dos columnas lógicas');
 assert(renderer.includes("q('#feeds')")&&renderer.includes("q('#addFeed')"),'Fuentes debe reutilizar la lista y el botón originales');
 assert(renderer.includes("q('#globalPartialClose')")&&renderer.includes("q('#globalExclusiveClose')"),'Fuentes debe conservar ambos cierres');
+assert(renderer.includes("card.className='card ec29-settings-sources'"),'Fuentes debe conservar la tarjeta base original sin recibir estilos genéricos nuevos');
 assert(!renderer.includes("querySelectorAll('.feedrow')"),'La capa UX no debe reconstruir ni manipular tarjetas feedrow');
 assert(renderer.includes("'queueColorExclusive'")&&renderer.includes('labelFor(id)'),'Apariencia debe conservar y reordenar el color de exclusivos dentro del flujo genérico de labels');
 assert(renderer.includes("q('#ec27LocalInstaller')"),'IA local debe reutilizar el instalador completo vigente creado por 0.3.27');
@@ -32,7 +33,7 @@ assert(css.includes('#ec29SettingsProvidersGrid')&&css.includes('repeat(2'),'Cla
 assert(css.includes('#ec29SettingsQueueCard .queue-colors')&&css.includes('repeat(6'),'Apariencia debe mostrar seis colores de forma compacta');
 assert(css.includes('@media(max-width:980px)'),'El colapso responsive debe quedar por debajo del mínimo normal de la app');
 assert(!/addEventListener\(['"]resize['"][\s\S]{0,500}(appendChild|insertAdjacentElement|replaceChildren)/.test(renderer),'Ajustes no debe reparentar por resize');
-assert(!css.includes('.feedrow{')&&!css.includes('.feed-head{')&&!css.includes('.feed-edit{')&&!css.includes('.feed-list-scroll{'),'El CSS nuevo no debe alterar el diseño original de Fuentes');
+assert(!css.includes('.feedrow{')&&!css.includes('.feed-head{')&&!css.includes('.feed-edit{')&&!css.includes('.feed-list-scroll{')&&!css.includes('#ec29SettingsSourcesCard>'),'El CSS nuevo no debe alterar el diseño original de Fuentes');
 assert(release.includes("control-settings-ux-lab29.css")&&release.includes("renderer-settings-ux-lab29.js"),'La capa UX debe inyectarse desde releaseV2UxRepairLab29');
 assert(finalGate.includes("require('./check-v2lab-settings-ux-lab29.js')"),'El diagnóstico Lab29 debe ejecutar el contrato de Ajustes');
 
