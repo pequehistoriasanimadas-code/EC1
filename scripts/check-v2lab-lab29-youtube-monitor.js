@@ -28,4 +28,5 @@ assert(/MONITOR_FPS\s*=\s*15/.test(baseMonitor),'Se preserva la base de monitor 
 
 require('./check-v2lab-auto-ux-lab29');
 require('./check-v2lab-ux-regression-lab29');
+require('./check-v2lab-global-ui-ownership-lab29');
 console.log('Lab.29 YouTube persistence + monitor adaptive cadence checks: OK');
