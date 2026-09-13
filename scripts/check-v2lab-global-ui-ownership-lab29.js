@@ -3,11 +3,21 @@ const fs=require('fs');
 const assert=require('assert');
 const read=file=>fs.readFileSync(file,'utf8');
 
+for(const file of [
+  'src/renderer-lab29.js',
+  'src/renderer-auto-ux-lab29.js',
+  'src/renderer-ux-cleanup-lab29.js',
+  'src/renderer-audio-profile-sync-lab29.js',
+  'src/renderer-emission-design-repair-lab29.js',
+  'src/services/releaseV2UxRepairLab29.js'
+])assert(fs.existsSync(file),`Falta ${file}`);
+
 const lab29=read('src/renderer-lab29.js');
 const auto=read('src/renderer-auto-ux-lab29.js');
 const cleanup=read('src/renderer-ux-cleanup-lab29.js');
-const audio=read('src/renderer-audio-ux-lab29.js');
+const audioSync=read('src/renderer-audio-profile-sync-lab29.js');
 const design=read('src/renderer-emission-design-repair-lab29.js');
+const uxRelease=read('src/services/releaseV2UxRepairLab29.js');
 
 assert(!lab29.includes('card.innerHTML'),'Lab.29 no debe reconstruir la tarjeta del monitor ni destruir controles ajenos');
 assert(!lab29.includes('ecMonitor29Image'),'Lab.29 no debe crear una segunda superficie de monitor');
@@ -25,7 +35,12 @@ assert(auto.includes('ecAutoMonitorControls'),'Automático debe mantener un host
 assert(auto.includes('ec28EmissionPanel'),'Automático debe recuperar Ahora al aire cuando aparezca tarde');
 assert(auto.includes('ecYoutubePromoEnabled'),'Automático debe recuperar Promo YouTube cuando aparezca tarde');
 
-assert(audio.includes("profile:changed"),'Audio y locución debe rehidratar/reconciliar la UX al cambiar de perfil');
+assert(audioSync.includes("profile:changed"),'Audio y locución debe rehidratarse al cambiar de perfil');
+assert(audioSync.includes('getSettings'),'Audio debe releer ajustes efectivos del perfil activo');
+assert(audioSync.includes('referenceVoiceId')&&audioSync.includes('v2ReferenceVoice'),'Audio debe recuperar la voz de referencia seleccionada por perfil');
+assert(audioSync.includes('v2TtsEngine')&&audioSync.includes('v2VoiceStyle'),'Audio debe recuperar motor y estilo por perfil');
+assert(uxRelease.includes("renderer-audio-profile-sync-lab29.js"),'La sincronización de Audio por perfil debe inyectarse en Control');
+
 assert(design.includes('repairNotePreview')&&design.includes('repairPromoPreview'),'Diseño debe mantener reparación dedicada de Nota y Promo');
 assert(!/function repairPreview\(\)[\s\S]{0,1500}compactDesignLayout\(\)/.test(design),'Diseño no debe reparentar estructura durante cada repaint');
 
