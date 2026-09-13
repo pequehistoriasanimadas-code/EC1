@@ -40,7 +40,8 @@
   function buildSourcesCard(left){
     const feedCount=q('#feedCount'),head=feedCount?.closest('.section-head'),feeds=q('#feeds'),add=q('#addFeed'),partial=q('#globalPartialClose'),exclusive=q('#globalExclusiveClose');
     if(!head||!feeds||!add||!partial||!exclusive)return null;
-    const card=document.createElement('div');card.id='ec29SettingsSourcesCard';card.className='card ec29-settings-card ec29-settings-sources';
+    // Fuentes conserva la tarjeta base y no hereda los estilos genéricos de las tarjetas nuevas de Ajustes.
+    const card=document.createElement('div');card.id='ec29SettingsSourcesCard';card.className='card ec29-settings-sources';
     const note=head.nextElementSibling?.classList?.contains('note')?head.nextElementSibling:null;
     move(head,card);move(note,card);move(feeds,card);move(add,card);move(partial,card);move(exclusive,card);
     left.appendChild(card);
