@@ -28,6 +28,9 @@
 #tab-settings #ec29SettingsQueueCard .queue-colors input[type="color"]{height:34px;margin-top:5px;padding:3px}
 #tab-settings #ec29SettingsQueueCard>.buttons{justify-content:flex-end;margin-top:10px}
 
+/* IA local conserva el instalador completo 0.3.27 y solo reorganiza su contexto. */
+#tab-settings #ec29SettingsLocalCard #ec27LocalInstaller{margin-top:10px}
+#tab-settings #ec29SettingsLocalCard #ec27LocalInstaller .ec27-advanced{margin-top:10px}
 #tab-settings #ec29SettingsLocalCard .local-model-diagnostic{margin-top:9px}
 #tab-settings #ec29SettingsLocalCard>#downloadProgress{margin-top:10px}
 #tab-settings .ec29-settings-minor-title{margin:14px 0 5px;font-size:12px;font-weight:800;color:#e5e5e5}
@@ -35,8 +38,6 @@
 #tab-settings #ec29LocalBackupPolicy.hidden{display:none!important}
 #tab-settings #ec29LocalBackupPolicy>label:first-of-type{margin-top:6px}
 #tab-settings #ec29LocalBackupPolicy #localPolicyInfo{margin:6px 0 0}
-#tab-settings #ec29LocalAdvanced{margin-top:12px}
-#tab-settings #ec29LocalAdvanced .buttons{margin-top:10px}
 
 #tab-settings #ec29SettingsServiceGrid{
   display:grid;
