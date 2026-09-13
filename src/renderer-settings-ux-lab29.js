@@ -2,7 +2,6 @@
 (function installSettingsUxLab29(){
   if(window.__ecSettingsUxLab29)return;
   const q=s=>document.querySelector(s);
-  const qa=s=>[...document.querySelectorAll(s)];
   const move=(el,to)=>{if(el&&to&&el.parentElement!==to)to.appendChild(el);return el;};
   let tries=0,retryTimer=null;
 
@@ -21,7 +20,7 @@
     if(textNode)textNode.nodeValue=text;else label.insertBefore(document.createTextNode(text),label.firstChild);
   }
   function prerequisites(){
-    const required=['tab-settings','ecOptimizer0321','feeds','addFeed','globalPartialClose','globalExclusiveClose','pickFallback','fallbackInfo','primary','backup1','backup2','providerSummary','localInfo','localBackupMode','localIdleRow','localPolicyInfo','downloadModel','downloadProgress','startLocal','stopLocal','claudeStatus','claudeKey','claudeModel','testClaude','geminiStatus','geminiKey','geminiModel','testGemini','queueColorExclusive','resetQueueColors','tab-audio'];
+    const required=['tab-settings','ecOptimizer0321','feeds','addFeed','globalPartialClose','globalExclusiveClose','pickFallback','fallbackInfo','primary','backup1','backup2','providerSummary','localInfo','ec27LocalInstaller','localBackupMode','localIdleRow','localPolicyInfo','claudeStatus','claudeKey','claudeModel','testClaude','geminiStatus','geminiKey','geminiModel','testGemini','queueColorExclusive','resetQueueColors','tab-audio'];
     if(required.some(id=>!q('#'+id)))return false;
     if(!q('#tab-settings .settings-cols')||!q('#tab-settings .queue-colors'))return false;
     // Audio debe haber reclamado Voz/Pronunciación antes de ocultar los hosts legacy de Ajustes.
@@ -33,11 +32,12 @@
     const instructions=q('#editorialInstructions'),prompt=q('#editorialPrompt');
     instructions?.closest('label')?.classList.add('ec29LegacyEditorialHidden');
     prompt?.closest('details')?.classList.add('ec29LegacyEditorialHidden');
-    const h=[...q('#tab-settings .settings-cols')?.querySelectorAll('h3')||[]].find(x=>/Redacción de noticias/i.test(x.textContent||''));
+    const root=q('#tab-settings .settings-cols');
+    const h=root?[...root.querySelectorAll('h3')].find(x=>/Redacción de noticias/i.test(x.textContent||'')):null;
     if(h){h.classList.add('ec29LegacyEditorialHidden');const prev=h.previousElementSibling;if(prev?.tagName==='HR')prev.classList.add('ec29LegacyEditorialHidden');const next=h.nextElementSibling;if(next?.classList?.contains('note'))next.classList.add('ec29LegacyEditorialHidden');}
   }
 
-  function buildSourcesCard(left,legacyLeft){
+  function buildSourcesCard(left){
     const feedCount=q('#feedCount'),head=feedCount?.closest('.section-head'),feeds=q('#feeds'),add=q('#addFeed'),partial=q('#globalPartialClose'),exclusive=q('#globalExclusiveClose');
     if(!head||!feeds||!add||!partial||!exclusive)return null;
     const card=document.createElement('div');card.id='ec29SettingsSourcesCard';card.className='card ec29-settings-card ec29-settings-sources';
@@ -66,15 +66,17 @@
 
   function buildLocalCard(right){
     const card=makeCard('ec29SettingsLocalCard','IA local');
-    const info=q('#localInfo'),diagnostic=q('#localModelDiagnostic0324'),download=q('#downloadModel'),progress=q('#downloadProgress');
-    move(info,card);move(diagnostic,card);card.appendChild(buttonRow(download));move(progress,card);
+    const info=q('#localInfo'),installer=q('#ec27LocalInstaller'),diagnostic=q('#localModelDiagnostic0324'),progress=q('#downloadProgress');
+    move(info,card);
+    // El instalador 0.3.27 es la autoridad vigente: conserva estado, instalación completa y sus controles avanzados.
+    move(installer,card);
+    move(diagnostic,card);
+    move(progress,card);
 
     const policy=document.createElement('div');policy.id='ec29LocalBackupPolicy';policy.className='ec29-local-backup-policy';
     const policyTitle=document.createElement('div');policyTitle.className='ec29-settings-minor-title';policyTitle.textContent='Si IA local está configurada como respaldo';policy.appendChild(policyTitle);
     move(labelFor('localBackupMode'),policy);move(q('#localIdleRow'),policy);move(q('#localPolicyInfo'),policy);card.appendChild(policy);
 
-    const advanced=document.createElement('details');advanced.id='ec29LocalAdvanced';advanced.className='advanced ec29-local-advanced';
-    const summary=document.createElement('summary');summary.textContent='Controles avanzados';advanced.appendChild(summary);advanced.appendChild(buttonRow(q('#startLocal'),q('#stopLocal')));card.appendChild(advanced);
     right.appendChild(card);return card;
   }
 
@@ -115,7 +117,7 @@
     if(!workspace){workspace=document.createElement('div');workspace.id='ec29SettingsWorkspace';workspace.className='ec29-settings-workspace';workspace.innerHTML='<div id="ec29SettingsLeft" class="ec29-settings-stack"></div><div id="ec29SettingsRight" class="ec29-settings-stack"></div>';optimizer.insertAdjacentElement('afterend',workspace);}
     const left=q('#ec29SettingsLeft'),right=q('#ec29SettingsRight');if(!left||!right)return false;
 
-    const sourcesCard=buildSourcesCard(left,legacyCards[0]);
+    const sourcesCard=buildSourcesCard(left);
     const fallbackCard=buildFallbackCard(left);
     const queueCard=buildQueueCard(left);
     const localCard=buildLocalCard(right);
@@ -139,6 +141,8 @@
       partialClose:!!q('#ec29SettingsSourcesCard #globalPartialClose'),
       exclusiveClose:!!q('#ec29SettingsSourcesCard #globalExclusiveClose'),
       exclusiveColor:!!q('#ec29SettingsQueueCard #queueColorExclusive'),
+      localInstallerPreserved:!!q('#ec29SettingsLocalCard #ec27LocalInstaller'),
+      localAdvancedPreserved:!!q('#ec27LocalInstaller #ec27LocalAdvanced'),
       editorialNodesPreserved:!!q('#editorialInstructions')&&!!q('#editorialPrompt'),
       rightOrder:[...right.children].map(x=>x.id)
     };
