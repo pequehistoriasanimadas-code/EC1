@@ -15,6 +15,8 @@ assert(renderer.includes("q('#feeds')")&&renderer.includes("q('#addFeed')"),'Fue
 assert(renderer.includes("q('#globalPartialClose')")&&renderer.includes("q('#globalExclusiveClose')"),'Fuentes debe conservar ambos cierres');
 assert(!renderer.includes("querySelectorAll('.feedrow')"),'La capa UX no debe reconstruir ni manipular tarjetas feedrow');
 assert(renderer.includes("'queueColorExclusive'")&&renderer.includes("labelFor('queueColorExclusive')"),'Apariencia debe conservar y reordenar el color de exclusivos');
+assert(renderer.includes("q('#ec27LocalInstaller')"),'IA local debe reutilizar el instalador completo vigente creado por 0.3.27');
+assert(!renderer.includes("summary.textContent='Controles avanzados'"),'La capa Settings no debe recrear los controles avanzados que ya posee el instalador vigente');
 assert(renderer.includes('syncLocalBackupPolicy'),'IA local debe tener política de respaldo condicional');
 assert(renderer.includes("backups.includes('local')")&&renderer.includes("primary!=='local'"),'La política de respaldo solo debe mostrarse cuando local sea backup real');
 assert(renderer.includes('ec29LegacyEditorialHidden'),'Redacción/Prompt legacy deben ocultarse sin destruir nodos');
