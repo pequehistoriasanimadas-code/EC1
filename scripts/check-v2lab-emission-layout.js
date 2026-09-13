@@ -75,11 +75,27 @@ assert(ui.includes("q('#ecNdiEnabled')?.closest('.card')"),'NDI debe mover el pa
 assert(ui.includes("q('#ec0331StandbyCard')"),'Video de espera debe conservar su tarjeta existente');
 assert(ui.includes('standbyVideo')&&ui.includes('verticalVideoBackground')&&ui.includes('musicFile'),'Reset seguro debe preservar archivos no visuales');
 
+// Salida compacta: el único Abrir Output es el global; la configuración técnica queda plegada.
+assert(!ui.includes('ecOutputMasterOpen'),'Output maestro no debe duplicar el botón global Abrir/Mostrar Output');
+assert(ui.includes('compactOutputCards'),'Salida debe compactar los paneles existentes sin reemplazar su lógica');
+for(const token of ['ec-output-permissions-compact','ec-output-lan-advanced','ec-output-ndi-advanced'])assert(ui.includes(token),`Falta compactación de Salida: ${token}`);
+
 const css=read('src/control-stabilization-lab28.css');
 assert(css.includes('@media(max-width:1180px)'),'El nuevo layout debe colapsar en el breakpoint estable de 1180 px');
 assert(css.includes('minmax(0,1fr)'),'Las columnas deben permitir encogerse sin overflow');
 assert(css.includes('min-width:0'),'Los hijos deben poder encogerse sin romper el layout');
 assert(!/position\s*:\s*sticky/.test(css),'No debe introducirse preview sticky en esta versión');
+for(const token of ['ec-output-permissions-compact','ec-output-lan-advanced','ec-output-ndi-advanced'])assert(css.includes(token),`Falta CSS compacto de Salida: ${token}`);
+
+// Diseño de emisión: formato + modo viven juntos encima de la preview, sin título redundante ni selector visible.
+const designUi=read('src/renderer-emission-design-v2.js');
+const designCss=read('src/control-emission-design-v2.css');
+for(const token of ['ecV2PreviewToolbar','ecV2Format16','ecV2Format916','ec-v2-format-buttons'])assert(designUi.includes(token),`Falta selector segmentado de Diseño: ${token}`);
+assert(designUi.includes("previewToolbar.appendChild(modeBar)")||designUi.includes("toolbar.appendChild(modeBar)"),'Nota/Promo debe moverse a la barra de la preview');
+assert(designUi.includes("format.dispatchEvent(new Event('change'"),'Los botones 16:9 / 9:16 deben reutilizar el flujo existente de cambio de formato');
+assert(designUi.includes('ec-v2-format-source-hidden'),'El selector legacy debe quedar en DOM pero oculto para preservar compatibilidad');
+assert(designUi.includes('ecV2VerticalQuickControls'),'Safe zone, guías y fondo 9:16 deben vivir debajo de la barra de preview');
+for(const token of ['ec-v2-preview-toolbar','ec-v2-format-buttons','ec-v2-vertical-quick-controls','ec-v2-format-source-hidden'])assert(designCss.includes(token),`Falta CSS de barra compacta de Diseño: ${token}`);
 
 const outCss=read('src/output-youtube-promo.css');
 for(const variable of ['--yt-x','--yt-y','--yt-scale','--yt-bg-opacity','--yt-thumb-scale','--yt-radius','--yt-title-lines'])assert(outCss.includes(variable),`Falta variable CSS de promo ${variable}`);
@@ -89,4 +105,4 @@ assert(stabilizationGate.includes("require('./check-v2lab-emission-layout')"),'L
 const pkg=JSON.parse(read('package.json'));
 assert((pkg.build.files||[]).includes('src/**/*'),'El normalizador y runtime nuevos deben quedar incluidos por src/**/* en el paquete');
 
-console.log('check-v2lab-emission-layout: OK · diseño completo + salida + promo fresca + responsive + reset seguro');
+console.log('check-v2lab-emission-layout: OK · diseño compacto + salida compacta + promo fresca + responsive + reset seguro');
