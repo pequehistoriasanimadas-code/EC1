@@ -31,4 +31,5 @@ assert(/function syncModeButtons\(/.test(design),'Nota/Promo deben sincronizar e
 assert(design.includes('verticalVideoBackgroundOptions'),'Diseño debe compactar Fondo videos 9:16');
 assert(designCss.includes('ec-v2-vertical-bg-compact'),'Fondo videos 9:16 debe tener CSS compacto dedicado');
 
+require('./check-v2lab-settings-ux-lab29.js');
 console.log('Final Lab.29 UI stability checks: OK');
