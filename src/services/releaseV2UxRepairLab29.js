@@ -43,7 +43,7 @@ function injectWindow(win){
   if(!win||win.isDestroyed())return;
   const run=()=>{
     if(!win||win.isDestroyed())return;
-    const url=String(win.webContents.getURL()||'');if(!/control\\.html(?:[?#]|$)/i.test(url))return;
+    const url=String(win.webContents.getURL()||'');if(!/control\.html(?:[?#]|$)/i.test(url))return;
     injectFile(win,'control-emission-design-repair-lab29.css','css');
     injectFile(win,'control-audio-repair-lab29.css','css');
     injectFile(win,'control-ux-cleanup-lab29.css','css');
