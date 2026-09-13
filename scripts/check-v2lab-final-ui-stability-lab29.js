@@ -40,7 +40,7 @@ assert(designCss.includes('ec-v2-vertical-bg-compact'),'Fondo videos 9:16 debe t
 // Pulido final aprobado: exclusivas, bibliotecas, Audio, Ajustes y ciclo de contenidos.
 assert(polish.includes('compactExclusiveCopy'),'Debe eliminar el texto largo lateral de Contenido exclusivo');
 assert(polish.includes('ecAudioPronOptionsRow'),'Pronunciación debe reunir sus tres switches en una sola fila');
-assert(polish.includes('ec29AudioLeft')&&polish.includes('ec29AudioRight'),'Audio debe conservar las dos columnas existentes');
+assert(polish.includes("q('#ec27AudioLeft')")&&polish.includes("q('#ec27AudioRight')"),'Audio debe conservar las dos columnas existentes');
 assert(polish.includes('ec29SettingsClosuresGrid'),'Cierres automáticos deben compartir una fila 50/50');
 assert(polish.includes('ecCannedCycleBlock'),'Ciclo de contenidos debe vivir dentro de Próximo contenido / selección');
 assert(polishCss.includes('#adsLibraryCard')&&polishCss.includes('align-self:stretch'),'Anuncios debe igualar el ancho de Contenidos disponibles');
