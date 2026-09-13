@@ -1,0 +1,19 @@
+/* Lab.29 · controles operativos compactos dentro del monitor */
+#tab-auto .ec-auto-monitor-card>.section-head{display:flex!important;align-items:center!important;gap:8px!important;margin-bottom:8px!important;min-width:0}
+#tab-auto .ec-auto-monitor-legacy-copy{display:none!important}
+#tab-auto .ec-auto-monitor-controls{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto;flex-wrap:wrap}
+#tab-auto .ec-auto-monitor-controls #emissionStart{margin:0!important;min-height:34px;padding:7px 11px;white-space:nowrap;flex:0 1 auto}
+#tab-auto .ec-auto-monitor-controls .ec-auto-icon-action{width:34px!important;height:34px!important;min-width:34px!important;padding:7px!important;margin:0!important;display:inline-grid!important;place-items:center!important;font-size:0!important;line-height:1!important;flex:0 0 34px}
+#tab-auto .ec-auto-monitor-controls .ec-auto-icon-action svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#tab-auto .ec-auto-monitor-controls #emissionResume svg{fill:currentColor;stroke:none}
+#tab-auto .ec-auto-monitor-controls #emissionStop{color:#e77777;border-color:#6d3333;background:#2b1717}
+#tab-auto .ec-auto-monitor-controls #emissionStop:disabled{color:#8b6666;background:#211717}
+#tab-auto .ec-auto-monitor-card #ecMonitorState{margin-left:auto;flex:0 0 auto}
+#tab-auto .ec-auto-emission-card-absorbed{display:none!important}
+#tab-auto .ec-auto-monitor-card .ec-monitor-frame-host{margin-top:0!important}
+
+@media(max-width:560px){
+  #tab-auto .ec-auto-monitor-card>.section-head{align-items:flex-start!important;flex-wrap:wrap}
+  #tab-auto .ec-auto-monitor-controls{order:2;flex-basis:100%}
+  #tab-auto .ec-auto-monitor-card #ecMonitorState{order:1;margin-left:auto}
+}

@@ -5,7 +5,7 @@ const resourcesDir=path.resolve(process.argv[2]||path.join('dist','win-unpacked'
 
 app.whenReady().then(async()=>{let tmp='';try{
   const pkg=JSON.parse(fs.readFileSync(path.join(appRoot,'package.json'),'utf8'));
-  assert.strictEqual(pkg.version,'2.0.0-lab.24');
+  assert(['2.0.0-lab.28','2.0.0-lab.29'].includes(pkg.version),`Versión V2 Lab no compatible con este smoke: ${pkg.version}`);
 
   const servicePath=path.join(appRoot,'src','services','releaseV2ProductionFidelity.js');
   const localPath=path.join(appRoot,'src','services','localRuntime.js');
@@ -13,7 +13,7 @@ app.whenReady().then(async()=>{let tmp='';try{
   const {resolvePipelineMode,normalizeLocalConfig,expectedVsRuntime,PROFILE_VERSION}=require(servicePath);
   const {LocalRuntime}=require(localPath);
   const {installVersion0320LocalPolicy}=require(policyPath);
-  assert.strictEqual(PROFILE_VERSION,'2.0-lab.24');
+  assert.strictEqual(PROFILE_VERSION,'2.0-lab.25');
 
   const source=fs.readFileSync(servicePath,'utf8');
   const automation=fs.readFileSync(path.join(appRoot,'src','services','automation0325.js'),'utf8');
@@ -53,6 +53,6 @@ app.whenReady().then(async()=>{let tmp='';try{
   assert(expectedVsRuntime(chatter99,{resourceMode:'tuned',profile:{ctx:4096,gpuLayers:99,batch:512,ubatch:256,threads:6,parallel:1,prio:0,poll:25,warmup:true}}).ok,'Packaged Chatterbox 99-layer profile mismatch regression');
 
   fs.rmSync(tmp,{recursive:true,force:true});tmp='';
-  console.log('PACKAGED V2 PRODUCTION FIDELITY lab.23 OK · tuned 48 · profile/pipeline fidelity · strict swap · stable voice diagnostics');
+  console.log(`PACKAGED V2 PRODUCTION FIDELITY ${pkg.version} OK · tuned 48 · profile/pipeline fidelity · strict swap · stable voice diagnostics`);
   app.exit(0);
 }catch(e){console.error(e.stack||e);try{if(tmp)fs.rmSync(tmp,{recursive:true,force:true});}catch{}app.exit(1);}});

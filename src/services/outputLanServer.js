@@ -8,8 +8,8 @@ const {fileURLToPath}=require('url');
 
 const STATIC_FILES=new Set([
   'output-web.html','output-web-adapter.js','output-web-mode.js','output-web-mode.css',
-  'output.css','output-0324.css','output-0325.css','output-0331.css',
-  'output.js','output-0324.js','output-0325.js','output-0326.js','output-0328.js','output-0331.js'
+  'output.css','output-0324.css','output-0325.css','output-0331.css','output-youtube-promo.css',
+  'output.js','output-0324.js','output-0325.js','output-0326.js','output-0328.js','output-0331.js','output-youtube-promo.js'
 ]);
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.mp3':'audio/mpeg','.wav':'audio/wav','.m4a':'audio/mp4','.aac':'audio/aac','.mp4':'video/mp4','.m4v':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.gif':'image/gif','.svg':'image/svg+xml','.ttf':'font/ttf','.otf':'font/otf','.woff':'font/woff','.woff2':'font/woff2'};
 function isLoopback(addr=''){const x=String(addr||'').replace(/^::ffff:/,'');return x==='127.0.0.1'||x==='::1'||x==='localhost';}

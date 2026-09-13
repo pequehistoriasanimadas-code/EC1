@@ -19,7 +19,7 @@ function payload({name='Perfil',profileSchemaVersion=1,kind='profile',settings={
   if(kind==='all')manifest.activeProfileId=id;
   return{manifest,globalSettings:kind==='all'?globalSettings:null,profiles:[{meta:{id,name,color:'#F7C600',schemaVersion:profileSchemaVersion},settings}],resources:[],voiceManifest:[]};
 }
-const root=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab24-profile-'));
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'gec-lab28-profile-'));
 try{
   const m=new ProfileManager0329(root);
   atomicJson(m.globalSettingsFile,{
@@ -37,7 +37,7 @@ try{
     ai:{primary:'claude',localTunedConfig:{gpuLayers:1},lastLocalBenchmark:{tokensPerSec:1}},
     optimization0321:{fingerprint:'OTHER-PC'}
   }});
-  delete legacy.manifest.packageSchemaVersion; // compatibilidad con paquete antiguo sin número explícito.
+  delete legacy.manifest.packageSchemaVersion;
   writePackage(legacyFile,legacy);
   const legacyInfo=pack.readInfo(legacyFile);assert.equal(legacyInfo.packageSchemaVersion,1);assert.equal(legacyInfo.profileSchemaVersion,0);assert.equal(legacyInfo.legacyProfile,true,'schema 0 debe identificarse como perfil legacy');
   const lr=pack.importFile(legacyFile,'keep');assert(lr.ok);
@@ -52,11 +52,11 @@ try{
   const current=payload({name:'Actual',profileSchemaVersion:1,settings:{
     rssFeeds:[{id:'new',name:'Actual',url:'https://new.test'}],
     automation:{bufferReady:15,exclusiveEveryNews:4,openExclusiveArticles:true,exclusiveReserveMax:10},
-    visual:{output:{format:'9:16',titleColor:'#FFFFFF'}},
+    visual:{output:{format:'9:16',titleColor:'#FFFFFF',youtubePromoCtaText:'Mira este contenido completo'}},
     ai:{primary:'local'}
   }});
   writePackage(currentFile,current);const cr=pack.importFile(currentFile,'keep');assert(cr.ok);
-  const now=m.readProfileSettings(cr.imported[0]);assert.equal(now.automation.openExclusiveArticles,true);assert.equal(now.visual.output.format,'9:16');
+  const now=m.readProfileSettings(cr.imported[0]);assert.equal(now.automation.openExclusiveArticles,true);assert.equal(now.visual.output.format,'9:16');assert.equal(now.visual.output.youtubePromoCtaText,'Mira este contenido completo','el CTA de promo debe ser específico del perfil');
 
   // Perfil con schema de perfil más nuevo pero mismo contenedor: conserva campos desconocidos.
   const forwardFile=path.join(root,'forward.gecprofile');
@@ -78,11 +78,11 @@ try{
   assert.throws(()=>readPackage(futurePackage),/versión más nueva de GEC/i);
 
   const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
-  const main=read('src/main.js'),stability=read('src/services/profileStability0329.js'),preload=read('src/preload.js'),control=read('src/control.html'),r0324=read('src/renderer-0324.js'),r0330=read('src/renderer-0330.js'),lan=read('src/renderer-lan-output.js'),css=read('src/control-lan-output.css'),optimizer=read('src/renderer-0321.js'),boot=read('src/bootstrap-v2lab.js'),boot0329=read('src/bootstrap-0329.js');
+  const main=read('src/main.js'),stability=read('src/services/profileStability0329.js'),preload=read('src/preload.js'),control=read('src/control.html'),r0324=read('src/renderer-0324.js'),r0330=read('src/renderer-0330.js'),lan=read('src/renderer-lan-output.js'),css=read('src/control-lan-output.css'),optimizer=read('src/renderer-0321.js'),boot=read('src/bootstrap-v2lab.js'),boot0329=read('src/bootstrap-0329.js'),lab28=read('src/services/releaseV2Stabilization.js'),lab28Ui=read('src/renderer-stabilization-lab28.js');
   assert(main.includes('CONTROL_LOAD_CANCELLED')&&main.includes('controlledShutdown()'),'reinicio controlado debe suprimir falsos errores de carga');
-  assert(main.includes("Number(code)===-3")&&main.includes('CONTROL_LOAD_ABORTED')&&main.includes('CONTROL_UI_READY'),'startup lab.24 debe tratar ERR_ABORTED como transitorio y verificar la UI real');
+  assert(main.includes("Number(code)===-3")&&main.includes('CONTROL_LOAD_ABORTED')&&main.includes('CONTROL_UI_READY'),'startup debe tratar ERR_ABORTED como transitorio y verificar la UI real');
   const startupBlock=main.slice(main.indexOf('function createControlWindow(){'),main.indexOf('function applyOutputWindowFormat'));
-  assert(!startupBlock.includes('reloadIgnoringCache'),'startup lab.24 no debe competir con recargas automáticas del renderer');
+  assert(!startupBlock.includes('reloadIgnoringCache'),'startup no debe competir con recargas automáticas del renderer');
   assert(startupBlock.includes("!uiReady&&!domReady")&&startupBlock.includes('CONTROL_UNRESPONSIVE_WAIT'),'unresponsive después de DOM-ready no debe disparar una nueva navegación');
   assert(stability.includes('__ecPrepareControlledRelaunch')&&stability.includes('__ecRefreshOutputAfterProfileChange'),'perfil debe coordinar relaunch y refresco Output');
   for(const v of ['renderer-0317.js','renderer-0318.js','renderer-0319.js','renderer-0320.js','renderer-0321.js','renderer-0322.js','renderer-0323.js'])assert(preload.includes(v),`falta restaurar ${v}`);
@@ -94,5 +94,18 @@ try{
   assert(boot.includes('__ecSingleInstanceLockOwned')&&boot0329.includes('inheritedLock'),'V2 debe poseer un solo single-instance lock a través de la cadena legacy');
   assert(lan.includes('ecAutoRightColumn')&&lan.includes('outputLanEnsure')&&lan.includes("'profile:changed'"),'monitor debe quedar arriba de la cola y recuperarse');
   assert(css.includes('#ecAutoRightColumn'),'layout de monitor/cola no aplicado');
-  console.log('check-v2lab-profile-compat: OK · schema legacy 0 · startup sin reload competitivo · ERR_ABORTED recuperable · lock único · monitor recuperable');
+
+  // Lab.28: hardware sigue global, pero la validación de producción queda vinculada a cada perfil.
+  assert(lab28.includes("SIDE_FILE='optimization-lab28.json'"),'Lab.28 necesita un sidecar de optimización por perfil');
+  assert(lab28.includes('ctx.m.profileDir(profileId)'),'el sidecar debe residir dentro del perfil activo');
+  assert(lab28.includes("ipcMain.handle('optimization-v2:status'"),'Lab.28 debe ser la fuente de verdad de estado de optimización');
+  assert(lab28.includes("ipcMain.handle('optimization-v2:commit'"),'Optimizar debe guardar la vinculación del perfil activo');
+  assert(lab28.includes("ipcMain.handle('optimization-v2:clear'"),'Limpiar optimización debe actuar sobre el perfil activo');
+  assert(lab28.includes('cleared:true'),'debe existir tombstone para no remigrar un estado global al perfil después de limpiarlo');
+  assert(lab28.includes('lab27-global-migration'),'la migración debe aprovechar la optimización previa sin obligar a repetir benchmark innecesariamente');
+  assert(boot.indexOf('releaseV2ProductionFidelity')<boot.indexOf('releaseV2Stabilization'),'la capa por perfil debe instalarse después de la hidratación histórica');
+  assert(lab28Ui.includes('optimizationV2Status')&&lab28Ui.includes('data-lab28-resolved'),'el badge debe resolverse desde una sola fuente de estado por perfil');
+  assert(lab28Ui.includes("'profile:changed'"),'cambiar perfil debe refrescar inmediatamente el estado de optimización');
+
+  console.log('check-v2lab-profile-compat: OK · legacy/actual/futuro · CTA por perfil · optimización vinculada por perfil · monitor recuperable');
 }finally{fs.rmSync(root,{recursive:true,force:true});}
