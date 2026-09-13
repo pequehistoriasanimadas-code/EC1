@@ -34,7 +34,6 @@ assert(recovery.includes("if(!hasReady&&c.emergency!==false)return'emergency'"),
 const reserve=(recovery.match(/function reserveRecoveryState\([^]*?\n\}/)||[])[0]||'';
 assert(reserve.includes('targetReady')&&reserve.includes('deficitNotes'),'La selección adaptativa debe derivar el déficit del objetivo de noticias');
 assert(!reserve.includes('targetAutonomyMin'),'La recuperación ya no debe depender de un objetivo manual en minutos');
-assert(bootstrap.includes("releaseV2CannedRecoveryLab29").includes?false:true);
 assert(bootstrap.includes("require('./services/releaseV2CannedRecoveryLab29').installReleaseV2CannedRecoveryLab29()"),'V2 Lab debe instalar la política de recuperación por cantidad de noticias');
 
 assert(css.includes('#ecCannedRulesRow'),'Debe existir layout compacto para respaldo + frecuencia');
