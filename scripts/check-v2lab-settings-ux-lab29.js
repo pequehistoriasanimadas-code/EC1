@@ -14,7 +14,7 @@ assert(renderer.includes('ec29SettingsLeft')&&renderer.includes('ec29SettingsRig
 assert(renderer.includes("q('#feeds')")&&renderer.includes("q('#addFeed')"),'Fuentes debe reutilizar la lista y el botón originales');
 assert(renderer.includes("q('#globalPartialClose')")&&renderer.includes("q('#globalExclusiveClose')"),'Fuentes debe conservar ambos cierres');
 assert(!renderer.includes("querySelectorAll('.feedrow')"),'La capa UX no debe reconstruir ni manipular tarjetas feedrow');
-assert(renderer.includes("'queueColorExclusive'")&&renderer.includes("labelFor('queueColorExclusive')"),'Apariencia debe conservar y reordenar el color de exclusivos');
+assert(renderer.includes("'queueColorExclusive'")&&renderer.includes('labelFor(id)'),'Apariencia debe conservar y reordenar el color de exclusivos dentro del flujo genérico de labels');
 assert(renderer.includes("q('#ec27LocalInstaller')"),'IA local debe reutilizar el instalador completo vigente creado por 0.3.27');
 assert(!renderer.includes("summary.textContent='Controles avanzados'"),'La capa Settings no debe recrear los controles avanzados que ya posee el instalador vigente');
 assert(renderer.includes('syncLocalBackupPolicy'),'IA local debe tener política de respaldo condicional');
