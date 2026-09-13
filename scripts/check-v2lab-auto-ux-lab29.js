@@ -17,12 +17,17 @@ new Function(ui);
 for(const id of [
   'ecAutoOperatorStrip','ecAutoLeft','ecAutoRight','ecAutoQueueActions',
   'ecAutoPrepSettingsHost','ecAutoExclusiveHost','ecAutoNowHost',
-  'ecAutoEmissionHost','ecAutoSessionHost'
+  'ecAutoEmissionHost','ecAutoSessionHost','ecAutoAdsToggleHost'
 ]) assert(ui.includes(id),`Falta host estable ${id}`);
 
 assert(release.includes("injectFile(win,'renderer-auto-ux-lab29.js')"),'Lab.29 debe inyectar el nuevo UX Automático en control.html');
 assert(ui.includes("q('#cannedEnabled')?.closest('.switch-row')"),'Debe mover el switch original de Contenidos');
+assert(ui.includes("q('#adsAfterCanned')?.closest('.switch-row')"),'Debe mover el switch original de Anuncios');
 assert(ui.includes("q('#ecYoutubePromoEnabled')?.closest('.switch-row')"),'Debe mover el switch original de Promo YouTube');
+assert(ui.indexOf('ecAutoContentToggleHost')<ui.indexOf('ecAutoAdsToggleHost')&&ui.indexOf('ecAutoAdsToggleHost')<ui.indexOf('ecAutoPromoToggleHost'),'Anuncios debe quedar entre Contenidos y Promo YouTube');
+assert(/adsRow[\s\S]{0,500}textContent='Anuncios'/.test(ui),'El switch movido de anuncios debe mostrarse como “Anuncios” en la franja superior');
+assert(ui.includes('adsSwitches:document.querySelectorAll(\'#adsAfterCanned\').length'),'La auditoría debe comprobar que existe un solo switch de Anuncios');
+assert(ui.includes('#adsAfterCanned'),'La reconciliación tardía debe contemplar el switch de Anuncios');
 assert(ui.includes("q('#processStart')?.closest('.buttons')"),'Debe mover el grupo original de controles de preparación, no clonarlo');
 assert(ui.includes("q('#emissionStart')?.closest('.card')"),'Debe mover la tarjeta/control original de emisión, no clonarlo');
 assert(ui.includes("q('#sessionCounters')"),'Debe reutilizar los contadores de sesión existentes');
@@ -47,6 +52,7 @@ assert(ui.includes("profile:changed"),'Debe rehidratar idempotentemente al cambi
 
 assert(css.includes('.ec-auto-operator-grid'),'Debe existir el grid principal del operador');
 assert(css.includes('grid-template-columns'),'Debe existir layout de dos columnas');
+assert(css.includes('.ec-auto-strip-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr))'),'La franja superior ancha debe reservar ocho columnas incluyendo Anuncios');
 assert(css.includes('@media(max-width:1180px)'),'El layout debe apilarse por CSS en el breakpoint estable');
 assert(!/window\.addEventListener\(['"]resize/.test(ui),'No debe reparentar DOM en resize');
 assert(!/ResizeObserver/.test(ui),'El nuevo UX no necesita ResizeObserver para reordenar');
@@ -55,4 +61,4 @@ assert(css.includes('.nav::before'),'La navegación debe usar una familia consis
 assert(css.includes('#ecAutoNowCard #ec28EmissionPanel .ec28-next{display:none!important}'),'Ahora al aire no debe duplicar el siguiente elemento fuera de la Cola');
 assert(!/\.queue-item[^\{]*::before|\.queue-type[^\{]*::before|\.queue-item[^\{]*\.ec-icon/.test(css),'Las tarjetas de cola no deben recibir iconos decorativos');
 
-console.log('check-v2lab-auto-ux-lab29: OK · consola Automático estable, una sola autoridad al aire y cola sin iconos');
+console.log('check-v2lab-auto-ux-lab29: OK · Automático conserva su layout y mueve Anuncios junto a Contenidos/Promo sin duplicar controles');
