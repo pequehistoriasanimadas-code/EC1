@@ -29,6 +29,10 @@ jobs:
         run: |
           npm run check 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\lab29-static-check.log"
           $code = $LASTEXITCODE
+          if ($code -eq 0) {
+            node scripts/check-v2lab-final-ui-stability-lab29.js 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\lab29-static-check.log" -Append
+            $code = $LASTEXITCODE
+          }
           "exit_code=$code" | Add-Content "$env:RUNNER_TEMP\lab29-static-check.log"
           if ($code -ne 0) { exit $code }
       - name: Upload diagnostic log
