@@ -11,10 +11,7 @@
 #tab-settings .ec29-settings-card>.section-head+ .note{margin-top:7px}
 #tab-settings .ec29-settings-card .buttons{align-items:center}
 
-/* Fuentes conserva íntegramente sus selectores/estilos originales. */
-#tab-settings #ec29SettingsSourcesCard>#addFeed{margin-top:2px}
-#tab-settings #ec29SettingsSourcesCard>#globalPartialClose,
-#tab-settings #ec29SettingsSourcesCard>#globalExclusiveClose{margin-top:12px}
+/* Fuentes conserva íntegramente sus estilos originales; esta capa no toca sus controles internos. */
 
 #tab-settings #ec29SettingsFallbackCard #fallbackInfo{margin-top:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#101010;min-height:34px}
 
