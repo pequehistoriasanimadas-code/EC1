@@ -18,6 +18,9 @@ const cleanup=read('src/renderer-ux-cleanup-lab29.js');
 const audioSync=read('src/renderer-audio-profile-sync-lab29.js');
 const design=read('src/renderer-emission-design-repair-lab29.js');
 const uxRelease=read('src/services/releaseV2UxRepairLab29.js');
+const main=read('src/main.js');
+const workflow=read('.github/workflows/build-windows.yml');
+new Function(audioSync);
 
 assert(!lab29.includes('card.innerHTML'),'Lab.29 no debe reconstruir la tarjeta del monitor ni destruir controles ajenos');
 assert(!lab29.includes('ecMonitor29Image'),'Lab.29 no debe crear una segunda superficie de monitor');
@@ -43,5 +46,10 @@ assert(uxRelease.includes("renderer-audio-profile-sync-lab29.js"),'La sincroniza
 
 assert(design.includes('repairNotePreview')&&design.includes('repairPromoPreview'),'Diseño debe mantener reparación dedicada de Nota y Promo');
 assert(!/function repairPreview\(\)[\s\S]{0,1500}compactDesignLayout\(\)/.test(design),'Diseño no debe reparentar estructura durante cada repaint');
+
+assert(main.includes('CONTROL_UI_REGRESSION_OK'),'El startup smoke real debe auditar el DOM final de Control');
+for(const id of ['ecAutoOperatorStrip','ecAutoMonitorControls','ec28EmissionPanel','ecEmissionV2PreviewCard','ecYoutubePromoEnabled','v2TtsEngine'])assert(main.includes(id),`Startup smoke debe comprobar ${id}`);
+assert(workflow.includes('CONTROL_UI_REGRESSION_OK'),'Windows Portable debe exigir que la auditoría real del DOM final termine correctamente');
+assert(workflow.includes('CONTROL_UI_REGRESSION_FAIL'),'Windows Portable debe fallar ante una regresión detectada por la auditoría de Control');
 
 console.log('Global Lab.29 UI ownership checks: OK');
