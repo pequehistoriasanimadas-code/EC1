@@ -52,9 +52,11 @@ function injectWindow(win){
     injectFile(win,'control-audio-repair-lab29.css','css');
     injectFile(win,'control-ux-cleanup-lab29.css','css');
     injectFile(win,'control-auto-operator-compact-lab29.css','css');
+    injectFile(win,'control-settings-ux-lab29.css','css');
     injectFile(win,'renderer-emission-design-repair-lab29.js','js');
     injectFile(win,'renderer-ux-cleanup-lab29.js','js');
     injectFile(win,'renderer-audio-profile-sync-lab29.js','js');
+    injectFile(win,'renderer-settings-ux-lab29.js','js');
     injectAutoNowGuard(win);
   };
   win.webContents.on('did-finish-load',run);setTimeout(run,0);
