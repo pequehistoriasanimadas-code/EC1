@@ -20,9 +20,12 @@ assert(!renderer.includes("summary.textContent='Controles avanzados'"),'La capa 
 assert(renderer.includes('syncLocalBackupPolicy'),'IA local debe tener política de respaldo condicional');
 assert(renderer.includes("backups.includes('local')")&&renderer.includes("primary!=='local'"),'La política de respaldo solo debe mostrarse cuando local sea backup real');
 assert(renderer.includes('ec29LegacyEditorialHidden'),'Redacción/Prompt legacy deben ocultarse sin destruir nodos');
-assert(renderer.indexOf("right.appendChild(localCard)")>=0,'IA local debe añadirse a la derecha');
-assert(renderer.indexOf("right.appendChild(serviceCard)")>renderer.indexOf("right.appendChild(localCard)"),'Servicio IA debe quedar debajo de IA local');
-assert(renderer.indexOf("right.appendChild(providersCard)")>renderer.indexOf("right.appendChild(serviceCard)"),'Proveedores deben quedar debajo de Servicio IA');
+const localOrder=renderer.indexOf('const localCard=buildLocalCard(right)');
+const serviceOrder=renderer.indexOf('const serviceCard=buildServiceCard(right)');
+const providersOrder=renderer.indexOf('const providersCard=buildProvidersCard(right)');
+assert(localOrder>=0,'IA local debe añadirse a la derecha');
+assert(serviceOrder>localOrder,'Servicio IA debe quedar debajo de IA local');
+assert(providersOrder>serviceOrder,'Proveedores deben quedar debajo de Servicio IA');
 assert(css.includes('grid-template-columns:minmax(0,1fr) minmax(0,1fr)'),'Ajustes debe mantener dos columnas equilibradas');
 assert(css.includes('#ec29SettingsServiceGrid')&&css.includes('repeat(3'),'Servicio IA debe usar tres columnas');
 assert(css.includes('#ec29SettingsProvidersGrid')&&css.includes('repeat(2'),'Claude y Gemini deben ir en paralelo');
