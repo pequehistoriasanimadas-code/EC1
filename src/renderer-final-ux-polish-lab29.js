@@ -107,7 +107,7 @@
     if(!target||!target.closest)return false;
     const tab=target.closest('#tab-settings,#tab-audio');if(!tab)return false;
     if(target.matches('button,[type="button"],[type="submit"],[type="file"],[type="password"]'))return false;
-    if(target.matches('#claudeKey,#geminiKey'))return false;
+    if(target.matches('#claudeKey')||target.matches('#geminiKey'))return false;
     if(target.closest('#ec27LearningList,#ec28LearningList'))return false;
     if(!target.matches('input,select,textarea'))return false;
     return true;
