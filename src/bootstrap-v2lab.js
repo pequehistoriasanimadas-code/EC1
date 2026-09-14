@@ -37,4 +37,5 @@ if(!gotLock){app.quit();}else{
   require('./services/releaseV2Lab29').installReleaseV2Lab29();
   require('./services/releaseV2EmissionDesign').installReleaseV2EmissionDesign();
   require('./services/releaseV2UxRepairLab29').installReleaseV2UxRepairLab29();
+  require('./services/releaseV2FinalCorrectionsLab29').installReleaseV2FinalCorrectionsLab29();
 }
