@@ -155,7 +155,15 @@ function installSettingsModelCacheAndPromoDefaults(){
   const p=SettingsStore.prototype;if(p.__ecFinalCorrectionsLab29)return;Object.defineProperty(p,'__ecFinalCorrectionsLab29',{value:true});
   const baseLoad=p.load,baseSave=p.save;
   p.load=function(...args){const s=baseLoad.apply(this,args);ensureApprovedPromoDefaults(s);return normalizeOptimizationForModel(s,storeRoot(this));};
-  p.save=function(settings,...args){const s=ensureApprovedPromoDefaults(settings&&typeof settings==='object'?settings:{});normalizeOptimizationForModel(s,storeRoot(this));const result=baseSave.call(this,s,...args);ensureApprovedPromoDefaults(result);return normalizeOptimizationForModel(result,storeRoot(this));};
+  p.save=function(settings,...args){
+    const root=storeRoot(this),s=ensureApprovedPromoDefaults(settings&&typeof settings==='object'?settings:{});
+    normalizeOptimizationForModel(s,root);
+    const result=baseSave.call(this,s,...args);
+    // The original SettingsStore.save intentionally returns undefined. Keep that
+    // contract intact and refresh only our machine cache from the same object.
+    normalizeOptimizationForModel(s,root);
+    return result;
+  };
 }
 
 function effectivePromo(settings={}){
