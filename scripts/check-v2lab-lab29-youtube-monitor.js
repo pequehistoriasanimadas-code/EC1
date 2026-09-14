@@ -28,19 +28,26 @@ assert(/MONITOR_FPS\s*=\s*15/.test(baseMonitor),'renderer-lan-output conserva la
 assert(baseMonitor.includes('productionGpuBusy()'),'El monitor base debe ceder durante carga GPU para que Lab.29 aplique el suplemento de 5 FPS');
 
 // Regresión de encuadre adaptativo: solo videos de espera y contenidos.
-const output=read('src/output.js');
-const standbyOutput=read('src/output-0331.js');
+const adaptive=read('src/output-adaptive-video-fit-lab29.js');
+const localOutput=read('src/output.html');
+const lanOutput=read('src/output-web.html');
 const standbyCss=read('src/output-0331.css');
-const renderer0331=read('src/renderer-0331.js');
-assert(output.includes('applyAdaptiveVideoFit(cannedVideo)'),'Contenidos deben recalcular object-fit según proporción del video y del Output');
-assert(output.includes("cannedVideo.addEventListener('loadedmetadata'"),'Contenidos deben analizar dimensiones intrínsecas al cargar metadata');
-assert(standbyOutput.includes('applyAdaptiveVideoFit(video)'),'Standby debe recalcular object-fit según proporción del video y del Output');
-assert(standbyOutput.includes("video.addEventListener('loadedmetadata'"),'Standby debe analizar dimensiones intrínsecas al cargar metadata');
-assert(!output.includes('applyAdaptiveVideoFit(img)'),'Las imágenes de notas deben conservar cover + movimiento y quedar fuera del encuadre adaptativo de video');
+const finalRenderer=read('src/renderer-final-corrections-lab29.js');
+new Function(adaptive);new Function(finalRenderer);
+assert(adaptive.includes('function applyAdaptiveVideoFit(video)'),'Debe existir una única regla explícita de encuadre adaptativo para video');
+assert(adaptive.includes("q('#cannedVideo')")&&adaptive.includes("q('#standbyVideo')"),'La regla adaptativa debe cubrir contenido y standby');
+assert(adaptive.includes("video.addEventListener('loadedmetadata'"),'El encuadre debe analizar las dimensiones intrínsecas al cargar metadata');
+assert(adaptive.includes("delta<=MATCH_TOLERANCE?'cover':'contain'"),'Videos con proporción equivalente deben llenar; proporciones distintas deben conservarse completas');
+assert(adaptive.includes("window.ECAPI?.on?.('output:design'")&&adaptive.includes("new ResizeObserver"),'El encuadre debe recalcularse al cambiar diseño/formato y dimensiones del Output');
+assert(!adaptive.includes("q('#image')")&&!adaptive.includes('applyAdaptiveVideoFit(img)'),'Las imágenes de notas deben conservar cover + movimiento y quedar fuera del encuadre adaptativo de video');
+assert(localOutput.includes('output-adaptive-video-fit-lab29.js'),'Output local/NDI debe cargar la regla adaptativa');
+assert(lanOutput.includes('output-adaptive-video-fit-lab29.js'),'Output LAN debe cargar la misma regla adaptativa');
 assert(/#standbyVideo\{object-fit:contain/.test(standbyCss),'Standby debe usar contain como fallback seguro hasta conocer la proporción del video');
-assert(renderer0331.includes('standbyFileName'),'La tarjeta de standby debe mostrar solo el nombre del archivo, no la ruta completa');
-assert(renderer0331.includes('Se reproduce en loop y se adapta automáticamente al formato 16:9 / 9:16 del Output.'),'La tarjeta de standby debe usar la explicación compacta aprobada');
-assert(!renderer0331.includes('Usa la misma transición configurada en Transiciones.'),'La tarjeta de standby no debe conservar la explicación técnica redundante');
+assert(finalRenderer.includes('function standbyFileName'),'La tarjeta de standby debe reducir la ruta a nombre de archivo');
+assert(finalRenderer.includes("info.textContent=name")&&finalRenderer.includes('info.title=raw'),'La ruta completa puede quedar como ayuda secundaria pero no como texto principal');
+assert(finalRenderer.includes('Se reproduce en loop y se adapta automáticamente al formato 16:9 / 9:16 del Output.'),'La tarjeta de standby debe usar la explicación compacta aprobada');
+assert(finalRenderer.includes("card.querySelectorAll('p.note').forEach(n=>n.remove())"),'La capa final debe retirar las explicaciones redundantes anteriores');
+assert(!finalRenderer.includes('Usa la misma transición configurada en Transiciones.'),'La tarjeta final no debe reinsertar la explicación técnica redundante');
 
 require('./check-v2lab-auto-ux-lab29');
 require('./check-v2lab-ux-regression-lab29');
