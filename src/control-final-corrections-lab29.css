@@ -4,3 +4,11 @@
 #tab-canned .ec-canned-recovery-toggle input:checked + .switch-ui{background:var(--y);border-color:var(--y)}
 #tab-canned .ec-canned-recovery-toggle input:checked + .switch-ui:after{transform:translateX(20px);background:#111}
 #tab-canned .ec-canned-recovery-toggle input:focus-visible + .switch-ui{outline:2px solid #fff;outline-offset:2px}
+
+/* Video de espera: una fila operativa + una única ayuda breve. */
+#ec0331StandbyCard.ec-final-standby-card .section-head{align-items:center;margin-bottom:10px}
+#ec0331StandbyCard .ec-final-standby-row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0}
+#ec0331StandbyCard .ec-final-standby-file{flex:1;min-width:0;padding:10px 12px;border:1px solid rgba(255,255,255,.10);border-radius:8px;background:rgba(255,255,255,.035);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ec0331StandbyCard .ec-final-standby-actions{display:flex;align-items:center;gap:8px;margin:0;flex:0 0 auto}
+#ec0331StandbyCard .ec-final-standby-note{margin:8px 0 0}
+@media(max-width:900px){#ec0331StandbyCard .ec-final-standby-row{align-items:stretch;flex-direction:column}#ec0331StandbyCard .ec-final-standby-actions{justify-content:flex-start}}
