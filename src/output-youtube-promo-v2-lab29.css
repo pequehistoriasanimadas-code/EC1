@@ -1,0 +1,26 @@
+/* Lab.29 final · Promo YouTube WYSIWYG, shared by local / NDI / LAN */
+#stage #ecYoutubePromoOutput.ec-youtube-promo-v2{
+  left:var(--yt-v2-center-x)!important;
+  right:auto!important;
+  top:var(--yt-v2-center-y)!important;
+  bottom:auto!important;
+  width:var(--yt-v2-width)!important;
+  min-height:var(--yt-v2-min-height)!important;
+  padding:var(--yt-v2-padding)!important;
+  gap:var(--yt-v2-gap)!important;
+  grid-template-columns:var(--yt-thumb-width) minmax(0,1fr)!important;
+  transform:translate(-50%,-50%)!important;
+  transform-origin:center center!important;
+  box-sizing:border-box!important;
+}
+#stage[data-format="9:16"] #ecYoutubePromoOutput.ec-youtube-promo-v2{
+  left:var(--yt-v2-center-x)!important;
+  right:auto!important;
+  top:var(--yt-v2-center-y)!important;
+  bottom:auto!important;
+  width:var(--yt-v2-width)!important;
+  min-height:var(--yt-v2-min-height)!important;
+  padding:var(--yt-v2-padding)!important;
+  gap:var(--yt-v2-gap)!important;
+}
+#stage #ecYoutubePromoOutput.ec-youtube-promo-v2 .ec-youtube-promo-thumb{width:var(--yt-thumb-width)!important;max-width:none!important}
