@@ -39,6 +39,18 @@
 #tab-settings #ec29SettingsQueueCard .queue-colors label{display:flex!important;flex-direction:column!important;gap:5px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-width:0}
 #tab-settings #ec29SettingsQueueCard .queue-colors input[type="color"]{display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;min-width:0!important;height:34px!important;margin:0!important;padding:3px!important;position:static!important}
 
+/* Guardado automático · los guardados maestros permanecen en DOM como autoridad, pero ya no ocupan espacio. */
+#tab-settings .settings-save,#tab-settings .ec-final-settings-save-hidden,#tab-settings #save.ec-final-settings-save-button-hidden,#tab-audio .ec-final-audio-save-hidden{display:none!important}
+
+/* Automático · el estado superior ya indica DETENIDO; solo mostramos un modo de pipeline útil durante preparación activa. */
+#tab-auto .ec-final-pipeline-source-hidden{display:none!important}
+#tab-auto #ecAutoPipelineDetail{margin:4px 0 7px!important;color:#aeb4bc;font-size:11px;line-height:1.35}
+#tab-auto #ecAutoPipelineDetail.hidden{display:none!important}
+
+/* Cola de emisión · las filas miden su contenido y nunca rellenan artificialmente la altura disponible. */
+#tab-auto #queue.queue-list{grid-auto-rows:max-content!important;align-content:start!important;align-items:start!important}
+#tab-auto #queue.queue-list>.queue-item{height:auto!important;min-height:0!important;align-self:start!important}
+
 @media(max-width:1180px){
   #tab-audio .ec-audio-pron-options-row{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
