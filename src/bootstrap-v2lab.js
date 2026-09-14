@@ -24,6 +24,7 @@ if(!gotLock){app.quit();}else{
   global.__ecSecondInstanceHandlerOwned=true;
   app.on('second-instance',()=>{try{const wins=BrowserWindow.getAllWindows().filter(w=>!w.isDestroyed());const target=wins.find(w=>String(w.getTitle?.()||'').includes('EC Automatic News'))||wins[0];if(target){if(target.isMinimized())target.restore();target.show();target.focus();}}catch{}});
   require('./services/releaseV2StartupUiAudit').installReleaseV2StartupUiAudit();
+  require('./services/releaseV2WindowSizingLab29').installReleaseV2WindowSizingLab29();
   require('./bootstrap-0332');
   require('./services/releaseV2Lab').installReleaseV2Lab();
   require('./services/releaseV2AudioUxLab29').installReleaseV2AudioUxLab29();
