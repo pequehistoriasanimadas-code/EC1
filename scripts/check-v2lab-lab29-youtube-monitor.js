@@ -27,7 +27,22 @@ assert(/productionGpuBusy\(\)/.test(ui),'La cadencia reducida debe depender de l
 assert(/MONITOR_FPS\s*=\s*15/.test(baseMonitor),'renderer-lan-output conserva la superficie y cadencia base de 15 FPS');
 assert(baseMonitor.includes('productionGpuBusy()'),'El monitor base debe ceder durante carga GPU para que Lab.29 aplique el suplemento de 5 FPS');
 
+// Regresión de encuadre adaptativo: solo videos de espera y contenidos.
+const output=read('src/output.js');
+const standbyOutput=read('src/output-0331.js');
+const standbyCss=read('src/output-0331.css');
+const renderer0331=read('src/renderer-0331.js');
+assert(output.includes('applyAdaptiveVideoFit(cannedVideo)'),'Contenidos deben recalcular object-fit según proporción del video y del Output');
+assert(output.includes("cannedVideo.addEventListener('loadedmetadata'"),'Contenidos deben analizar dimensiones intrínsecas al cargar metadata');
+assert(standbyOutput.includes('applyAdaptiveVideoFit(video)'),'Standby debe recalcular object-fit según proporción del video y del Output');
+assert(standbyOutput.includes("video.addEventListener('loadedmetadata'"),'Standby debe analizar dimensiones intrínsecas al cargar metadata');
+assert(!output.includes('applyAdaptiveVideoFit(img)'),'Las imágenes de notas deben conservar cover + movimiento y quedar fuera del encuadre adaptativo de video');
+assert(/#standbyVideo\{object-fit:contain/.test(standbyCss),'Standby debe usar contain como fallback seguro hasta conocer la proporción del video');
+assert(renderer0331.includes('standbyFileName'),'La tarjeta de standby debe mostrar solo el nombre del archivo, no la ruta completa');
+assert(renderer0331.includes('Se reproduce en loop y se adapta automáticamente al formato 16:9 / 9:16 del Output.'),'La tarjeta de standby debe usar la explicación compacta aprobada');
+assert(!renderer0331.includes('Usa la misma transición configurada en Transiciones.'),'La tarjeta de standby no debe conservar la explicación técnica redundante');
+
 require('./check-v2lab-auto-ux-lab29');
 require('./check-v2lab-ux-regression-lab29');
 require('./check-v2lab-global-ui-ownership-lab29');
-console.log('Lab.29 YouTube persistence + single monitor adaptive cadence checks: OK');
+console.log('Lab.29 YouTube persistence + single monitor adaptive cadence + adaptive video framing checks: OK');
