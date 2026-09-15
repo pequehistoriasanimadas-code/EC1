@@ -16,6 +16,7 @@ const repairRelease=read('src/services/releaseV2UxRepairLab29.js');
 const queue=read('src/renderer-0332.js');
 const emission=read('src/renderer-0328.js');
 const patches=read('src/renderer-patches.js');
+const main=read('src/main.js');
 new Function(ui);new Function(cannedUi);
 
 for(const id of [
@@ -65,6 +66,12 @@ const authoritativeRefreshBridge=/baseRefreshAutomation\(s\)[\s\S]{0,180}__ecAut
 assert(explicitSnapshotHandoff||authoritativeRefreshBridge,'Un snapshot manual de refreshAutomation debe llegar también a la franja superior');
 assert(ui.includes('Number(b.target)'),'LISTAS debe seguir tomando el objetivo del snapshot autoritativo, no del valor visual del input');
 
+// OUTPUT también es un resumen derivado. Con la ventana cerrada debe reflejar el
+// formato guardado del perfil, no conservar el 16:9 inicial hasta abrir Output.
+assert(main.includes('function effectiveOutputState'),'Debe existir una fuente efectiva del estado Output que contemple el diseño guardado cuando la ventana está cerrada');
+assert(/ipcMain\.handle\('output:status',[\s\S]{0,220}effectiveOutputState\(\)/.test(main),'output:status debe devolver el formato/resolución efectivos incluso con Output cerrado');
+assert(/settings:save[\s\S]{0,2600}!outputReady\(\)[\s\S]{0,500}setOutputState/.test(main),'Guardar un formato con Output cerrado debe publicar el nuevo resumen para la franja superior');
+
 assert(css.includes('.ec-auto-operator-grid'),'Debe existir el grid principal del operador');
 assert(css.includes('grid-template-columns'),'Debe existir layout de dos columnas');
 assert(cannedCss.includes('repeat(8,minmax(0,1fr))'),'La franja superior ancha debe reservar ocho columnas incluyendo Anuncios');
@@ -76,4 +83,4 @@ assert(css.includes('.nav::before'),'La navegación debe usar una familia consis
 assert(css.includes('#ecAutoNowCard #ec28EmissionPanel .ec28-next{display:none!important}'),'Ahora al aire no debe duplicar el siguiente elemento fuera de la Cola');
 assert(!/\.queue-item[^\{]*::before|\.queue-type[^\{]*::before|\.queue-item[^\{]*\.ec-icon/.test(css),'Las tarjetas de cola no deben recibir iconos decorativos');
 
-console.log('check-v2lab-auto-ux-lab29: OK · Automático conserva su layout, sincroniza resumen vivo y mueve Anuncios junto a Contenidos/Promo sin duplicar controles');
+console.log('check-v2lab-auto-ux-lab29: OK · Automático conserva su layout, sincroniza resúmenes vivos y mueve Anuncios junto a Contenidos/Promo sin duplicar controles');
