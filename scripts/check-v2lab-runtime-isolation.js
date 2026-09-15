@@ -3,6 +3,7 @@ const fs=require('fs'),path=require('path'),os=require('os'),assert=require('ass
 const resilience=require(path.resolve(__dirname,'..','src','services','releaseV2CudaInstallResilienceLab29.js'));
 resilience.installReleaseV2CudaInstallResilienceLab29();
 const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES}=require(path.resolve(__dirname,'..','src','services','ttsLabRuntime.js'));
+const {selectGpuRequestIndex,gpuWorkerLimit}=require(path.resolve(__dirname,'..','src','services','automation0325.js'));
 const {CUDA_VALIDATE_TIMEOUT_MS}=resilience;
 
 function makePython(resources){
@@ -110,10 +111,32 @@ function makeEnginePackage(rt,id){
     const activeMarker=rtTimeout.readJson(rtTimeout.cudaMarker(rtTimeout.cudaRoot));
     assert(activeMarker?.validationPending!==true,'Después de una validación real correcta el runtime activo ya no debe quedar pendiente');
 
+    // Regression de rendimiento Chatterbox observada en RTX 3080: el primer
+    // arranque frío y las dos corridas posteriores todavía pueden estar
+    // calentando CUDA. El RTF estable debe medirse después de 3 warmups y no
+    // tomar como estable un 1.43 cuando el mismo worker caliente llega a ~0.9.
+    const benchData=path.join(base,'EC Automatic News Data chatterbox benchmark'),rtBench=new TTSLabRuntime({resourcesDir:resources,dataDir:benchData});
+    const rtfSequence=[4.32,1.49,1.43,0.95,0.91,0.89];let benchCalls=0;
+    rtBench.generate=async()=>{const rtf=rtfSequence[benchCalls]??0.90,idx=benchCalls++,file=path.join(rtBench.audioDir,`bench-${idx}.wav`);fs.writeFileSync(file,'wav');return{path:file,realtimeFactor:rtf,elapsedMs:Math.round(rtf*10000),durationSec:10,cudaPeakAllocatedMb:3200,cudaPeakReservedMb:4200,qwenRuntime:{}};};
+    const chatterBench=await rtBench.benchmark('chatterbox',{referenceVoiceId:'ref-test'});
+    assert.strictEqual(benchCalls,6,'Chatterbox debe ejecutar 3 warmups reales antes de las 3 corridas estables');
+    assert.strictEqual(Number(chatterBench.warmupRuns||0),3,'El resultado debe declarar 3 warmups de Chatterbox');
+    assert(Math.abs(Number(chatterBench.stableRealtimeFactor)-0.91)<0.001,`RTF estable debe representar worker caliente (~0.91), no ${chatterBench.stableRealtimeFactor}`);
+
+    // Regression de GPU SWAP: si hay AI y voz pendientes al mismo tiempo,
+    // conservar afinidad con el motor ya cargado para completar un bloque antes
+    // de intercambiar la VRAM. Esto evita AI -> matar -> voz -> matar por noticia.
+    assert.strictEqual(typeof gpuWorkerLimit,'function','GPU SWAP debe exponer una política global de tamaño de bloque');
+    const mixedQueue=[{kind:'ai'},{kind:'voice'},{kind:'ai'}];
+    assert.strictEqual(selectGpuRequestIndex(mixedQueue,0,2,{mode:'gpu-swap',lastKind:'ai',swapBurstCount:1,maxSwapBurst:4}),0,'GPU SWAP debe continuar el bloque AI mientras haya AI pendiente');
+    assert.strictEqual(gpuWorkerLimit('gpu-swap',0,15),4,'GPU SWAP debe poder preparar hasta 4 noticias por bloque');
+    assert.strictEqual(gpuWorkerLimit('gpu-coordinated',0,15),2,'GPU coordinada conserva el paralelismo actual');
+    assert.strictEqual(gpuWorkerLimit('gpu-coordinated',2,15),1,'GPU coordinada sigue reduciendo presión cuando hay backlog de voz');
+
     // The legacy slot is never deleted by v2 migration.
     fs.mkdirSync(rt.legacyCudaRoot,{recursive:true});fs.writeFileSync(path.join(rt.legacyCudaRoot,'legacy.keep'),'legacy');
     assert(fs.existsSync(path.join(rt.legacyCudaRoot,'legacy.keep')));
 
-    console.log('check-v2lab-runtime-isolation: OK · CUDA v2 transactional · cold-validation timeout resilient · candidate reuse · mutex · rollback · Unicode path · user data preserved');
+    console.log('check-v2lab-runtime-isolation: OK · CUDA v2 transactional · cold-validation timeout resilient · candidate reuse · Chatterbox warm benchmark · GPU SWAP batching · mutex · rollback · Unicode path · user data preserved');
   }finally{fs.rmSync(base,{recursive:true,force:true});}
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
