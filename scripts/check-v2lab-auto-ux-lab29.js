@@ -16,7 +16,6 @@ const repairRelease=read('src/services/releaseV2UxRepairLab29.js');
 const queue=read('src/renderer-0332.js');
 const emission=read('src/renderer-0328.js');
 const patches=read('src/renderer-patches.js');
-const main=read('src/main.js');
 new Function(ui);new Function(cannedUi);
 
 for(const id of [
@@ -66,11 +65,13 @@ const authoritativeRefreshBridge=/baseRefreshAutomation\(s\)[\s\S]{0,180}__ecAut
 assert(explicitSnapshotHandoff||authoritativeRefreshBridge,'Un snapshot manual de refreshAutomation debe llegar también a la franja superior');
 assert(ui.includes('Number(b.target)'),'LISTAS debe seguir tomando el objetivo del snapshot autoritativo, no del valor visual del input');
 
-// OUTPUT también es un resumen derivado. Con la ventana cerrada debe reflejar el
-// formato guardado del perfil, no conservar el 16:9 inicial hasta abrir Output.
-assert(main.includes('function effectiveOutputState'),'Debe existir una fuente efectiva del estado Output que contemple el diseño guardado cuando la ventana está cerrada');
-assert(/ipcMain\.handle\('output:status',[\s\S]{0,220}effectiveOutputState\(\)/.test(main),'output:status debe devolver el formato/resolución efectivos incluso con Output cerrado');
-assert(/settings:save[\s\S]{0,2600}!outputReady\(\)[\s\S]{0,500}setOutputState/.test(main),'Guardar un formato con Output cerrado debe publicar el nuevo resumen para la franja superior');
+// OUTPUT también es un resumen derivado. Cuando la ventana está cerrada, la
+// franja debe reflejar inmediatamente el formato configurado en Diseño de emisión.
+assert(ui.includes('function configuredOutputResolution'),'Debe existir una resolución configurada para representar Output cerrado');
+assert(/configuredOutputResolution[\s\S]{0,300}#outputFormat/.test(ui),'La resolución cerrada debe leer el formato configurado visible del perfil');
+assert(/const configured=!s\.open\?configuredOutputResolution\(\):''/.test(ui),'Output cerrado debe preferir el formato configurado y Output abierto el estado real');
+assert(ui.includes('installOutputFormatSync'),'Debe existir sincronización inmediata al cambiar el formato de emisión');
+assert(/format\.addEventListener\('change',sync\)[\s\S]{0,120}format\.addEventListener\('input',sync\)/.test(ui),'Cambiar 16:9/9:16 debe refrescar la franja sin esperar a abrir Output');
 
 assert(css.includes('.ec-auto-operator-grid'),'Debe existir el grid principal del operador');
 assert(css.includes('grid-template-columns'),'Debe existir layout de dos columnas');
