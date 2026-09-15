@@ -15,6 +15,7 @@ const release=read('src/services/releaseV2Lab29.js');
 const repairRelease=read('src/services/releaseV2UxRepairLab29.js');
 const queue=read('src/renderer-0332.js');
 const emission=read('src/renderer-0328.js');
+const patches=read('src/renderer-patches.js');
 new Function(ui);new Function(cannedUi);
 
 for(const id of [
@@ -55,6 +56,13 @@ assert(ui.includes("window.ECAPI?.on?.('automation:state'")||ui.includes("window
 assert(ui.includes("window.ECAPI?.on?.('output:state'")||ui.includes("window.ECAPI.on?.('output:state'"),'Debe sincronizar el resumen de Output desde output:state');
 assert(ui.includes("profile:changed")&&cannedUi.includes("profile:changed"),'Debe rehidratar idempotentemente al cambiar de perfil');
 
+// El resumen Listas/Autonomía es derivado. Los cambios de configuración automática
+// también obtienen un snapshot fresco sin que el backend tenga que emitir otro
+// automation:state; ese snapshot debe llegar explícitamente al operador Lab29.
+assert(ui.includes('window.__ecAutoUxLab29SyncAutomation'),'El UX Automático debe exponer una única entrada para sincronizar snapshots manuales');
+assert(/automationStatus\(\);\s*refreshAutomation\(s\);\s*window\.__ecAutoUxLab29SyncAutomation\?\.\(s\)/.test(patches),'Guardar ajustes automáticos debe sincronizar la franja con el snapshot fresco del backend');
+assert(ui.includes('Number(b.target)'),'LISTAS debe seguir tomando el objetivo del snapshot autoritativo, no del valor visual del input');
+
 assert(css.includes('.ec-auto-operator-grid'),'Debe existir el grid principal del operador');
 assert(css.includes('grid-template-columns'),'Debe existir layout de dos columnas');
 assert(cannedCss.includes('repeat(8,minmax(0,1fr))'),'La franja superior ancha debe reservar ocho columnas incluyendo Anuncios');
@@ -66,4 +74,4 @@ assert(css.includes('.nav::before'),'La navegación debe usar una familia consis
 assert(css.includes('#ecAutoNowCard #ec28EmissionPanel .ec28-next{display:none!important}'),'Ahora al aire no debe duplicar el siguiente elemento fuera de la Cola');
 assert(!/\.queue-item[^\{]*::before|\.queue-type[^\{]*::before|\.queue-item[^\{]*\.ec-icon/.test(css),'Las tarjetas de cola no deben recibir iconos decorativos');
 
-console.log('check-v2lab-auto-ux-lab29: OK · Automático conserva su layout y mueve Anuncios junto a Contenidos/Promo sin duplicar controles');
+console.log('check-v2lab-auto-ux-lab29: OK · Automático conserva su layout, sincroniza resumen vivo y mueve Anuncios junto a Contenidos/Promo sin duplicar controles');
