@@ -1,0 +1,70 @@
+/* Lab.29 · compactación final de Diseño de emisión + Salida */
+
+/* Diseño de emisión: barra única sobre la preview. */
+#ecEmissionV2PreviewCard .ec-v2-preview-legacy-head{display:none!important}
+#ecEmissionV2PreviewCard .ec-v2-preview-toolbar{display:grid;grid-template-columns:auto minmax(220px,1fr) auto;gap:10px;align-items:center;margin-bottom:10px;padding:6px;background:#111;border:1px solid #303030;border-radius:10px;min-width:0}
+#ecEmissionV2PreviewCard .ec-v2-format-buttons{display:grid;grid-template-columns:repeat(2,minmax(72px,1fr));gap:5px;min-width:160px}
+#ecEmissionV2PreviewCard .ec-v2-format-buttons button{min-height:36px;padding:8px 14px;background:#252525;color:#bbb;border:1px solid #383838}
+#ecEmissionV2PreviewCard .ec-v2-format-buttons button.active{background:#f7c600!important;color:#080808!important;border-color:#f7c600!important;box-shadow:0 0 0 1px #f7c600 inset}
+#ecEmissionV2PreviewCard .ec-v2-mode-bar{margin:0!important;padding:0!important;background:transparent!important;border:0!important;border-radius:0!important;gap:5px!important;min-width:0}
+#ecEmissionV2PreviewCard .ec-v2-mode-bar button{min-height:36px}
+#ecEmissionV2PreviewCard #designResolution{justify-self:end;margin:0;white-space:nowrap}
+#tab-emission .ec-v2-format-source-hidden{display:none!important}
+
+#ecEmissionV2PreviewCard .ec-v2-vertical-quick-controls{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);gap:10px;align-items:center;margin:0 0 10px;padding:8px 10px;background:#111;border:1px solid #303030;border-radius:10px;min-width:0}
+#ecEmissionV2PreviewCard .ec-v2-vertical-quick-controls.hidden{display:none!important}
+#ecEmissionV2PreviewCard #verticalSafeOptions.ec-v2-quick-safe{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;min-width:0}
+#ecEmissionV2PreviewCard #verticalSafeOptions.ec-v2-quick-safe.hidden{display:none!important}
+#ecEmissionV2PreviewCard #verticalSafeOptions.ec-v2-quick-safe .switch-row{margin:0!important;padding:8px 10px!important;min-height:48px;border:1px solid #2d2d2d;border-radius:8px;background:#151515}
+#ecEmissionV2PreviewCard #verticalSafeOptions.ec-v2-quick-safe .switch-row small{display:none}
+#ecEmissionV2PreviewCard #verticalVideoBackgroundOptions.ec-v2-quick-bg{margin:0!important;min-width:0}
+#ecEmissionV2PreviewCard #verticalVideoBackgroundOptions.ec-v2-quick-bg.ec-v2-vertical-bg-compact{grid-template-columns:minmax(120px,.75fr) minmax(0,1fr) auto!important;padding:8px 10px!important;background:#151515!important;border:1px solid #2d2d2d!important;border-radius:8px!important}
+
+/* Salida: resumen compacto y un solo control global para abrir Output. */
+#tab-output .ec-output-summary-compact{padding-top:14px;padding-bottom:14px}
+#tab-output .ec-output-summary-compact .section-head{margin-bottom:9px}
+#tab-output .ec-output-summary-compact .section-head p.note{margin:3px 0 0}
+#tab-output .ec-output-summary-compact .ec-output-flow{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,2.3fr);gap:10px;align-items:stretch}
+#tab-output .ec-output-summary-compact .ec-output-arrow{display:none!important}
+#tab-output .ec-output-summary-compact .ec-output-master,#tab-output .ec-output-summary-compact .ec-output-destinations>div{padding:10px 11px}
+#tab-output .ec-output-summary-compact .ec-output-destinations{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+
+#tab-output .ec-output-permissions-compact{padding-top:12px;padding-bottom:12px}
+#tab-output .ec-output-permissions-compact .section-head{margin-bottom:6px}
+#tab-output .ec-output-permissions-compact .section-head p.note{display:none}
+#tab-output .ec-output-permissions-compact .ec-network-permissions-grid{margin:6px 0 8px;gap:7px}
+#tab-output .ec-output-permissions-compact .ec-network-permissions-grid>div{padding:7px 9px}
+#tab-output .ec-output-permissions-compact .buttons{margin:6px 0 0}
+#tab-output .ec-output-permissions-compact #ecNetworkPermissionsInfo{margin:7px 0 0;line-height:1.3}
+
+#tab-output .ec-output-lan-compact,#tab-output .ec-output-ndi-compact{padding-top:14px;padding-bottom:14px}
+#tab-output .ec-output-lan-compact .section-head,#tab-output .ec-output-ndi-compact .section-head{margin-bottom:8px}
+#tab-output .ec-output-lan-compact .section-head p.note,#tab-output .ec-output-ndi-compact .section-head p.note{display:none}
+#tab-output .ec-output-lan-compact .switch-row,#tab-output .ec-output-ndi-compact .switch-row{margin-top:6px;padding-top:8px;padding-bottom:8px}
+#tab-output .ec-output-lan-compact .switch-row small,#tab-output .ec-output-ndi-compact>.switch-row small{display:none}
+#tab-output .ec-output-lan-compact .form-grid,#tab-output .ec-output-ndi-compact .form-grid{margin-top:8px}
+#tab-output .ec-output-lan-compact #ecLanInfo,#tab-output .ec-output-ndi-compact #ecNdiInfo{margin:8px 0 0;line-height:1.3}
+
+#tab-output .ec-output-lan-advanced,#tab-output .ec-output-ndi-advanced{margin-top:10px;border:1px solid #303030;border-radius:9px;background:#121212}
+#tab-output .ec-output-lan-advanced>summary,#tab-output .ec-output-ndi-advanced>summary{cursor:pointer;padding:10px 12px;font-weight:700;color:#bbb}
+#tab-output .ec-output-advanced-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px;padding:0 12px 12px;min-width:0}
+#tab-output .ec-output-advanced-body>label,#tab-output .ec-output-advanced-body>.switch-row{margin:0!important;min-width:0}
+#tab-output .ec-output-advanced-body>.buttons,#tab-output .ec-output-advanced-body>.ec-ndi-attribution{grid-column:1/-1;margin:0}
+#tab-output .ec-output-advanced-body>.switch-row small{display:block}
+#tab-output #ecNetworkPermissionsHost.ec-output-wide{grid-column:1/-1}
+
+@media(max-width:1180px){
+  #ecEmissionV2PreviewCard .ec-v2-preview-toolbar{grid-template-columns:auto minmax(0,1fr) auto}
+  #ecEmissionV2PreviewCard .ec-v2-vertical-quick-controls{grid-template-columns:1fr}
+  #tab-output .ec-output-summary-compact .ec-output-flow{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  #ecEmissionV2PreviewCard .ec-v2-preview-toolbar{grid-template-columns:1fr}
+  #ecEmissionV2PreviewCard .ec-v2-format-buttons{min-width:0}
+  #ecEmissionV2PreviewCard #designResolution{justify-self:start}
+  #ecEmissionV2PreviewCard #verticalSafeOptions.ec-v2-quick-safe{grid-template-columns:1fr}
+  #ecEmissionV2PreviewCard #verticalVideoBackgroundOptions.ec-v2-quick-bg.ec-v2-vertical-bg-compact{grid-template-columns:minmax(0,1fr) auto!important}
+  #tab-output .ec-output-summary-compact .ec-output-destinations{grid-template-columns:1fr}
+  #tab-output .ec-output-advanced-body{grid-template-columns:1fr}
+  #tab-output .ec-output-advanced-body>.buttons,#tab-output .ec-output-advanced-body>.ec-ndi-attribution{grid-column:auto}
+}
