@@ -1,5 +1,7 @@
 'use strict';
 const fs=require('fs');
+const os=require('os');
+const path=require('path');
 const assert=require('assert');
 const read=file=>fs.readFileSync(file,'utf8');
 
@@ -10,6 +12,7 @@ assert((pkg.build.files||[]).includes('scripts/check-v2lab-stabilization-lab28.j
 
 for(const file of [
   'src/services/releaseV2Stabilization.js',
+  'src/services/releaseV2GlobalOptimizationLab29.js',
   'src/renderer-stabilization-lab28.js',
   'src/control-stabilization-lab28.css',
   'src/output-stabilization-lab28.js',
@@ -20,22 +23,51 @@ for(const file of [
 
 const boot=read('src/bootstrap-v2lab.js');
 assert(boot.includes("releaseV2Stabilization")&&boot.includes('installReleaseV2Stabilization'),'Bootstrap debe instalar la capa de estabilización Lab.28');
+assert(boot.includes("releaseV2GlobalOptimizationLab29")&&boot.includes('installMachineGlobalOptimizationLab29'),'Bootstrap debe instalar el puente de optimización global Lab.29');
+assert(boot.indexOf('installReleaseV2Stabilization')<boot.indexOf('installMachineGlobalOptimizationLab29'),'El puente global debe instalarse después de Lab.28 para reemplazar su IPC por perfil');
 assert(boot.includes("releaseV2Lab29")&&boot.includes('installReleaseV2Lab29'),'Bootstrap debe instalar la corrección Lab.29 después de Lab.28');
 
 const stabilization=read('src/services/releaseV2Stabilization.js');
-assert(stabilization.includes("optimization-lab28.json"),'La optimización debe tener estado asociado al perfil activo');
+assert(stabilization.includes("optimization-lab28.json"),'La optimización debe mantener sidecar de compatibilidad asociado al perfil activo');
 assert(stabilization.includes('profileDir(profileId)'),'El sidecar de optimización debe guardarse dentro del perfil');
-assert(stabilization.includes("optimization-v2:status")&&stabilization.includes("optimization-v2:commit")&&stabilization.includes("optimization-v2:clear"),'Lab.28 debe reemplazar los IPC de optimización por la versión por perfil');
-assert(stabilization.includes('function globalProductionProfile'),'Debe existir una fuente canónica global del perfil de producción por computadora');
-assert(stabilization.includes('promoteCompatibleSideProfile'),'Debe poder recuperar una optimización válida de Lab28 anterior y promoverla al estado global');
-assert(stabilization.includes('syncActiveProfileOptimization'),'Un perfil nuevo o recién activado debe vincularse al perfil global compatible sin repetir benchmark');
-assert(stabilization.includes('atomicJson(fidelity.profileFile(base),profile)'),'Optimizar debe persistir el perfil de producción global además del vínculo del perfil activo');
-assert(stabilization.includes('global-machine-profile'),'El sidecar por perfil debe registrar que reutiliza la optimización global de esta computadora');
+assert(stabilization.includes("optimization-v2:status")&&stabilization.includes("optimization-v2:commit")&&stabilization.includes("optimization-v2:clear"),'Lab.28 debe conservar IPC base para que Lab.29 pueda reemplazarlo');
+const globalOptimization=read('src/services/releaseV2GlobalOptimizationLab29.js');
+assert(globalOptimization.includes('function globalProductionProfile'),'Debe existir una fuente canónica global del perfil de producción por computadora');
+assert(globalOptimization.includes('promoteCompatibleSideProfile'),'Debe poder recuperar una optimización válida de Lab28 anterior y promoverla al estado global');
+assert(globalOptimization.includes('syncActiveProfileOptimization'),'Un perfil nuevo o recién activado debe vincularse al perfil global compatible sin repetir benchmark');
+assert(globalOptimization.includes('atomicJson(fidelity.profileFile(base),profile)'),'Optimizar debe persistir el perfil de producción global además del vínculo del perfil activo');
+assert(globalOptimization.includes('global-machine-profile'),'El sidecar por perfil debe registrar que reutiliza la optimización global de esta computadora');
+assert(globalOptimization.includes('pending:!!profile?.localAi?.required'),'Un LocalRuntime todavía no iniciado no debe convertir una optimización válida en SIN OPTIMIZAR');
+assert(globalOptimization.includes('perfil de otra computadora'),'La reutilización debe bloquear fingerprints de otra máquina');
 assert(stabilization.includes('publicFallback')&&stabilization.includes("publicOnly:true"),'La preparación debe usar fallback público cuando toca exclusiva y no hay una elegible');
 assert(stabilization.includes('No hay exclusiva ni noticia pública elegible'),'El productor solo debe esperar cuando tampoco exista una pública');
 assert(stabilization.includes('youtubePromo')&&stabilization.includes('ctaText'),'La promo real del contenido debe llevar el CTA configurado');
 assert(/mediaRole\|\|''\)[\s\S]*content/.test(stabilization)||stabilization.includes("role==='content'"),'La promo debe limitarse a CONTENIDOS');
 assert(stabilization.includes("role==='ad'")&&stabilization.includes('youtubePromo:null'),'Los ANUNCIOS deben limpiar cualquier promo de YouTube');
+
+// Regresión real: una optimización hecha en El Comercio debe sobrevivir al crear/activar Gestión.
+const {getProfileManager}=require('../src/services/profileManager0329');
+const fidelity=require('../src/services/releaseV2ProductionFidelity');
+const stabilizationApi=require('../src/services/releaseV2Stabilization');
+const globalApi=require('../src/services/releaseV2GlobalOptimizationLab29');
+const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'gec-global-optimization-lab29-'));
+try{
+  const m=getProfileManager(tmp),localConfig={label:'RTX 3080',ctx:4096,gpuLayers:99,batch:512,ubatch:192,threads:6,parallel:1,prio:-1,poll:0,warmup:false};
+  const defaults={ai:{primary:'local',backup1:'claude',backup2:'gemini',localAutoTuned:true,localTunedConfig:localConfig,lastLocalBenchmark:{tokensPerSec:108.2,coexistenceMode:'gpu-coordinated',coordinatedValidated:true}},tts:{engine:'chatterbox',referenceVoiceId:'LOCUTOR',engineParams:{chatterbox:{}},speed:1},visual:{},rssFeeds:[],rssPartialClose:{},exclusiveClose:{},canned:{},documents:{processed:{}},automation:{}};
+  const comercio=m.create({name:'El Comercio',color:'#F7C600',defaults}),gestion=m.create({name:'Gestión',color:'#EC4899',defaults});
+  const settings={...defaults,optimization0321:{version:'2.0-lab.25',fingerprint:'THIS-PC',hardwareLabel:'RTX 3080 · 12 GB',voice:{medianRtf:.68},local:{coexistenceMode:'gpu-coordinated'}}};
+  const profile=fidelity.buildProfile(settings,{fingerprint:'THIS-PC',hardwareLabel:'RTX 3080 · 12 GB',localResult:{recommendedConfig:localConfig,recommendedId:'gpu99',recommendedLabel:'GPU completa',summary:{tokensPerSec:108.2,coexistenceMode:'gpu-coordinated',coordinatedValidated:true}},ttsResult:{stableRealtimeFactor:.68,worstRealtimeFactor:.68},pipelineMode:'gpu-coordinated',validated:true});
+  const oldSide=stabilizationApi.sideFile(tmp,comercio.id);fs.mkdirSync(path.dirname(oldSide),{recursive:true});fs.writeFileSync(oldSide,JSON.stringify({schemaVersion:1,cleared:false,optimization0321:settings.optimization0321,productionProfile:profile,source:'lab28-profile-optimizer'},null,2));
+  m.activate(gestion.id);
+  assert(!fs.existsSync(fidelity.profileFile(tmp)),'La fixture debe empezar como #859: solo sidecar por perfil, sin canónico global');
+  const promoted=globalApi.promoteCompatibleSideProfile(tmp,settings);assert(promoted&&promoted.id===profile.id,'Gestión debe recuperar la optimización compatible creada antes en El Comercio');
+  assert(fs.existsSync(fidelity.profileFile(tmp)),'La migración debe crear active-production-profile.json global');
+  const resolved=globalApi.globalProductionProfile(tmp,settings);assert(resolved.compatible&&resolved.profile?.id===profile.id,'El perfil global recuperado debe quedar compatible en la misma computadora');
+  const linked=globalApi.syncActiveProfileOptimization(tmp,settings,resolved.profile);assert(linked?.productionProfile?.id===profile.id&&linked?.source==='global-machine-profile','Gestión debe quedar vinculada al global sin benchmark nuevo');
+  const managementSide=JSON.parse(fs.readFileSync(stabilizationApi.sideFile(tmp,gestion.id),'utf8'));assert.strictEqual(managementSide.productionProfile.id,profile.id);assert.strictEqual(managementSide.optimization0321.fingerprint,'THIS-PC');
+  const otherMachine=globalApi.globalProductionProfile(tmp,{...settings,optimization0321:{...settings.optimization0321,fingerprint:'OTHER-PC'}},{allowPromotion:false});assert.strictEqual(otherMachine.compatible,false,'No debe reutilizarse el perfil si cambia la computadora');
+  const otherEngine=globalApi.globalProductionProfile(tmp,{...settings,tts:{...settings.tts,engine:'qwen3tts',engineParams:{qwen3tts:{}}}},{allowPromotion:false});assert.strictEqual(otherEngine.compatible,false,'Cambiar motor TTS debe exigir reoptimización');
+}finally{fs.rmSync(tmp,{recursive:true,force:true});}
 
 const monitor=read('src/renderer-lan-output.js');
 assert(/MONITOR_FPS\s*=\s*15/.test(monitor),'Monitor interno base debe quedar en 15 FPS');
