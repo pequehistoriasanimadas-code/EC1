@@ -101,12 +101,14 @@ function makeEnginePackage(rt,id){
     assert(activeMarker?.validationPending!==true,'Después de una validación real correcta el runtime activo ya no debe quedar pendiente');
 
     const benchData=path.join(base,'EC Automatic News Data chatterbox benchmark'),rtBench=new TTSLabRuntime({resourcesDir:resources,dataDir:benchData});
-    const rtfSequence=[4.32,1.49,1.43,0.95,0.91,0.89];let benchCalls=0;
-    rtBench.generate=async()=>{const rtf=rtfSequence[benchCalls]??0.90,idx=benchCalls++,file=path.join(rtBench.audioDir,`bench-${idx}.wav`);fs.writeFileSync(file,'wav');return{path:file,realtimeFactor:rtf,elapsedMs:Math.round(rtf*10000),durationSec:10,cudaPeakAllocatedMb:3200,cudaPeakReservedMb:4200,qwenRuntime:{}};};
+    // Control A/B basado en la Lab25 reoptimizada en la RTX 3080: arranque frío alto y worker caliente ~0.65.
+    const rtfSequence=[4.57,0.65,0.64,0.66];let benchCalls=0;
+    rtBench.generate=async()=>{const rtf=rtfSequence[benchCalls]??0.65,idx=benchCalls++,file=path.join(rtBench.audioDir,`bench-${idx}.wav`);fs.writeFileSync(file,'wav');return{path:file,realtimeFactor:rtf,elapsedMs:Math.round(rtf*10000),durationSec:10,cudaPeakAllocatedMb:3200,cudaPeakReservedMb:4200,qwenRuntime:{}};};
     const chatterBench=await rtBench.benchmark('chatterbox',{referenceVoiceId:'ref-test'});
-    assert.strictEqual(benchCalls,6,'Chatterbox debe ejecutar 3 warmups reales antes de las 3 corridas estables');
-    assert.strictEqual(Number(chatterBench.warmupRuns||0),3,'El resultado debe declarar 3 warmups de Chatterbox');
-    assert(Math.abs(Number(chatterBench.stableRealtimeFactor)-0.91)<0.001,`RTF estable debe representar worker caliente (~0.91), no ${chatterBench.stableRealtimeFactor}`);
+    assert.strictEqual(benchCalls,4,'Chatterbox A/B debe ejecutar el benchmark base: 1 warmup + 3 corridas estables');
+    assert.strictEqual(Number(chatterBench.warmupRuns||0),0,'El wrapper Lab29 de warmups extra no debe estar instalado en la build A/B');
+    assert(Math.abs(Number(chatterBench.coldStartRealtimeFactor)-4.57)<0.001,`El arranque frío debe permanecer separado (~4.57), no ${chatterBench.coldStartRealtimeFactor}`);
+    assert(Math.abs(Number(chatterBench.stableRealtimeFactor)-0.65)<0.001,`RTF estable debe usar la mediana de las 3 corridas calientes (~0.65), no ${chatterBench.stableRealtimeFactor}`);
 
     assert.strictEqual(typeof gpuWorkerLimit,'function','GPU SWAP debe exponer una política global de tamaño de bloque');
     const mixedQueue=[{kind:'ai'},{kind:'voice'},{kind:'ai'}];
@@ -118,6 +120,6 @@ function makeEnginePackage(rt,id){
     fs.mkdirSync(rt.legacyCudaRoot,{recursive:true});fs.writeFileSync(path.join(rt.legacyCudaRoot,'legacy.keep'),'legacy');
     assert(fs.existsSync(path.join(rt.legacyCudaRoot,'legacy.keep')));
 
-    console.log('check-v2lab-runtime-isolation: OK · CUDA v2 transactional · cold-validation timeout resilient · candidate reuse · Chatterbox warm benchmark · GPU SWAP batching · mutex · rollback · Unicode path · user data preserved');
+    console.log('check-v2lab-runtime-isolation: OK · CUDA v2 transactional · cold-validation timeout resilient · candidate reuse · Chatterbox Lab25 base benchmark A/B · GPU SWAP batching · mutex · rollback · Unicode path · user data preserved');
   }finally{fs.rmSync(base,{recursive:true,force:true});}
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
