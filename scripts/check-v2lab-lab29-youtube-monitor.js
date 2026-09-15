@@ -49,6 +49,7 @@ assert(finalRenderer.includes('Se reproduce en loop y se adapta automáticamente
 assert(finalRenderer.includes("card.querySelectorAll('p.note').forEach(n=>n.remove())"),'La capa final debe retirar las explicaciones redundantes anteriores');
 assert(!finalRenderer.includes('Usa la misma transición configurada en Transiciones.'),'La tarjeta final no debe reinsertar la explicación técnica redundante');
 
+require('./check-v2lab-youtube-profile-capability-lab29');
 require('./check-v2lab-auto-ux-lab29');
 require('./check-v2lab-ux-regression-lab29');
 require('./check-v2lab-global-ui-ownership-lab29');
