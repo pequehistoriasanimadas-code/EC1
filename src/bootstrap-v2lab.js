@@ -28,6 +28,7 @@ if(!gotLock){app.quit();}else{
   require('./bootstrap-0332');
   require('./services/releaseV2Lab').installReleaseV2Lab();
   require('./services/releaseV2CudaInstallResilienceLab29').installReleaseV2CudaInstallResilienceLab29();
+  require('./services/releaseV2ChatterboxPerformanceLab29').installReleaseV2ChatterboxPerformanceLab29();
   require('./services/releaseV2AudioUxLab29').installReleaseV2AudioUxLab29();
   require('./services/releaseV2Optimization').installV2Optimization();
   require('./services/releaseV2ProductionFidelity').installV2ProductionFidelity();
