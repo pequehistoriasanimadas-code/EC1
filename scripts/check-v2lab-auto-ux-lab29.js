@@ -60,7 +60,9 @@ assert(ui.includes("profile:changed")&&cannedUi.includes("profile:changed"),'Deb
 // también obtienen un snapshot fresco sin que el backend tenga que emitir otro
 // automation:state; ese snapshot debe llegar explícitamente al operador Lab29.
 assert(ui.includes('window.__ecAutoUxLab29SyncAutomation'),'El UX Automático debe exponer una única entrada para sincronizar snapshots manuales');
-assert(/automationStatus\(\);\s*refreshAutomation\(s\);\s*window\.__ecAutoUxLab29SyncAutomation\?\.\(s\)/.test(patches),'Guardar ajustes automáticos debe sincronizar la franja con el snapshot fresco del backend');
+const explicitSnapshotHandoff=/automationStatus\(\);\s*refreshAutomation\(s\);\s*window\.__ecAutoUxLab29SyncAutomation\?\.\(s\)/.test(patches);
+const authoritativeRefreshBridge=/baseRefreshAutomation\(s\)[\s\S]{0,180}__ecAutoUxLab29SyncAutomation\?\.\(s\)/.test(ui)&&ui.includes('installAutomationRefreshBridge');
+assert(explicitSnapshotHandoff||authoritativeRefreshBridge,'Un snapshot manual de refreshAutomation debe llegar también a la franja superior');
 assert(ui.includes('Number(b.target)'),'LISTAS debe seguir tomando el objetivo del snapshot autoritativo, no del valor visual del input');
 
 assert(css.includes('.ec-auto-operator-grid'),'Debe existir el grid principal del operador');
