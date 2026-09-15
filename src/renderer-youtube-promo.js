@@ -3,7 +3,7 @@
   if(window.__ecYoutubePromoLab27Installed)return;
   if(!window.ECAPI||!document.querySelector('#tab-canned')||!window.__ec0331RendererInstalled){setTimeout(installYoutubePromoLab27,120);return;}
   window.__ecYoutubePromoLab27Installed=true;
-  const q=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const q=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let currentSettings=null,lastScan=null,lastAutomation=null,renderBusy=false,modalItem=null,youtubeCapabilityObserver=null,youtubeCapabilityTimer=null,youtubeCapabilityRecoveries=[];
   const leadOptions='<option value="5">5 s</option><option value="7">7 s</option><option value="10">10 s</option>';
   const tell=msg=>{try{if(typeof status==='function')status(msg);}catch{};};
