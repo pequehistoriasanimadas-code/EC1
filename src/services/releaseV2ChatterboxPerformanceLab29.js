@@ -114,6 +114,6 @@ function installGpuSwapBatching(){
   if(typeof baseSnapshot==='function')p.snapshot=function(...args){const out=baseSnapshot.apply(this,args);if(this.coexistenceMode?.()==='gpu-swap'&&out?.processing){out.processing.pipelineMode=`staggered-${GPU_SWAP_BATCH_SIZE}-gpu-swap`;out.processing.gpuSwapBatchSize=GPU_SWAP_BATCH_SIZE;out.processing.gpuSwapLastKind=String(this.__ecGpuSwapLastKind||'');out.processing.gpuSwapBurstCount=Number(this.__ecGpuSwapBurstCount||0);}return out;};
 }
 
-function installReleaseV2ChatterboxPerformanceLab29(){installBenchmarkPolicy();installGpuSwapBatching();}
+function installReleaseV2ChatterboxPerformanceLab29(){installGpuSwapBatching();}
 
 module.exports={CHATTERBOX_WARMUP_RUNS,GPU_SWAP_BATCH_SIZE,gpuWorkerLimit,selectGpuRequestIndex,installReleaseV2ChatterboxPerformanceLab29};
