@@ -193,9 +193,24 @@
     return true;
   }
 
+  function configuredOutputResolution(){
+    const format=String(q('#outputFormat')?.value||globalThis.settings?.visual?.output?.format||'').trim();
+    if(format==='9:16')return'1080×1920';
+    if(format==='16:9')return'1920×1080';
+    return'';
+  }
   function renderOutput(s=lastOutput){
-    if(!s)return;lastOutput=s;const out=q('#ecAutoOutputValue');
-    if(out)out.textContent=s.resolution||(Number(s.width)>0&&Number(s.height)>0?`${Number(s.width)}×${Number(s.height)}`:(s.format==='9:16'?'1080×1920':'1920×1080'));
+    if(!s)s={open:false};lastOutput=s;const out=q('#ecAutoOutputValue');if(!out)return;
+    const configured=!s.open?configuredOutputResolution():'';
+    out.textContent=configured||s.resolution||(s.format==='9:16'?'1080×1920':'1920×1080');
+  }
+  function installOutputFormatSync(){
+    const format=q('#outputFormat');if(!format)return false;
+    if(format.dataset.ecAutoOutputSync==='1')return true;
+    format.dataset.ecAutoOutputSync='1';
+    const sync=()=>renderOutput(lastOutput||{open:false});
+    format.addEventListener('change',sync);format.addEventListener('input',sync);
+    return true;
   }
 
   async function hydrate(){
@@ -206,14 +221,14 @@
   function installLayout(){
     if(!prerequisites())return false;
     loadCss();const tab=q('#tab-auto'),cols=ensureMainColumns();if(!cols)return false;
-    ensureOperatorStrip(tab);ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);updateAudit();
+    ensureOperatorStrip(tab);ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);installOutputFormatSync();updateAudit();
     return true;
   }
 
   function reconcileLateNodes(){
     if(!window.__ecAutoUxLab29Installed)return;
     const tab=q('#tab-auto'),cols=ensureMainColumns();
-    if(cols){ensureOperatorStrip(tab);ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);updateAudit();}
+    if(cols){ensureOperatorStrip(tab);ensureQueue(cols.left);ensureBottomSettings(cols.left);ensureRight(cols.right);installOutputFormatSync();updateAudit();}
   }
 
   function scheduleLateReconcile(){
@@ -223,7 +238,7 @@
 
   function watchLateNodes(){
     if(lateObserver||typeof MutationObserver!=='function'||!document.body)return;
-    const selector='#ecLanMonitorCard,#ecYoutubePromoEnabled,#cannedEnabled,#ec28EmissionPanel,#sessionCounters,#exclusiveSchedule0324,#ec28EmissionNext';
+    const selector='#ecLanMonitorCard,#ecYoutubePromoEnabled,#cannedEnabled,#ec28EmissionPanel,#sessionCounters,#exclusiveSchedule0324,#ec28EmissionNext,#outputFormat';
     lateObserver=new MutationObserver(records=>{
       for(const record of records){
         for(const node of record.addedNodes){
@@ -242,13 +257,13 @@
 
   function attempt(){
     if(installLayout()){
-      window.__ecAutoUxLab29Installed=true;installAutomationRefreshBridge();clearTimeout(retryTimer);watchLateNodes();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();return;
+      window.__ecAutoUxLab29Installed=true;installAutomationRefreshBridge();installOutputFormatSync();clearTimeout(retryTimer);watchLateNodes();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();return;
     }
     if(retryCount++<160)retryTimer=setTimeout(attempt,150);
   }
 
   window.ECAPI?.on?.('automation:state',s=>{lastAutomation=s;if(!window.__ecAutoUxLab29Installed)attempt();else scheduleLateReconcile();renderAutomation(s);});
   window.ECAPI?.on?.('output:state',s=>{lastOutput=s;if(!window.__ecAutoUxLab29Installed)attempt();else scheduleLateReconcile();renderOutput(s);});
-  window.ECAPI?.on?.('profile:changed',()=>setTimeout(()=>{reconcileLateNodes();installAutomationRefreshBridge();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();},260));
+  window.ECAPI?.on?.('profile:changed',()=>setTimeout(()=>{reconcileLateNodes();installAutomationRefreshBridge();installOutputFormatSync();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();},260));
   attempt();
 })();
