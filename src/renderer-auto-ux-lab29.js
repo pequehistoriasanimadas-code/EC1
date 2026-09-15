@@ -179,6 +179,20 @@
     syncEmissionControlState(s);
   }
 
+  window.__ecAutoUxLab29SyncAutomation=s=>renderAutomation(s);
+  function installAutomationRefreshBridge(){
+    if(window.__ecAutoUxLab29RefreshBridge)return true;
+    if(typeof refreshAutomation!=='function')return false;
+    const baseRefreshAutomation=refreshAutomation;
+    refreshAutomation=function(s){
+      const result=baseRefreshAutomation(s);
+      window.__ecAutoUxLab29SyncAutomation?.(s);
+      return result;
+    };
+    window.__ecAutoUxLab29RefreshBridge=true;
+    return true;
+  }
+
   function renderOutput(s=lastOutput){
     if(!s)return;lastOutput=s;const out=q('#ecAutoOutputValue');
     if(out)out.textContent=s.resolution||(Number(s.width)>0&&Number(s.height)>0?`${Number(s.width)}×${Number(s.height)}`:(s.format==='9:16'?'1080×1920':'1920×1080'));
@@ -228,13 +242,13 @@
 
   function attempt(){
     if(installLayout()){
-      window.__ecAutoUxLab29Installed=true;clearTimeout(retryTimer);watchLateNodes();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();return;
+      window.__ecAutoUxLab29Installed=true;installAutomationRefreshBridge();clearTimeout(retryTimer);watchLateNodes();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();return;
     }
     if(retryCount++<160)retryTimer=setTimeout(attempt,150);
   }
 
   window.ECAPI?.on?.('automation:state',s=>{lastAutomation=s;if(!window.__ecAutoUxLab29Installed)attempt();else scheduleLateReconcile();renderAutomation(s);});
   window.ECAPI?.on?.('output:state',s=>{lastOutput=s;if(!window.__ecAutoUxLab29Installed)attempt();else scheduleLateReconcile();renderOutput(s);});
-  window.ECAPI?.on?.('profile:changed',()=>setTimeout(()=>{reconcileLateNodes();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();},260));
+  window.ECAPI?.on?.('profile:changed',()=>setTimeout(()=>{reconcileLateNodes();installAutomationRefreshBridge();settlePass=0;clearTimeout(settleTimer);settleTimer=setTimeout(settleLateNodes,120);hydrate();},260));
   attempt();
 })();
