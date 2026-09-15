@@ -1,6 +1,9 @@
 'use strict';
 const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert');
-const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES,CUDA_VALIDATE_TIMEOUT_MS}=require(path.resolve(__dirname,'..','src','services','ttsLabRuntime.js'));
+const resilience=require(path.resolve(__dirname,'..','src','services','releaseV2CudaInstallResilienceLab29.js'));
+resilience.installReleaseV2CudaInstallResilienceLab29();
+const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES}=require(path.resolve(__dirname,'..','src','services','ttsLabRuntime.js'));
+const {CUDA_VALIDATE_TIMEOUT_MS}=resilience;
 
 function makePython(resources){
   const p=path.join(resources,'runtime','python','python.exe');
@@ -20,6 +23,8 @@ function makeEnginePackage(rt,id){
 }
 
 (async()=>{
+  const boot=fs.readFileSync(path.resolve(__dirname,'..','src','bootstrap-v2lab.js'),'utf8');
+  assert(boot.includes("releaseV2CudaInstallResilienceLab29').installReleaseV2CudaInstallResilienceLab29()"),'El Portable debe instalar la protección CUDA antes de usar los motores TTS');
   assert.strictEqual(CUDA_RUNTIME.revision,2);
   assert.strictEqual(CUDA_RUNTIME.slot,'shared-cuda-v2');
   assert(CUDA_CRITICAL_FILES.includes('torch/torch_version.py'));
@@ -81,9 +86,11 @@ function makeEnginePackage(rt,id){
     // para revalidarlo sin volver a descargar varios GB en el siguiente intento.
     const timeoutData=path.join(base,'EC Automatic News Data timeout'),rtTimeout=new TTSLabRuntime({resourcesDir:resources,dataDir:timeoutData});
     rtTimeout.freeBytes=()=>20*1024*1024*1024;
-    rtTimeout.runPip=async args=>{const idx=args.indexOf('--target');assert(idx>=0);writeCritical(args[idx+1],'download-complete');};
+    rtTimeout.nvidiaPresent=async()=>false;
+    let timeoutPipCount=0;
+    rtTimeout.runPip=async args=>{timeoutPipCount++;const idx=args.indexOf('--target');assert(idx>=0);writeCritical(args[idx+1],'download-complete');};
     rtTimeout.validateInstalledEnginesAgainstCuda=async()=>[];
-    rtTimeout.validateCudaSite=async()=>{const e=new Error('Validación CUDA excedió 45 s');e.code='PROCESS_TIMEOUT';throw e;};
+    rtTimeout.runProcess=async(_exe,_args,opts={})=>{if(opts.label==='Validación CUDA'){const e=new Error('Validación CUDA excedió 180 s');e.code='PROCESS_TIMEOUT';throw e;}return{status:0,stdout:'',stderr:''};};
     let timeoutFailed=false;try{await rtTimeout.installCudaRuntime({force:true});}catch(e){timeoutFailed=e.code==='PROCESS_TIMEOUT'||/Validación CUDA excedió/.test(String(e.message||e));}
     assert(timeoutFailed,'La prueba debe reproducir el timeout de validación CUDA');
     const stageRoot=path.join(rtTimeout.root,`${CUDA_RUNTIME.slot}.candidate`),stageSite=path.join(stageRoot,'site-packages');
@@ -91,6 +98,17 @@ function makeEnginePackage(rt,id){
     assert(rtTimeout.cudaManifestForSite(stageSite),'El candidato conservado debe mantener sus archivos CUDA críticos');
     const pending=rtTimeout.readJson(rtTimeout.cudaMarker(stageRoot));
     assert(pending?.validationPending===true,'El candidato debe quedar marcado como pendiente de revalidación, no como instalación válida');
+    assert.strictEqual(timeoutPipCount,1,'El primer intento debe descargar CUDA una sola vez');
+
+    // A retry must validate the preserved candidate and activate it without a
+    // second PyTorch/CUDA download.
+    rtTimeout.runProcess=async(_exe,_args,opts={})=>opts.label==='Validación CUDA'?{status:0,stdout:JSON.stringify({torch:'2.6.0',torchaudio:'2.6.0',cuda:false,torch_cuda:'12.4'}),stderr:''}:{status:0,stdout:'',stderr:''};
+    const retried=await rtTimeout.installCudaRuntime({force:true});
+    assert(retried.ok,'El reintento debe completar la activación del runtime conservado');
+    assert.strictEqual(timeoutPipCount,1,'El reintento no debe volver a descargar PyTorch/CUDA');
+    assert.strictEqual(rtTimeout.cudaInstalled(),true,'El runtime revalidado debe quedar activo');
+    const activeMarker=rtTimeout.readJson(rtTimeout.cudaMarker(rtTimeout.cudaRoot));
+    assert(activeMarker?.validationPending!==true,'Después de una validación real correcta el runtime activo ya no debe quedar pendiente');
 
     // The legacy slot is never deleted by v2 migration.
     fs.mkdirSync(rt.legacyCudaRoot,{recursive:true});fs.writeFileSync(path.join(rt.legacyCudaRoot,'legacy.keep'),'legacy');
