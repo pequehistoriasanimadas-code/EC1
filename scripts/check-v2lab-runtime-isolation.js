@@ -2,6 +2,8 @@
 const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert');
 const resilience=require(path.resolve(__dirname,'..','src','services','releaseV2CudaInstallResilienceLab29.js'));
 resilience.installReleaseV2CudaInstallResilienceLab29();
+const chatterPerf=require(path.resolve(__dirname,'..','src','services','releaseV2ChatterboxPerformanceLab29.js'));
+chatterPerf.installReleaseV2ChatterboxPerformanceLab29();
 const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES}=require(path.resolve(__dirname,'..','src','services','ttsLabRuntime.js'));
 const {selectGpuRequestIndex,gpuWorkerLimit}=require(path.resolve(__dirname,'..','src','services','automation0325.js'));
 const {CUDA_VALIDATE_TIMEOUT_MS}=resilience;
@@ -26,6 +28,7 @@ function makeEnginePackage(rt,id){
 (async()=>{
   const boot=fs.readFileSync(path.resolve(__dirname,'..','src','bootstrap-v2lab.js'),'utf8');
   assert(boot.includes("releaseV2CudaInstallResilienceLab29').installReleaseV2CudaInstallResilienceLab29()"),'El Portable debe instalar la protección CUDA antes de usar los motores TTS');
+  assert(boot.includes("releaseV2ChatterboxPerformanceLab29').installReleaseV2ChatterboxPerformanceLab29()"),'El Portable debe instalar la política global de rendimiento Chatterbox');
   assert.strictEqual(CUDA_RUNTIME.revision,2);
   assert.strictEqual(CUDA_RUNTIME.slot,'shared-cuda-v2');
   assert(CUDA_CRITICAL_FILES.includes('torch/torch_version.py'));
@@ -42,18 +45,14 @@ function makeEnginePackage(rt,id){
     let pipCount=0;
     rt.runPip=async args=>{pipCount++;const idx=args.indexOf('--target');assert(idx>=0);const site=args[idx+1];await new Promise(r=>setTimeout(r,80));writeCritical(site,'install-'+pipCount);};
 
-    // User data must survive every CUDA repair.
     fs.mkdirSync(rt.voiceDir,{recursive:true});fs.writeFileSync(path.join(rt.voiceDir,'LOCUTOR.wav'),'voice');
     fs.mkdirSync(rt.fineTunedDir,{recursive:true});fs.writeFileSync(path.join(rt.fineTunedDir,'AURELIO.keep'),'fine');
     fs.mkdirSync(rt.modelsDir,{recursive:true});fs.writeFileSync(path.join(rt.modelsDir,'hf.keep'),'model-cache');
 
-    // Simulate both engine packages already present. Candidate CUDA must be
-    // checked against both without either installer writing into the other.
     makeEnginePackage(rt,'chatterbox');makeEnginePackage(rt,'qwen3tts');
     const validated=[];
     rt.validateEngineRuntime=async(id,{cudaSite}={})=>{validated.push({id,cudaSite});return{ok:true,engine:id};};
 
-    // Two motors requesting CUDA at the same time must share one transaction.
     const [a,b]=await Promise.all([rt.installCudaRuntime({force:true}),rt.installCudaRuntime({force:true})]);
     assert(a.ok&&b.ok);
     assert.strictEqual(pipCount,1,'El mutex CUDA debe ejecutar pip una sola vez');
@@ -63,16 +62,12 @@ function makeEnginePackage(rt,id){
     assert(fs.existsSync(path.join(rt.fineTunedDir,'AURELIO.keep')));
     assert(fs.existsSync(path.join(rt.modelsDir,'hf.keep')));
 
-    // Exact regression from the user's screenshot: marker says installed but
-    // torch.torch_version disappears. Light health must reject it immediately.
     fs.rmSync(path.join(rt.cudaSite,'torch','torch_version.py'),{force:true});
     const broken=rt.cudaLightHealth();
     assert.strictEqual(broken.ok,false);
     assert.strictEqual(broken.state,'damaged');
     assert.strictEqual(rt.cudaInstalled(),false);
 
-    // Restore a healthy active runtime, then simulate pip failing during a
-    // forced repair. The old active runtime must remain untouched (rollback).
     writeCritical(rt.cudaSite,'healthy-old');writeMarker(rt);
     fs.writeFileSync(path.join(rt.cudaRoot,'ACTIVE_SENTINEL'),'keep-me');
     rt.runPip=async()=>{throw new Error('simulated pip interruption');};
@@ -81,10 +76,6 @@ function makeEnginePackage(rt,id){
     assert(fs.existsSync(path.join(rt.cudaRoot,'ACTIVE_SENTINEL')),'El runtime anterior debe sobrevivir si falla la instalación candidata');
     assert.strictEqual(rt.cudaInstalled(),true,'El rollback debe conservar el runtime anterior válido');
 
-    // Regression del caso real Chatterbox: una descarga CUDA completa puede
-    // tardar más de 45 s en su primer import por Windows/antivirus. Si la
-    // validación temporalmente vence, el candidato descargado debe conservarse
-    // para revalidarlo sin volver a descargar varios GB en el siguiente intento.
     const timeoutData=path.join(base,'EC Automatic News Data timeout'),rtTimeout=new TTSLabRuntime({resourcesDir:resources,dataDir:timeoutData});
     rtTimeout.freeBytes=()=>20*1024*1024*1024;
     rtTimeout.nvidiaPresent=async()=>false;
@@ -101,8 +92,6 @@ function makeEnginePackage(rt,id){
     assert(pending?.validationPending===true,'El candidato debe quedar marcado como pendiente de revalidación, no como instalación válida');
     assert.strictEqual(timeoutPipCount,1,'El primer intento debe descargar CUDA una sola vez');
 
-    // A retry must validate the preserved candidate and activate it without a
-    // second PyTorch/CUDA download.
     rtTimeout.runProcess=async(_exe,_args,opts={})=>opts.label==='Validación CUDA'?{status:0,stdout:JSON.stringify({torch:'2.6.0',torchaudio:'2.6.0',cuda:false,torch_cuda:'12.4'}),stderr:''}:{status:0,stdout:'',stderr:''};
     const retried=await rtTimeout.installCudaRuntime({force:true});
     assert(retried.ok,'El reintento debe completar la activación del runtime conservado');
@@ -111,10 +100,6 @@ function makeEnginePackage(rt,id){
     const activeMarker=rtTimeout.readJson(rtTimeout.cudaMarker(rtTimeout.cudaRoot));
     assert(activeMarker?.validationPending!==true,'Después de una validación real correcta el runtime activo ya no debe quedar pendiente');
 
-    // Regression de rendimiento Chatterbox observada en RTX 3080: el primer
-    // arranque frío y las dos corridas posteriores todavía pueden estar
-    // calentando CUDA. El RTF estable debe medirse después de 3 warmups y no
-    // tomar como estable un 1.43 cuando el mismo worker caliente llega a ~0.9.
     const benchData=path.join(base,'EC Automatic News Data chatterbox benchmark'),rtBench=new TTSLabRuntime({resourcesDir:resources,dataDir:benchData});
     const rtfSequence=[4.32,1.49,1.43,0.95,0.91,0.89];let benchCalls=0;
     rtBench.generate=async()=>{const rtf=rtfSequence[benchCalls]??0.90,idx=benchCalls++,file=path.join(rtBench.audioDir,`bench-${idx}.wav`);fs.writeFileSync(file,'wav');return{path:file,realtimeFactor:rtf,elapsedMs:Math.round(rtf*10000),durationSec:10,cudaPeakAllocatedMb:3200,cudaPeakReservedMb:4200,qwenRuntime:{}};};
@@ -123,9 +108,6 @@ function makeEnginePackage(rt,id){
     assert.strictEqual(Number(chatterBench.warmupRuns||0),3,'El resultado debe declarar 3 warmups de Chatterbox');
     assert(Math.abs(Number(chatterBench.stableRealtimeFactor)-0.91)<0.001,`RTF estable debe representar worker caliente (~0.91), no ${chatterBench.stableRealtimeFactor}`);
 
-    // Regression de GPU SWAP: si hay AI y voz pendientes al mismo tiempo,
-    // conservar afinidad con el motor ya cargado para completar un bloque antes
-    // de intercambiar la VRAM. Esto evita AI -> matar -> voz -> matar por noticia.
     assert.strictEqual(typeof gpuWorkerLimit,'function','GPU SWAP debe exponer una política global de tamaño de bloque');
     const mixedQueue=[{kind:'ai'},{kind:'voice'},{kind:'ai'}];
     assert.strictEqual(selectGpuRequestIndex(mixedQueue,0,2,{mode:'gpu-swap',lastKind:'ai',swapBurstCount:1,maxSwapBurst:4}),0,'GPU SWAP debe continuar el bloque AI mientras haya AI pendiente');
@@ -133,7 +115,6 @@ function makeEnginePackage(rt,id){
     assert.strictEqual(gpuWorkerLimit('gpu-coordinated',0,15),2,'GPU coordinada conserva el paralelismo actual');
     assert.strictEqual(gpuWorkerLimit('gpu-coordinated',2,15),1,'GPU coordinada sigue reduciendo presión cuando hay backlog de voz');
 
-    // The legacy slot is never deleted by v2 migration.
     fs.mkdirSync(rt.legacyCudaRoot,{recursive:true});fs.writeFileSync(path.join(rt.legacyCudaRoot,'legacy.keep'),'legacy');
     assert(fs.existsSync(path.join(rt.legacyCudaRoot,'legacy.keep')));
 
