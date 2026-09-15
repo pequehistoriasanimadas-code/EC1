@@ -3,8 +3,8 @@
   if(window.__ecYoutubePromoLab27Installed)return;
   if(!window.ECAPI||!document.querySelector('#tab-canned')||!window.__ec0331RendererInstalled){setTimeout(installYoutubePromoLab27,120);return;}
   window.__ecYoutubePromoLab27Installed=true;
-  const q=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let currentSettings=null,lastScan=null,lastAutomation=null,renderBusy=false,modalItem=null;
+  const q=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  let currentSettings=null,lastScan=null,lastAutomation=null,renderBusy=false,modalItem=null,youtubeCapabilityObserver=null,youtubeCapabilityTimer=null,youtubeCapabilityRecoveries=[];
   const leadOptions='<option value="5">5 s</option><option value="7">7 s</option><option value="10">10 s</option>';
   const tell=msg=>{try{if(typeof status==='function')status(msg);}catch{};};
   const samePath=(a,b)=>String(a||'').replace(/\\/g,'/').toLocaleLowerCase('es')===String(b||'').replace(/\\/g,'/').toLocaleLowerCase('es');
@@ -48,7 +48,31 @@
   function isManual(item){const m=manualContent();return!!m&&(samePath(m.path,item.path)||String(m.name||'')===String(item.name||''));}
   async function renderList(){if(renderBusy)return;renderBusy=true;try{const [scan,auto]=await Promise.all([window.ECAPI.cannedList(),window.ECAPI.automationStatus?.().catch(()=>null)]);lastScan=scan;if(auto)lastAutomation=auto;const box=q('#cannedList');if(!box)return;box.classList.add('ec-yt-list');if(!scan?.files?.length){box.innerHTML='<div class="empty">Selecciona una carpeta.</div>';return;}box.innerHTML='';for(const x of scan.files){const linked=!!x.youtubeLink,manual=isManual(x),row=document.createElement('div');row.className='media-item ec0331-media-item ec-yt-media-item';row.innerHTML=`<div class="ec-yt-media-copy"><div class="media-name">${esc(x.name)}</div><div class="media-meta">${fmtDuration(x.durationSec)}${x.durationSec?' · ':''}${Number(x.sizeMB||0).toFixed(1)} MB</div></div><div class="ec-yt-media-actions"><button class="dark compact ec-yt-link-state ${linked?'linked':''}" type="button">${linked?'● Vinculado':'○ Vincular'}</button><button class="dark compact ec-yt-next ${manual?'active':''}" type="button">${manual?'Cancelar próximo':'Programar como próximo'}</button></div>`;const buttons=row.querySelectorAll('button');buttons[0].onclick=()=>openLinkModal(x);buttons[1].onclick=async()=>{try{lastAutomation=manual?await window.ECAPI.cannedCancelSpecific():await window.ECAPI.cannedScheduleSpecific(x.path);tell(manual?'Selección manual cancelada.':`Programado como próximo: ${x.name}`);await renderList();}catch(e){tell(`Contenido: ${e.message||e}`);}};box.appendChild(row);}}catch(e){tell(`Contenidos: ${e.message||e}`);}finally{renderBusy=false;}}
   async function reloadAll(){await reloadSettings();renderGlobal();await renderList();}
-  const oldRefresh=typeof refreshCannedList==='function'?refreshCannedList:null;if(oldRefresh)refreshCannedList=async function(){const r=await oldRefresh.apply(this,arguments);setTimeout(renderList,0);return r;};
-  window.ECAPI.on('automation:state',s=>{lastAutomation=s;setTimeout(()=>renderList(),40);});window.ECAPI.on('profile:changed',()=>setTimeout(reloadAll,300));
-  injectGlobalControls();reloadAll().catch(()=>{});setInterval(()=>{if(!document.hidden){reloadSettings().then(()=>renderGlobal()).catch(()=>{});}},5000);
+  function youtubeListNeedsCapabilityRepair(){const box=q('#cannedList');if(!box)return false;const rows=box.querySelectorAll('.media-item,.ec0331-media-item');return rows.length>0&&!box.querySelector('.ec-yt-link-state');}
+  async function ensureYoutubePromoCapability(){
+    if(!q('#tab-canned'))return;
+    if(!currentSettings)await reloadSettings();
+    if(!q('#ecYoutubePromoControls'))injectGlobalControls();
+    renderGlobal();
+    const box=q('#cannedList');if(box&&(!box.classList.contains('ec-yt-list')||youtubeListNeedsCapabilityRepair()))await renderList();
+  }
+  function scheduleYoutubeCapabilityRecovery(){
+    for(const id of youtubeCapabilityRecoveries)clearTimeout(id);
+    youtubeCapabilityRecoveries=[0,180,500,1000,1800].map(delay=>setTimeout(()=>ensureYoutubePromoCapability().catch(()=>{}),delay));
+  }
+  function mutationTouchesCanned(m){const tab=q('#tab-canned');if(tab&&(m.target===tab||tab.contains?.(m.target)))return true;for(const n of [...(m.addedNodes||[]),...(m.removedNodes||[])]){if(n?.id==='tab-canned'||n?.querySelector?.('#tab-canned'))return true;}return false;}
+  function observeYoutubePromoCapability(){
+    if(youtubeCapabilityObserver||!document.body)return;
+    youtubeCapabilityObserver=new MutationObserver(mutations=>{
+      if(!mutations.some(mutationTouchesCanned))return;
+      if(q('#ecYoutubePromoControls')&&!youtubeListNeedsCapabilityRepair())return;
+      clearTimeout(youtubeCapabilityTimer);youtubeCapabilityTimer=setTimeout(()=>ensureYoutubePromoCapability().catch(()=>{}),80);
+    });
+    youtubeCapabilityObserver.observe(document.body,{childList:true,subtree:true});
+  }
+  const oldRefresh=typeof refreshCannedList==='function'?refreshCannedList:null;if(oldRefresh)refreshCannedList=async function(){const r=await oldRefresh.apply(this,arguments);setTimeout(()=>ensureYoutubePromoCapability().catch(()=>{}),0);return r;};
+  window.ECAPI.on('automation:state',s=>{lastAutomation=s;setTimeout(()=>renderList(),40);});
+  window.ECAPI.on('profile:changed',()=>{currentSettings=null;lastScan=null;lastAutomation=null;scheduleYoutubeCapabilityRecovery();});
+  injectGlobalControls();observeYoutubePromoCapability();scheduleYoutubeCapabilityRecovery();
+  setInterval(()=>{if(!document.hidden){reloadSettings().then(()=>ensureYoutubePromoCapability()).catch(()=>{});}},5000);
 })();
