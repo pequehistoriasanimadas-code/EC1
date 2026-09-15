@@ -23,8 +23,22 @@ if(!gotLock){app.quit();}else{
   global.__ecSingleInstanceLockOwned=true;
   global.__ecSecondInstanceHandlerOwned=true;
   app.on('second-instance',()=>{try{const wins=BrowserWindow.getAllWindows().filter(w=>!w.isDestroyed());const target=wins.find(w=>String(w.getTitle?.()||'').includes('EC Automatic News'))||wins[0];if(target){if(target.isMinimized())target.restore();target.show();target.focus();}}catch{}});
+  require('./services/releaseV2StartupUiAudit').installReleaseV2StartupUiAudit();
+  require('./services/releaseV2WindowSizingLab29').installReleaseV2WindowSizingLab29();
   require('./bootstrap-0332');
   require('./services/releaseV2Lab').installReleaseV2Lab();
+  require('./services/releaseV2CudaInstallResilienceLab29').installReleaseV2CudaInstallResilienceLab29();
+  require('./services/releaseV2ChatterboxPerformanceLab29').installReleaseV2ChatterboxPerformanceLab29();
+  require('./services/releaseV2AudioUxLab29').installReleaseV2AudioUxLab29();
   require('./services/releaseV2Optimization').installV2Optimization();
   require('./services/releaseV2ProductionFidelity').installV2ProductionFidelity();
+  require('./services/releaseV2NetworkPermissions').installReleaseV2NetworkPermissions();
+  require('./services/releaseV2YoutubePromo').installReleaseV2YoutubePromo();
+  require('./services/releaseV2Stabilization').installReleaseV2Stabilization();
+  require('./services/releaseV2GlobalOptimizationLab29').installMachineGlobalOptimizationLab29();
+  require('./services/releaseV2CannedRecoveryLab29').installReleaseV2CannedRecoveryLab29();
+  require('./services/releaseV2Lab29').installReleaseV2Lab29();
+  require('./services/releaseV2EmissionDesign').installReleaseV2EmissionDesign();
+  require('./services/releaseV2UxRepairLab29').installReleaseV2UxRepairLab29();
+  require('./services/releaseV2FinalCorrectionsLab29').installReleaseV2FinalCorrectionsLab29();
 }

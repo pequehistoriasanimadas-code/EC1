@@ -1,0 +1,56 @@
+/* Lab.29 · Contenidos / Anuncios compactos, sin duplicar controles funcionales. */
+.ec-canned-hidden,.ec-canned-legacy-autonomy-target,.ec-canned-legacy-autonomy-card{display:none!important}
+
+#tab-canned #ecCannedProgramCard.ec-canned-program-card{min-width:0}
+#tab-canned #ecCannedRulesRow{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.72fr);gap:12px;align-items:stretch;margin:8px 0 10px}
+#tab-canned #ecCannedRulesRow>.switch-row,#tab-canned #ecCannedRulesRow>label{margin:0!important;min-height:50px;border:1px solid #303030;border-radius:10px;background:#151515;padding:9px 11px!important;box-sizing:border-box}
+#tab-canned #ecCannedRulesRow>.switch-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#tab-canned #ecCannedRulesRow>.switch-row small{display:none}
+#tab-canned #ecCannedRulesRow>.switch-row b{font-size:12px}
+#tab-canned #ecCannedRulesRow>.ec-canned-frequency-rule{display:grid;grid-template-columns:auto minmax(110px,1fr);align-items:center;gap:9px;font-size:12px;font-weight:800;color:#ddd}
+#tab-canned #ecCannedRulesRow>.ec-canned-frequency-rule select{margin:0;min-width:0;width:100%}
+
+#tab-canned .ec-canned-recovery-simple{margin-top:10px!important;border:1px solid #303030!important;background:#151515!important;padding:11px!important}
+#tab-canned .ec-canned-recovery-simple>.section-head{margin:0 0 7px!important}
+#tab-canned .ec-canned-recovery-simple>.section-head h3{margin:0!important}
+#tab-canned .ec-canned-recovery-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:8px 0 0;border-top:1px solid #2d2d2d}
+#tab-canned .ec-canned-recovery-toggle>span:first-child{min-width:0}
+#tab-canned .ec-canned-recovery-toggle b{display:block;font-size:12px}
+#tab-canned .ec-canned-recovery-toggle small{display:block;margin-top:3px;color:#969696;font-size:11px;line-height:1.3}
+#tab-canned .ec-canned-recovery-toggle .switch-ui{flex:0 0 auto}
+
+#tab-canned #ecCannedSelectionCard{margin-top:10px;padding:11px;border:1px solid #4b4020;background:#17150d}
+#tab-canned #ecCannedSelectionCard>.section-head{margin-bottom:7px}
+#tab-canned #ecCannedSelectionCard #ec27Selection{margin:0;background:#111}
+#tab-canned #ecCannedSelectionBadgeHost{margin-left:auto}
+
+#tab-canned #ecCannedAvailableCard.ec-canned-library-card,#tab-canned #adsLibraryCard.ec-canned-library-card{padding:13px 14px!important;border-radius:14px!important;min-width:0}
+#tab-canned .ec-canned-library-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px!important}
+#tab-canned .ec-canned-library-head>h3{margin:0;white-space:nowrap}
+#tab-canned .ec-canned-library-actions{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap;min-width:0}
+#tab-canned .ec-canned-library-actions>.mini-pill{order:2;margin-left:3px}
+#tab-canned .ec-canned-folder-actions{display:flex;align-items:center;gap:7px;margin:0!important;order:1}
+#tab-canned .ec-canned-folder-actions button{margin:0;padding:8px 11px;white-space:nowrap}
+#tab-canned .ec-canned-folder-info{margin:1px 0 8px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#929292}
+#tab-canned #ecCannedAvailableCard #ec27LibraryMode{margin:0 0 8px}
+#tab-canned #adsLibraryCard #adsState{display:none!important}
+#tab-canned #adsLibraryCard .ec-canned-ads-master-switch{margin:0!important}
+#tab-canned #adsLibraryCard #adsList,#tab-canned #ecCannedAvailableCard #cannedList{border-radius:10px}
+#tab-canned #adsLibraryCard,#tab-canned #ecCannedAvailableCard{box-sizing:border-box}
+
+/* El operador superior mantiene exactamente el layout actual; solo suma Anuncios. */
+@media(min-width:1321px){.ec-auto-strip-grid{grid-template-columns:repeat(8,minmax(0,1fr))!important}}
+
+@media(max-width:1320px){
+  #tab-canned .ec-canned-library-actions{width:100%;margin-left:0;justify-content:flex-start}
+  #tab-canned .ec-canned-library-actions>.mini-pill{margin-left:auto}
+}
+@media(max-width:1180px){
+  #tab-canned #ecCannedRulesRow{grid-template-columns:1fr}
+  #tab-canned .ec-canned-library-actions{width:auto;margin-left:auto;justify-content:flex-end}
+}
+@media(max-width:760px){
+  #tab-canned .ec-canned-library-actions{width:100%;margin-left:0;justify-content:flex-start}
+  #tab-canned .ec-canned-folder-actions{width:100%}
+  #tab-canned .ec-canned-folder-actions button{flex:1 1 auto}
+}

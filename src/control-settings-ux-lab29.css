@@ -1,0 +1,72 @@
+/* Lab.29 · Ajustes: jerarquía compacta sin alterar Fuentes ni Optimización automática */
+#tab-settings #ec29SettingsWorkspace{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:14px;
+  align-items:start;
+  min-width:0;
+}
+#tab-settings .ec29-settings-stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+#tab-settings .ec29-settings-stack>.card{margin:0!important;min-width:0}
+#tab-settings .ec29-settings-card>.section-head+ .note{margin-top:7px}
+#tab-settings .ec29-settings-card .buttons{align-items:center}
+
+/* Fuentes conserva íntegramente sus estilos originales; esta capa no toca sus controles internos. */
+
+#tab-settings #ec29SettingsFallbackCard #fallbackInfo{margin-top:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#101010;min-height:34px}
+
+#tab-settings #ec29SettingsQueueCard .queue-colors{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:8px;
+  margin-top:10px;
+}
+#tab-settings #ec29SettingsQueueCard .queue-colors label{margin:0;min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tab-settings #ec29SettingsQueueCard .queue-colors input[type="color"]{height:34px;margin-top:5px;padding:3px}
+#tab-settings #ec29SettingsQueueCard>.buttons{justify-content:flex-end;margin-top:10px}
+
+/* IA local conserva el instalador completo 0.3.27 y solo reorganiza su contexto. */
+#tab-settings #ec29SettingsLocalCard #ec27LocalInstaller{margin-top:10px}
+#tab-settings #ec29SettingsLocalCard #ec27LocalInstaller .ec27-advanced{margin-top:10px}
+#tab-settings #ec29SettingsLocalCard .local-model-diagnostic{margin-top:9px}
+#tab-settings #ec29SettingsLocalCard>#downloadProgress{margin-top:10px}
+#tab-settings .ec29-settings-minor-title{margin:14px 0 5px;font-size:12px;font-weight:800;color:#e5e5e5}
+#tab-settings #ec29LocalBackupPolicy{margin-top:4px}
+#tab-settings #ec29LocalBackupPolicy.hidden{display:none!important}
+#tab-settings #ec29LocalBackupPolicy>label:first-of-type{margin-top:6px}
+#tab-settings #ec29LocalBackupPolicy #localPolicyInfo{margin:6px 0 0}
+
+#tab-settings #ec29SettingsServiceGrid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin-top:10px;
+}
+#tab-settings #ec29SettingsServiceGrid label{margin:0;min-width:0}
+#tab-settings #ec29SettingsServiceCard #providerSummary{margin:5px 0 0}
+
+#tab-settings #ec29SettingsProvidersGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:10px;
+}
+#tab-settings #ec29SettingsProvidersGrid .ec29-provider-card{margin:0;min-width:0;padding:11px}
+#tab-settings #ec29SettingsProvidersGrid .ec29-provider-card>h3{margin:0 0 8px;font-size:14px}
+#tab-settings #ec29SettingsProvidersGrid .provider-status{margin:0 0 8px}
+#tab-settings #ec29SettingsProvidersGrid label{margin:8px 0 4px}
+#tab-settings #ec29SettingsProvidersGrid button{width:100%;margin-top:9px}
+#tab-settings #ec29SettingsProvidersGrid .advanced-field{opacity:.72}
+
+/* Los hosts antiguos permanecen en DOM porque guardado/inicialización aún leen controles legacy. */
+#tab-settings .ec29-settings-legacy-host,
+#tab-settings .ec29LegacyEditorialHidden{display:none!important}
+#tab-settings .ec29-settings-legacy-cols{display:none!important}
+
+/* Mantener dos columnas en el ancho mínimo normal de la app; colapsar solo más abajo. */
+@media(max-width:980px){
+  #tab-settings #ec29SettingsWorkspace{grid-template-columns:minmax(0,1fr)}
+  #tab-settings #ec29SettingsServiceGrid{grid-template-columns:minmax(0,1fr)}
+  #tab-settings #ec29SettingsProvidersGrid{grid-template-columns:minmax(0,1fr)}
+  #tab-settings #ec29SettingsQueueCard .queue-colors{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
