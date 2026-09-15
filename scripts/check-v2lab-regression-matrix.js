@@ -20,6 +20,8 @@ const monitorLab27=read('src/renderer-monitor-live-lab27.js');
 const youtubeRelease=read('src/services/releaseV2YoutubePromo.js');
 const optimizer=read('src/renderer-0321.js');
 const lanServer=read('src/services/outputLanServer.js');
+const chatterboxPerfLab29=read('src/services/releaseV2ChatterboxPerformanceLab29.js');
+const ttsLabRuntime=read('src/services/ttsLabRuntime.js');
 
 // 1. Contadores de sesión: incrementan en motor y el renderer final los refresca aunque falle una capa legacy.
 assert(automation.includes('this.newsEmitted=0')&&auto25.includes('this.newsEmitted++'),'contador de noticias emitidas debe existir e incrementarse al terminar cada noticia');
@@ -70,4 +72,13 @@ const ndi=read('src/services/outputNdi.js');
 assert(main.includes('startNdiFrameClock')&&main.includes('seedNdiProgram')&&main.includes('currentOutputProgram'),'NDI debe mantener frames constantes y recuperar el programa actual al reiniciar');
 assert(ndi.includes('this.connections>0')&&ndi.includes('this.connections<1'),'NDI no debe copiar frames/audio crudos si no hay receptores');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor 15 FPS/audio · optimization · content/ad + YouTube promo · LAN · NDI');
+// 10. Chatterbox A/B: recuperar el benchmark base de Lab25 sin quitar el batching GPU SWAP de Lab29.
+const installerMatch=chatterboxPerfLab29.match(/function\s+installReleaseV2ChatterboxPerformanceLab29\s*\(\)\s*\{([^}]*)\}/);
+assert(installerMatch,'debe existir installReleaseV2ChatterboxPerformanceLab29');
+const installerBody=installerMatch[1];
+assert(!installerBody.includes('installBenchmarkPolicy('),'Lab29 A/B no debe instalar pre-warmups extra de Chatterbox');
+assert(installerBody.includes('installGpuSwapBatching('),'Lab29 A/B debe conservar el batching GPU SWAP');
+assert(chatterboxPerfLab29.includes('const GPU_SWAP_BATCH_SIZE=4'),'Lab29 A/B debe conservar bloques GPU SWAP de 4 etapas');
+assert(ttsLabRuntime.includes("const warm=await this.generate(id,text,options)")&&ttsLabRuntime.includes("const runs=[],stableRuns=id==='qwen3tts'?5:3"),'Chatterbox debe volver al warmup + 3 corridas estables del benchmark base');
+
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor 15 FPS/audio · optimization · content/ad + YouTube promo · LAN · NDI · Chatterbox base benchmark A/B');
