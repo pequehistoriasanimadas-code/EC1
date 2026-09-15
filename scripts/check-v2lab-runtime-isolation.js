@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert');
-const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES}=require(path.resolve(__dirname,'..','src','services','ttsLabRuntime.js'));
+const {TTSLabRuntime,CUDA_RUNTIME,CUDA_CRITICAL_FILES,CUDA_VALIDATE_TIMEOUT_MS}=require(path.resolve(__dirname,'..','src','services','ttsLabRuntime.js'));
 
 function makePython(resources){
   const p=path.join(resources,'runtime','python','python.exe');
@@ -23,6 +23,7 @@ function makeEnginePackage(rt,id){
   assert.strictEqual(CUDA_RUNTIME.revision,2);
   assert.strictEqual(CUDA_RUNTIME.slot,'shared-cuda-v2');
   assert(CUDA_CRITICAL_FILES.includes('torch/torch_version.py'));
+  assert(Number(CUDA_VALIDATE_TIMEOUT_MS)>=180000,'La validación CUDA en frío debe tolerar al menos 180 s en Windows');
 
   const base=fs.mkdtempSync(path.join(os.tmpdir(),'GEC ÁREA DISEÑO lab17 '));
   try{
@@ -74,10 +75,27 @@ function makeEnginePackage(rt,id){
     assert(fs.existsSync(path.join(rt.cudaRoot,'ACTIVE_SENTINEL')),'El runtime anterior debe sobrevivir si falla la instalación candidata');
     assert.strictEqual(rt.cudaInstalled(),true,'El rollback debe conservar el runtime anterior válido');
 
+    // Regression del caso real Chatterbox: una descarga CUDA completa puede
+    // tardar más de 45 s en su primer import por Windows/antivirus. Si la
+    // validación temporalmente vence, el candidato descargado debe conservarse
+    // para revalidarlo sin volver a descargar varios GB en el siguiente intento.
+    const timeoutData=path.join(base,'EC Automatic News Data timeout'),rtTimeout=new TTSLabRuntime({resourcesDir:resources,dataDir:timeoutData});
+    rtTimeout.freeBytes=()=>20*1024*1024*1024;
+    rtTimeout.runPip=async args=>{const idx=args.indexOf('--target');assert(idx>=0);writeCritical(args[idx+1],'download-complete');};
+    rtTimeout.validateInstalledEnginesAgainstCuda=async()=>[];
+    rtTimeout.validateCudaSite=async()=>{const e=new Error('Validación CUDA excedió 45 s');e.code='PROCESS_TIMEOUT';throw e;};
+    let timeoutFailed=false;try{await rtTimeout.installCudaRuntime({force:true});}catch(e){timeoutFailed=e.code==='PROCESS_TIMEOUT'||/Validación CUDA excedió/.test(String(e.message||e));}
+    assert(timeoutFailed,'La prueba debe reproducir el timeout de validación CUDA');
+    const stageRoot=path.join(rtTimeout.root,`${CUDA_RUNTIME.slot}.candidate`),stageSite=path.join(stageRoot,'site-packages');
+    assert(fs.existsSync(stageRoot),'Un timeout de validación no debe borrar el runtime CUDA recién descargado');
+    assert(rtTimeout.cudaManifestForSite(stageSite),'El candidato conservado debe mantener sus archivos CUDA críticos');
+    const pending=rtTimeout.readJson(rtTimeout.cudaMarker(stageRoot));
+    assert(pending?.validationPending===true,'El candidato debe quedar marcado como pendiente de revalidación, no como instalación válida');
+
     // The legacy slot is never deleted by v2 migration.
     fs.mkdirSync(rt.legacyCudaRoot,{recursive:true});fs.writeFileSync(path.join(rt.legacyCudaRoot,'legacy.keep'),'legacy');
     assert(fs.existsSync(path.join(rt.legacyCudaRoot,'legacy.keep')));
 
-    console.log('check-v2lab-runtime-isolation: OK · CUDA v2 transactional · mutex · torch_version corruption · rollback · Unicode path · user data preserved · cross-engine check');
+    console.log('check-v2lab-runtime-isolation: OK · CUDA v2 transactional · cold-validation timeout resilient · candidate reuse · mutex · rollback · Unicode path · user data preserved');
   }finally{fs.rmSync(base,{recursive:true,force:true});}
 })().catch(e=>{console.error(e.stack||e);process.exit(1);});
