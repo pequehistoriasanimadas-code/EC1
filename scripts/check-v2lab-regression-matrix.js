@@ -22,6 +22,7 @@ const optimizer=read('src/renderer-0321.js');
 const lanServer=read('src/services/outputLanServer.js');
 const chatterboxPerfLab29=read('src/services/releaseV2ChatterboxPerformanceLab29.js');
 const ttsLabRuntime=read('src/services/ttsLabRuntime.js');
+const audioUx=read('src/renderer-audio-ux-lab29.js');
 
 // 1. Contadores de sesión: incrementan en motor y el renderer final los refresca aunque falle una capa legacy.
 assert(automation.includes('this.newsEmitted=0')&&auto25.includes('this.newsEmitted++'),'contador de noticias emitidas debe existir e incrementarse al terminar cada noticia');
@@ -81,4 +82,15 @@ assert(installerBody.includes('installGpuSwapBatching('),'Lab29 A/B debe conserv
 assert(chatterboxPerfLab29.includes('const GPU_SWAP_BATCH_SIZE=4'),'Lab29 A/B debe conservar bloques GPU SWAP de 4 etapas');
 assert(ttsLabRuntime.includes("const warm=await this.generate(id,text,options)")&&ttsLabRuntime.includes("const runs=[],stableRuns=id==='qwen3tts'?5:3"),'Chatterbox debe volver al warmup + 3 corridas estables del benchmark base');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor 15 FPS/audio · optimization · content/ad + YouTube promo · LAN · NDI · Chatterbox base benchmark A/B');
+// 11. Audio de referencia: un solo control Play/Stop, limpieza segura y sin audios de preview solapados.
+assert(audioUx.includes("stop:'<svg"),'el control de referencia debe disponer de icono Stop');
+assert(audioUx.includes('function stopReferenceAudio'),'debe existir una única rutina para detener y limpiar la referencia activa');
+assert(audioUx.includes('referenceAudioId===id'),'volver a pulsar la referencia activa debe detenerla en lugar de reiniciarla');
+assert(audioUx.includes('referenceAudio.onended')&&audioUx.includes('referenceAudio.onerror'),'fin o error del audio debe restaurar automáticamente el botón Play');
+assert(audioUx.includes("q('#v2VoicePreview')?.addEventListener('play',stopReferenceAudio)"),'Probar voz debe detener cualquier referencia para evitar previews simultáneos');
+assert(audioUx.includes("window.ECAPI.on?.('profile:changed',stopReferenceAudio)"),'cambiar de perfil debe detener la referencia activa');
+assert(audioUx.includes("q('#v2TtsEngine')?.addEventListener('change',()=>{stopReferenceAudio();"),'cambiar de motor debe detener la referencia activa');
+assert(audioUx.includes("q('#v2ReferenceVoice')?.addEventListener('change',()=>{stopReferenceAudio();"),'cambiar de voz de referencia debe detener el audio anterior');
+assert(audioUx.includes('if(referenceAudioId===id)stopReferenceAudio()'),'eliminar la referencia que suena debe detenerla antes de borrarla');
+
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor 15 FPS/audio · optimization · content/ad + YouTube promo · LAN · NDI · Chatterbox base benchmark A/B · reference audio Play/Stop');
