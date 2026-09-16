@@ -1,65 +1,67 @@
-import ast
+import importlib.util
 import math
+import random
 from pathlib import Path
 
-import numpy as np
-
 ROOT = Path(__file__).resolve().parents[1]
-WORKER = ROOT / "src" / "tts_lab_worker.py"
-source = WORKER.read_text(encoding="utf-8")
-tree = ast.parse(source)
-fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "cleanup_chatterbox_tail"), None)
-if fn is None:
-    raise AssertionError("No existe cleanup_chatterbox_tail")
-module = ast.Module(body=[fn], type_ignores=[])
-ast.fix_missing_locations(module)
-env = {"np": np, "math": math}
-exec(compile(module, str(WORKER), "exec"), env)
-cleanup = env["cleanup_chatterbox_tail"]
+MODULE = ROOT / "src" / "chatterbox_pause_cleanup_lab29.py"
+if not MODULE.exists():
+    raise AssertionError("Falta chatterbox_pause_cleanup_lab29.py")
+spec = importlib.util.spec_from_file_location("gec_chatterbox_cleanup", MODULE)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+clean_samples = mod.clean_samples
 
 sr = 24000
 
-def tone(seconds, amp=0.12, hz=180.0):
+def tone(seconds, amp=5000, hz=180.0):
     n = int(round(seconds * sr))
-    t = np.arange(n, dtype=np.float64) / sr
-    return (np.sin(2 * np.pi * hz * t) * amp).astype(np.float32)
+    return [int(round(math.sin(2 * math.pi * hz * (i / sr)) * amp)) for i in range(n)]
+
+def silence(seconds):
+    return [0] * int(round(seconds * sr))
 
 def noise(seconds, amp, seed):
-    n = int(round(seconds * sr))
-    rng = np.random.default_rng(seed)
-    return (rng.standard_normal(n) * amp).astype(np.float32)
+    n = int(round(seconds * sr)); rng = random.Random(seed); out = []
+    for _ in range(n):
+        out.append(max(-32767, min(32767, int(round(rng.gauss(0, amp))))))
+    return out
 
-# Production-like failure: normal voice, a quiet valley, then a short low-level
-# breath/noise burst, followed by a low tail. The burst must be removed.
-sample = np.concatenate([
-    tone(1.0),
-    noise(0.12, 0.0007, 1),
-    noise(0.08, 0.0100, 2),
-    noise(0.18, 0.0005, 3),
-])
-cleaned, diag = cleanup(sample, sr, True)
-assert diag["tail_cleanup_applied"] is True, diag
-assert diag["tail_cleanup_reason"] == "post_silence_residual", diag
-assert 100 <= diag["tail_cleanup_ms"] <= 360, diag
-assert len(cleaned) < len(sample)
-assert abs(float(cleaned[-1])) < 1e-7, "El fade debe terminar en cero"
+def rms(block):
+    return math.sqrt(sum(float(x) * float(x) for x in block) / max(1, len(block)))
 
-# A short natural ending must not be clipped.
-clean = np.concatenate([tone(1.2), noise(0.06, 0.0030, 4)])
-cleaned2, diag2 = cleanup(clean, sr, True)
-assert diag2["tail_cleanup_applied"] is False, diag2
-assert len(cleaned2) == len(clean)
+# Regression principal: equivalente al burst fuerte escuchado después de
+# "en Lurín...": voz -> silencio largo -> ruido corto fuerte -> silencio -> voz.
+strong = tone(.85, 5200, 175) + silence(.48) + noise(.16, 10500, 11) + silence(.08) + tone(.90, 5400, 205)
+burst_start = int((.85 + .48) * sr); burst_end = burst_start + int(.16 * sr)
+raw_rms = rms(strong[burst_start:burst_end])
+processed, diag = clean_samples(strong, sr, True)
+assert len(processed) == len(strong), "La limpieza debe preservar duración/sincronía"
+assert diag["pause_cleanup_applied"] is True, diag
+assert diag["pause_cleanup_strong_events"] >= 1, diag
+assert rms(processed[burst_start:burst_end]) < raw_rms * .08, (raw_rms, rms(processed[burst_start:burst_end]), diag)
+voice_after = int((.85 + .48 + .16 + .08) * sr)
+assert processed[voice_after:] == strong[voice_after:], "La frase posterior no debe modificarse"
 
-# A long very-low tail can be shortened conservatively.
-low_tail = np.concatenate([tone(1.0), noise(0.24, 0.0004, 5)])
-cleaned3, diag3 = cleanup(low_tail, sr, True)
-assert diag3["tail_cleanup_applied"] is True, diag3
-assert diag3["tail_cleanup_reason"] == "low_level_tail", diag3
-assert 60 <= diag3["tail_cleanup_ms"] <= 360, diag3
+# Residuo débil interno entre frases: también debe desaparecer sin recortar.
+weak = tone(.75, 5000, 180) + silence(.18) + noise(.08, 190, 22) + silence(.10) + tone(.80, 5000, 195)
+weak_start = int((.75 + .18) * sr); weak_end = weak_start + int(.08 * sr)
+weak_out, weak_diag = clean_samples(weak, sr, True)
+assert len(weak_out) == len(weak)
+assert weak_diag["pause_cleanup_applied"] is True, weak_diag
+assert weak_diag["pause_cleanup_weak_events"] >= 1, weak_diag
+assert rms(weak_out[weak_start:weak_end]) < rms(weak[weak_start:weak_end]) * .08
 
-# Safety switch: disabled means bit-for-bit length and samples are preserved.
-disabled, diag4 = cleanup(sample, sr, False)
-assert diag4["tail_cleanup_applied"] is False
-assert np.array_equal(disabled, sample)
+# Seguridad: una consonante/ruido corto dentro de voz continua no está aislada
+# por silencio a ambos lados y no debe eliminarse.
+natural = tone(.70, 5000, 180) + noise(.06, 1800, 31) + tone(.75, 5000, 190)
+natural_out, natural_diag = clean_samples(natural, sr, True)
+assert natural_diag["pause_cleanup_applied"] is False, natural_diag
+assert natural_out == natural
 
-print("check-v2lab-chatterbox-tail: OK · residual post-pausa eliminado · voz útil preservada · fade seguro")
+# Switch de seguridad.
+disabled, disabled_diag = clean_samples(strong, sr, False)
+assert disabled_diag["pause_cleanup_applied"] is False
+assert disabled == strong
+
+print("check-v2lab-chatterbox-tail: OK · burst fuerte + residuo interno eliminados · duración y voz útil preservadas")

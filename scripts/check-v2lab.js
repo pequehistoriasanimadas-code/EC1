@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const pkg=JSON.parse(read('package.json')),boot=read('src/bootstrap-v2lab.js'),pathGuard=read('src/services/v2LabDataPath.js'),mainSource=read('src/main.js'),profilePolicy=read('src/services/profilePolicy0329.js'),release=read('src/services/releaseV2Lab.js'),optimizer=read('src/services/releaseV2Optimization.js'),production=read('src/services/releaseV2ProductionFidelity.js'),runtime=read('src/services/ttsLabRuntime.js'),renderer=read('src/renderer-v2lab.js'),queueRenderer=read('src/renderer-0332.js'),baseOptimizerUi=read('src/renderer-0321.js'),automation=read('src/services/automation0325.js'),localRuntime=read('src/services/localRuntime.js'),localPolicy=read('src/services/version0320LocalPolicy.js'),providers=read('src/services/providers.js'),preload=read('src/preload.js'),worker=read('src/tts_lab_worker.py'),prepare=read('scripts/prepare-windows-runtime.ps1'),workflow=read('.github/workflows/build-windows.yml');
 require(path.join(root,'src','services','releaseV2Optimization.js'));
-assert.strictEqual(pkg.version,'2.0.0-lab.24','La build debe identificarse como 2.0.0-lab.24');
+assert.strictEqual(pkg.version,'2.0.0-lab.28','La build debe identificarse como 2.0.0-lab.28');
 assert.strictEqual(pkg.main,'src/bootstrap-v2lab.js','V2 Lab debe arrancar desde bootstrap-v2lab');
 assert.strictEqual(pkg.build.appId,'pe.ec.automaticnews','V2 Lab debe conservar el appId técnico');
 assert.strictEqual(pkg.build.productName,'EC Automatic News','V2 Lab debe conservar el productName técnico para compatibilidad');
@@ -83,10 +83,10 @@ assert(runtime.includes('async runProcess(')&&runtime.includes('cachedCudaHealth
 assert(runtime.includes('await this.waitForMaintenance()')&&runtime.includes('if(existing?.child&&existing.ready)return existing')&&runtime.includes('await this.ensureCudaRuntimeHealthy()'),'ensureWorker debe reutilizar un worker sano antes de validar CUDA');
 assert(runtime.includes('async importFineTunedZip')&&runtime.includes('findModelDirAsync')&&runtime.includes('modelFingerprintAsync'),'Importación de modelos fine-tuned debe evitar I/O pesado síncrono');
 assert(renderer.includes('qwenParams=settings?.tts?.engineParams?.qwen3tts')&&!renderer.includes(",q=settings?.tts?.engineParams?.qwen3tts"),'Renderer no debe sombrear el helper q()');
-assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab24'")&&release.includes('await labRuntime().importFineTunedZip'),'Hardening de responsividad lab.23 incompleto');
+assert(renderer.includes("window.__GEC_V2LAB_RENDERER_RESPONSIVE__='lab25'")&&release.includes('await labRuntime().importFineTunedZip'),'Hardening de responsividad lab.23 incompleto');
 assert(baseOptimizerUi.includes('GEC valida ambos motores')&&!baseOptimizerUi.includes('EC valida también Qwen + Kokoro al mismo tiempo'),'Texto del optimizador debe reflejar el motor seleccionado y no mencionar Kokoro de forma fija');
 assert(runtime.includes('chatterboxPreparedLatam')&&runtime.includes('preparedInfo')&&runtime.includes('gpuVramMb'),'Runtime debe separar cachés LatAm y conservar identidad GPU entre reinicios');
-assert(baseOptimizerUi.includes('ttsLabel0321')&&baseOptimizerUi.includes('ttsLabStatus')&&baseOptimizerUi.includes("version:'2.0-lab.24'")&&baseOptimizerUi.includes('ttsLabStop')&&baseOptimizerUi.includes('ttsLabValidateSelected'),'Optimizador base V2 debe prevalidar Qwen, liberar TTS antes de Qwen local y usar la GPU CUDA real');
+assert(baseOptimizerUi.includes('ttsLabel0321')&&baseOptimizerUi.includes('ttsLabStatus')&&baseOptimizerUi.includes("version:'2.0-lab.25'")&&baseOptimizerUi.includes('ttsLabStop')&&baseOptimizerUi.includes('ttsLabValidateSelected'),'Optimizador base V2 debe prevalidar Qwen, liberar TTS antes de Qwen local y usar la GPU CUDA real');
 assert(release.includes('prepareReference')&&release.includes('importFineTunedModel')&&release.includes('referenceText'),'Routing/benchmark V2 no contempla referencias preparadas y modelos entrenados');
 assert(release.includes('installProcessingWarmup')&&release.includes('ttsRuntimeSignature')&&release.includes('CACHE_REVISION')&&release.includes('ttsModelFingerprint')&&release.includes('qwen3tts:finetuned:'),'Inicio de preparación debe calentar el TTS seleccionado e invalidar optimizaciones por checkpoint');
 assert(localPolicy.includes("phase:'warmup'")&&localPolicy.includes("phase:'case'")&&localPolicy.includes('cutoffMs*5'),'Optimización Qwen debe reportar progreso granular y permitir descarte temprano');
@@ -100,4 +100,4 @@ assert(renderer.includes('currentOptimizationKey')&&renderer.includes('selectedF
 assert(prepare.includes('tts-lab')&&prepare.includes('tts_lab_worker.py'),'Worker Python no se empaqueta como runtime');
 assert(workflow.includes('Packaged 0.3.32 queue planner and stable renderer test'),'V2 Lab debe conservar el smoke 0.3.32');
 assert(workflow.includes('GEC-V2.0-TTS-Lab-Windows-Portable-EXE'),'Workflow no distingue el artefacto V2');
-console.log('check-v2lab: OK · lab.23 · production profile · tuned fidelity · stable voice chunks · UI responsiva · CUDA isolation');
+console.log('check-v2lab: OK · lab.28 · production profile · tuned fidelity · stable voice chunks · UI responsiva · CUDA isolation');

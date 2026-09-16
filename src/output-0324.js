@@ -69,7 +69,7 @@
     set('--exclusive-radius',px(design.exclusiveRadius,5,0,30));
 
     exclusive.textContent=String(design.exclusiveText||'EXCLUSIVO').slice(0,32);
-    if(design.exclusiveEnabled===false)exclusive.classList.remove('show');
+    if(design.exclusiveEnabled===false||design.exclusiveBadgeVisible===false)exclusive.classList.remove('show');
   };
 
   transitionEnabled=function(){return design.transitionType!=='none';};
@@ -77,7 +77,7 @@
   const baseSetStory=setStoryContent;
   setStoryContent=async function(p){
     await baseSetStory(p);
-    const show=!!p?.isExclusive&&design.exclusiveEnabled!==false;
+    const show=!!p?.isExclusive&&design.exclusiveEnabled!==false&&design.exclusiveBadgeVisible!==false;
     exclusive.textContent=String(design.exclusiveText||'EXCLUSIVO').slice(0,32);
     exclusive.classList.toggle('show',show);
     exclusive.dataset.publisher=String(p?.publisherName||'');
