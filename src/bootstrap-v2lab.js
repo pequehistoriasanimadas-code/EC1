@@ -27,6 +27,7 @@ if(!gotLock){app.quit();}else{
   require('./services/releaseV2WindowSizingLab29').installReleaseV2WindowSizingLab29();
   require('./bootstrap-0332');
   require('./services/releaseV2Lab').installReleaseV2Lab();
+  require('./services/releaseV2PrimaryTtsLockLab29').installReleaseV2PrimaryTtsLockLab29();
   require('./services/releaseV2CudaInstallResilienceLab29').installReleaseV2CudaInstallResilienceLab29();
   require('./services/releaseV2ChatterboxPerformanceLab29').installReleaseV2ChatterboxPerformanceLab29();
   require('./services/releaseV2AudioUxLab29').installReleaseV2AudioUxLab29();
