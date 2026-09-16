@@ -22,6 +22,7 @@ const optimizer=read('src/renderer-0321.js');
 const lanServer=read('src/services/outputLanServer.js');
 const chatterboxPerfLab29=read('src/services/releaseV2ChatterboxPerformanceLab29.js');
 const ttsLabRuntime=read('src/services/ttsLabRuntime.js');
+const v2Lab=read('src/services/releaseV2Lab.js');
 const audioUx=read('src/renderer-audio-ux-lab29.js');
 
 // 1. Contadores de sesión: incrementan en motor y el renderer final los refresca aunque falle una capa legacy.
@@ -35,9 +36,13 @@ assert(auto25.includes('processingSchedulerState(settings')&&auto25.includes('sc
 assert(auto25.includes("const selectionMode=needDueExclusive?{exclusiveOnly:true}:{publicOnly:true}"),'el turno exclusivo debe reservar el slot de preparación correspondiente');
 assert(r32.includes('<span class="queue-exclusive">EXCLUSIVO</span>'),'la cola final debe identificar exclusivas visiblemente');
 
-// 3. Standby: URL recalculada desde ruta real, loop y retorno al standby.
+// 3. Standby: URL recalculada desde ruta real, loop, retorno y autorrecuperación si el decoder deja de avanzar.
 assert(main.includes('standbyVideoUrl:fileUrl(raw.standbyVideo)')&&main.includes('delete incomingOutput.standbyVideoUrl'),'standby no debe depender de una URL sintética persistida');
 assert(out31.includes('video.loop=true')&&out31.includes("if(a==='stop')setTimeout(()=>showStandby"),'standby debe hacer loop y regresar al detener');
+assert(out31.includes('function startStandbyVideoWatchdog'),'standby debe tener un watchdog independiente de progreso de video');
+assert(out31.includes('function recoverStandbyVideo'),'standby congelado debe disponer de una rutina de recuperación controlada');
+assert(out31.includes('lastStandbyProgressAt')&&out31.includes('lastStandbyCurrentTime'),'watchdog debe comprobar avance real de currentTime, no solo paused/ended');
+assert(out31.includes("video.addEventListener('stalled'")&&out31.includes("video.addEventListener('waiting'"),'eventos stalled/waiting deben alimentar la recuperación del standby');
 
 // 4. Música: jamás sobre contenido/anuncio, incluido el primer contenido tras standby.
 assert(out.includes('await stopMusicForCanned();if(serial!==contentSerial)return;const previous=activeKind'),'contenido debe cortar música antes de evaluar transición de origen');
@@ -82,7 +87,13 @@ assert(installerBody.includes('installGpuSwapBatching('),'Lab29 A/B debe conserv
 assert(chatterboxPerfLab29.includes('const GPU_SWAP_BATCH_SIZE=4'),'Lab29 A/B debe conservar bloques GPU SWAP de 4 etapas');
 assert(ttsLabRuntime.includes("const warm=await this.generate(id,text,options)")&&ttsLabRuntime.includes("const runs=[],stableRuns=id==='qwen3tts'?5:3"),'Chatterbox debe volver al warmup + 3 corridas estables del benchmark base');
 
-// 11. Audio de referencia: un solo control Play/Stop, limpieza segura y sin audios de preview solapados.
+// 11. Motor TTS seleccionado: nunca cambiar silenciosamente Chatterbox/Qwen por Kokoro durante una noticia.
+assert(v2Lab.includes("if(engine==='kokoro')return baseGenerate"),'Kokoro seleccionado explícitamente debe conservar su ruta nativa');
+assert(!v2Lab.includes('fallbackExplicit:true')&&!v2Lab.includes('fallbackFrom:engine'),'un fallo de Chatterbox/Qwen no puede producir un WAV Kokoro silencioso');
+assert(v2Lab.includes('TTS_PRIMARY_ENGINE_FAILED'),'el error del motor primario debe conservar una identidad diagnóstica para que el pipeline pueda reintentar o marcar error');
+assert(auto25.includes("'TTS_PRIMARY_ENGINE_FAILED'")||auto25.includes('TTS_WORKER_EXIT'),'pipeline debe mantener una ruta de recuperación/reintento sin cambiar la identidad de voz');
+
+// 12. Audio de referencia: un solo control Play/Stop, limpieza segura y sin audios de preview solapados.
 assert(audioUx.includes("stop:'<svg"),'el control de referencia debe disponer de icono Stop');
 assert(audioUx.includes('function stopReferenceAudio'),'debe existir una única rutina para detener y limpiar la referencia activa');
 assert(audioUx.includes('referenceAudioId===id'),'volver a pulsar la referencia activa debe detenerla en lugar de reiniciarla');
@@ -93,4 +104,4 @@ assert(audioUx.includes("q('#v2TtsEngine')?.addEventListener('change',()=>{stopR
 assert(audioUx.includes("q('#v2ReferenceVoice')?.addEventListener('change',()=>{stopReferenceAudio();"),'cambiar de voz de referencia debe detener el audio anterior');
 assert(audioUx.includes('if(referenceAudioId===id)stopReferenceAudio()'),'eliminar la referencia que suena debe detenerla antes de borrarla');
 
-console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby · music · monitor 15 FPS/audio · optimization · content/ad + YouTube promo · LAN · NDI · Chatterbox base benchmark A/B · reference audio Play/Stop');
+console.log('check-v2lab-regression-matrix: OK · counters · P/P/P/E · standby watchdog · music · monitor 15 FPS/audio · optimization · content/ad + YouTube promo · LAN · NDI · Chatterbox base benchmark A/B · TTS primary lock · reference audio Play/Stop');
