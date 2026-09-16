@@ -6,6 +6,7 @@ const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p
 
 const main=read('src/main.js');
 const preload=read('src/preload.js');
+const bootstrapV2=read('src/bootstrap-v2lab.js');
 const automation=read('src/services/automation.js');
 const auto25=read('src/services/automation0325.js');
 const rel30=read('src/services/release0330.js');
@@ -23,6 +24,7 @@ const lanServer=read('src/services/outputLanServer.js');
 const chatterboxPerfLab29=read('src/services/releaseV2ChatterboxPerformanceLab29.js');
 const ttsLabRuntime=read('src/services/ttsLabRuntime.js');
 const v2Lab=read('src/services/releaseV2Lab.js');
+const primaryTtsLock=read('src/services/releaseV2PrimaryTtsLockLab29.js');
 const audioUx=read('src/renderer-audio-ux-lab29.js');
 
 // 1. Contadores de sesión: incrementan en motor y el renderer final los refresca aunque falle una capa legacy.
@@ -89,9 +91,16 @@ assert(ttsLabRuntime.includes("const warm=await this.generate(id,text,options)")
 
 // 11. Motor TTS seleccionado: nunca cambiar silenciosamente Chatterbox/Qwen por Kokoro durante una noticia.
 assert(v2Lab.includes("if(engine==='kokoro')return baseGenerate"),'Kokoro seleccionado explícitamente debe conservar su ruta nativa');
-assert(!v2Lab.includes('fallbackExplicit:true')&&!v2Lab.includes('fallbackFrom:engine'),'un fallo de Chatterbox/Qwen no puede producir un WAV Kokoro silencioso');
-assert(v2Lab.includes('TTS_PRIMARY_ENGINE_FAILED'),'el error del motor primario debe conservar una identidad diagnóstica para que el pipeline pueda reintentar o marcar error');
-assert(auto25.includes("'TTS_PRIMARY_ENGINE_FAILED'")||auto25.includes('TTS_WORKER_EXIT'),'pipeline debe mantener una ruta de recuperación/reintento sin cambiar la identidad de voz');
+assert(v2Lab.includes('if(s.tts?.fallbackToKokoro===false)throw e'),'router V2 debe respetar el bloqueo de fallback antes de generar Kokoro');
+assert(primaryTtsLock.includes('function enforcePrimaryTtsPolicy')&&primaryTtsLock.includes('s.tts.fallbackToKokoro=false'),'política de producción debe desactivar el fallback silencioso de forma autoritativa');
+assert(primaryTtsLock.includes('p.load=function')&&primaryTtsLock.includes('p.save=function')&&primaryTtsLock.includes('p.defaults=function'),'bloqueo debe cubrir perfiles existentes, guardados y valores por defecto');
+const labInstallPos=bootstrapV2.indexOf("require('./services/releaseV2Lab').installReleaseV2Lab()"),lockInstallPos=bootstrapV2.indexOf("require('./services/releaseV2PrimaryTtsLockLab29').installReleaseV2PrimaryTtsLockLab29()");
+assert(labInstallPos>=0&&lockInstallPos>labInstallPos,'bloqueo primario debe instalarse después del router V2 para envolver su SettingsStore efectivo');
+const {enforcePrimaryTtsPolicy}=require('../src/services/releaseV2PrimaryTtsLockLab29');
+const locked=enforcePrimaryTtsPolicy({tts:{engine:'chatterbox',fallbackToKokoro:true}});
+assert.strictEqual(locked.tts.engine,'chatterbox','bloqueo no puede cambiar el motor seleccionado');
+assert.strictEqual(locked.tts.fallbackToKokoro,false,'perfil antiguo con fallback=true debe quedar bloqueado antes de producción');
+assert(auto25.includes("'TTS_STALL','TTS_TOTAL_TIMEOUT','TTS_WORKER_EXIT','GPU_QUEUE_TIMEOUT'"),'pipeline debe conservar reintentos de recuperación del motor primario sin cambiar la identidad de voz');
 
 // 12. Audio de referencia: un solo control Play/Stop, limpieza segura y sin audios de preview solapados.
 assert(audioUx.includes("stop:'<svg"),'el control de referencia debe disponer de icono Stop');
